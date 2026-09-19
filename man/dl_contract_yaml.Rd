@@ -12,8 +12,19 @@ dl_contract_yaml(contract, path)
 \item{path}{YAML output file.}
 }
 \value{
-Output path, invisibly. Executable R rules are described, never serialized as runnable YAML.
+Output path, invisibly. Executable R rules are described, never
+serialized as runnable YAML.
 }
 \description{
 Export the portable contract subset
+}
+\examples{
+contract <- dl_contract(
+  "orders", "1.0.0", "Analytics", "Order amounts", "One order",
+  c(order_id = "integer", amount = "numeric"), key = "order_id"
+)
+path <- tempfile(fileext = ".yml")
+dl_contract_yaml(contract, path)
+cat(readLines(path), sep = "\n")
+unlink(path)
 }

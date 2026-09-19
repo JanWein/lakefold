@@ -9,15 +9,29 @@ dl_commons_yaml(metric, table, sql_expr, path)
 \arguments{
 \item{metric}{Registered metric definition for business metadata.}
 
-\item{table}{Physical table or governed product view name in the consumer environment.}
+\item{table}{Physical table or governed product view name in the consumer
+environment.}
 
-\item{sql_expr}{Explicit single-table aggregate expression, e.g. SUM(reserve).}
+\item{sql_expr}{Explicit single-table aggregate expression, e.g.
+SUM(reserve).}
 
 \item{path}{Output YAML file.}
 }
 \value{
-Path. This adapter exports metadata; it does not execute or install commons.
+Path. This adapter exports metadata; it does not execute or install
+commons.
 }
 \description{
 Export an explicit declarative definition for data-dict and commons
+}
+\examples{
+metric <- dl_metric(
+  "orders.total", "orders", expr = sum(amount), time_behavior = "flow",
+  unit = "EUR", owner = "Analytics", description = "Total order value",
+  approved = TRUE, code_version = "v1"
+)
+path <- tempfile(fileext = ".yml")
+dl_commons_yaml(metric, "orders", "SUM(amount)", path)
+cat(readLines(path), sep = "\n")
+unlink(path)
 }

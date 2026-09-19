@@ -28,3 +28,7 @@ Source specification. Files are read only at execution time.
 \description{
 Define an input source
 }
+\examples{
+source <- dl_source("orders.file", "orders.csv", reader = utils::read.csv)
+source
+}

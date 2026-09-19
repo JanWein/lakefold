@@ -2,24 +2,52 @@
 % Please edit documentation in R/workflow.R
 \name{dl_execute}
 \alias{dl_execute}
-\title{Execute a pipeline, product or metric with a consistent object-first API}
+\title{Execute a pipeline, product, metric or dbt project with a consistent
+object-first API}
 \usage{
 dl_execute(object, lake = NULL, ...)
 }
 \arguments{
-\item{object}{Pipeline, product or metric specification.}
+\item{object}{Pipeline, product, metric or dbt project specification.}
 
-\item{lake}{Connected lake or dl_config. NULL uses a pipeline's stored config.}
+\item{lake}{Connected lake or dl_config. NULL uses a pipeline's stored
+config.}
 
 \item{...}{Arguments forwarded to the underlying execution function.}
 }
 \value{
 For pipelines and products, a dl_run_result. For metrics, a tibble
-  with a dl_manifest attribute. Return types intentionally reflect the operation.
+with a dl_manifest attribute. Return types intentionally reflect the
+operation.
 }
 \description{
 Pipelines delegate to dl_run(), products to dl_build() and metrics to
 dl_measure(). Their original functions remain supported. Products and metrics
 require an explicit lake or dl_config. A connection opened here is closed on
 exit; an existing connection remains owned by its caller.
+}
+\examples{
+root <- tempfile("lakefold-example-")
+config <- dl_config(
+  dl_catalog_duckdb(file.path(root, "lake.db")),
+  dl_storage_local(file.path(root, "data")),
+  landing = file.path(root, "landing"), backend = "duckdb"
+)
+lake <- dl_connect(config)
+path <- file.path(root, "orders.csv")
+utils::write.csv(data.frame(order_id = 1:2, amount = c(25, 75)), path,
+  row.names = FALSE)
+source <- dl_source("orders.file", path, reader = utils::read.csv)
+contract <- dl_contract(
+  "orders", "1.0.0", "Analytics", "Order amounts", "One order",
+  c(order_id = "integer", amount = "numeric"), key = "order_id"
+)
+pipeline <- dl_pipeline("orders.import", config, code_version = "v1") |>
+  dl_step_land(source) |>
+  dl_step_extract() |>
+  dl_step_validate(contract) |>
+  dl_step_publish("orders")
+dl_execute(pipeline, lake)
+dl_disconnect(lake)
+unlink(root, recursive = TRUE)
 }

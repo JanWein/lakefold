@@ -12,8 +12,16 @@ dl_validate(data, contract)
 \item{contract}{Contract definition.}
 }
 \value{
-A tibble with one row per check. Only passed and warning permit publication.
+A tibble with one row per check. Only passed and warning permit
+publication.
 }
 \description{
 Validate a candidate against a contract
+}
+\examples{
+contract <- dl_contract(
+  "orders", "1.0.0", "Analytics", "Order amounts", "One order",
+  c(order_id = "integer", amount = "numeric"), key = "order_id"
+)
+dl_validate(data.frame(order_id = 1:2, amount = c(25, 75)), contract)
 }

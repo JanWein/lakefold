@@ -29,13 +29,15 @@ dl_metric(
 
 \item{expr}{Tidy evaluation summary expression, e.g. sum(reserve).}
 
-\item{compute}{Alternative function(data, dimensions, params) for complex metrics.}
+\item{compute}{Alternative function(data, dimensions, params) for complex
+metrics.}
 
 \item{dimensions}{Permitted grouping columns.}
 
 \item{time_column}{Column representing the business date.}
 
-\item{time_behavior}{stock requires exactly one selected date; flow may span dates.}
+\item{time_behavior}{stock requires exactly one selected date; flow may span
+dates.}
 
 \item{unit}{Unit.}
 
@@ -54,4 +56,12 @@ Metric specification. Reports execute it directly without an LLM.
 }
 \description{
 Define an approved metric
+}
+\examples{
+metric <- dl_metric(
+  "orders.total", "orders", expr = sum(amount), time_behavior = "flow",
+  unit = "EUR", owner = "Analytics", description = "Total order value",
+  approved = TRUE, code_version = "v1"
+)
+metric
 }

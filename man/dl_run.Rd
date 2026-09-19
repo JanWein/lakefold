@@ -15,17 +15,46 @@ dl_run(
 \arguments{
 \item{pipeline}{Pipeline specification.}
 
-\item{lake}{Optional existing connection; otherwise opened from the specification.}
+\item{lake}{Optional existing connection; otherwise opened from the
+specification.}
 
-\item{business_date}{Business date of this delivery, separate from arrival time.}
+\item{business_date}{Business date of this delivery, separate from arrival
+time.}
 
-\item{notify}{Optional function(event) using your existing notification transport.}
+\item{notify}{Optional function(event) using your existing notification
+transport.}
 
-\item{stop_on_failure}{Stop after persisting failure metadata (recommended for jobs).}
+\item{stop_on_failure}{Stop after persisting failure metadata (recommended
+for jobs).}
 }
 \value{
 A run result with run_id, status, release_id and quality results.
 }
 \description{
 Run an ingestion pipeline
+}
+\examples{
+root <- tempfile("lakefold-example-")
+config <- dl_config(
+  dl_catalog_duckdb(file.path(root, "lake.db")),
+  dl_storage_local(file.path(root, "data")),
+  landing = file.path(root, "landing"), backend = "duckdb"
+)
+lake <- dl_connect(config)
+path <- file.path(root, "orders.csv")
+utils::write.csv(data.frame(order_id = 1:2, amount = c(25, 75)), path,
+  row.names = FALSE)
+source <- dl_source("orders.file", path, reader = utils::read.csv)
+contract <- dl_contract(
+  "orders", "1.0.0", "Analytics", "Order amounts", "One order",
+  c(order_id = "integer", amount = "numeric"), key = "order_id"
+)
+pipeline <- dl_pipeline("orders.import", config, code_version = "v1") |>
+  dl_step_land(source) |>
+  dl_step_extract() |>
+  dl_step_validate(contract) |>
+  dl_step_publish("orders")
+dl_run(pipeline, lake)
+dl_disconnect(lake)
+unlink(root, recursive = TRUE)
 }

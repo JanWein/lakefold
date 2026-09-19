@@ -23,7 +23,8 @@ dl_connect(config)
 
 \item{layers}{Schema names.}
 
-\item{landing}{Local immutable landing directory (also used as staging for S3).}
+\item{landing}{Local immutable landing directory (also used as staging for
+S3).}
 
 \item{backend}{DuckLake, or local DuckDB for offline development.}
 
@@ -36,4 +37,16 @@ A connected lake handle. Close it with dl_disconnect().
 }
 \description{
 Set up or reconnect to a data lake
+}
+\examples{
+root <- tempfile("lakefold-example-")
+config <- dl_config(
+  dl_catalog_duckdb(file.path(root, "lake.db")),
+  dl_storage_local(file.path(root, "data")),
+  landing = file.path(root, "landing"), backend = "duckdb"
+)
+lake <- dl_connect(config)
+lake
+dl_disconnect(lake)
+unlink(root, recursive = TRUE)
 }

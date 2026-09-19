@@ -31,7 +31,8 @@ dl_contract(
 
 \item{grain}{Meaning of one row.}
 
-\item{columns}{Named character vector of R types: character, integer, numeric,
+\item{columns}{Named character vector of R types: character, integer,
+numeric,
 logical, Date, POSIXct.}
 
 \item{required}{Non-null columns.}
@@ -53,4 +54,11 @@ A serializable contract specification.
 }
 \description{
 Define a data contract
+}
+\examples{
+contract <- dl_contract(
+  "orders", "1.0.0", "Analytics", "Order amounts", "One order",
+  c(order_id = "integer", amount = "numeric"), key = "order_id"
+)
+contract
 }

@@ -18,7 +18,8 @@ dl_storage_s3(bucket, prefix = "dataloom/", endpoint, region = "eu-central-1")
 \arguments{
 \item{path}{Local path.}
 
-\item{connection_env}{Environment variable containing a PostgreSQL libpq string.}
+\item{connection_env}{Environment variable containing a PostgreSQL libpq
+string.}
 
 \item{bucket}{S3 bucket.}
 
@@ -33,4 +34,9 @@ A serializable configuration object containing no credentials.
 }
 \description{
 Define metadata and storage configuration
+}
+\examples{
+dl_catalog_duckdb(file.path(tempdir(), "lake.db"))
+dl_storage_local(file.path(tempdir(), "data"))
+dl_catalog_postgres("DUCKLAKE_PG_CONNECTION")
 }

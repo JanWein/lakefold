@@ -12,8 +12,21 @@ dl_catalog_export(lake, path)
 \item{path}{JSON output path.}
 }
 \value{
-The normalized path, invisibly. No row data or credentials are exported.
+The normalized path, invisibly. No row data or credentials are
+exported.
 }
 \description{
 Export a read-only metadata snapshot
+}
+\examples{
+root <- tempfile("lakefold-example-")
+config <- dl_config(
+  dl_catalog_duckdb(file.path(root, "lake.db")),
+  dl_storage_local(file.path(root, "data")),
+  landing = file.path(root, "landing"), backend = "duckdb"
+)
+lake <- dl_connect(config)
+dl_catalog_export(lake, file.path(root, "catalog.json"))
+dl_disconnect(lake)
+unlink(root, recursive = TRUE)
 }

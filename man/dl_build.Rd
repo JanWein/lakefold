@@ -18,7 +18,8 @@ dl_build(
 
 \item{product}{Product specification.}
 
-\item{releases}{Optional named vector of explicit input release ids, keyed by input alias.}
+\item{releases}{Optional named vector of explicit input release ids, keyed
+by input alias.}
 
 \item{business_date}{Reporting date.}
 
@@ -31,4 +32,28 @@ Run result.
 }
 \description{
 Build, validate and publish a product
+}
+\examples{
+root <- tempfile("lakefold-example-")
+config <- dl_config(
+  dl_catalog_duckdb(file.path(root, "lake.db")),
+  dl_storage_local(file.path(root, "data")),
+  landing = file.path(root, "landing"), backend = "duckdb"
+)
+lake <- dl_connect(config)
+path <- file.path(root, "orders.csv")
+utils::write.csv(data.frame(order_id = 1:2, amount = c(25, 75)), path,
+  row.names = FALSE)
+source <- dl_source("orders.file", path, reader = utils::read.csv)
+contract <- dl_contract(
+  "orders", "1.0.0", "Analytics", "Order amounts", "One order",
+  c(order_id = "integer", amount = "numeric"), key = "order_id"
+)
+release <- dl_ingest(lake, source, contract, "orders", code_version = "v1")
+product <- dl_product("orders.copy", c(orders = "orders"),
+  build = function(tables) tables$orders, contract = contract,
+  code_version = "v1")
+dl_build(lake, product)
+dl_disconnect(lake)
+unlink(root, recursive = TRUE)
 }

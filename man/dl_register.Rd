@@ -12,8 +12,26 @@ dl_register(lake, object)
 \item{object}{A contract, source, product, metric or pipeline definition.}
 }
 \value{
-The definition, invisibly. Reusing a version with changed content errors.
+The definition, invisibly. Reusing a version with changed content
+errors.
 }
 \description{
 Register a versioned definition
+}
+\examples{
+root <- tempfile("lakefold-example-")
+config <- dl_config(
+  dl_catalog_duckdb(file.path(root, "lake.db")),
+  dl_storage_local(file.path(root, "data")),
+  landing = file.path(root, "landing"), backend = "duckdb"
+)
+lake <- dl_connect(config)
+contract <- dl_contract(
+  "orders", "1.0.0", "Analytics", "Order amounts", "One order",
+  c(order_id = "integer", amount = "numeric"), key = "order_id"
+)
+dl_register(lake, contract)
+dl_registry(lake, "assets")
+dl_disconnect(lake)
+unlink(root, recursive = TRUE)
 }

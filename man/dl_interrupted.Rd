@@ -17,3 +17,15 @@ Runs still marked running. Never auto-cancels a possibly live writer.
 \description{
 Identify interrupted runs without changing metadata
 }
+\examples{
+root <- tempfile("lakefold-example-")
+config <- dl_config(
+  dl_catalog_duckdb(file.path(root, "lake.db")),
+  dl_storage_local(file.path(root, "data")),
+  landing = file.path(root, "landing"), backend = "duckdb"
+)
+lake <- dl_connect(config)
+dl_interrupted(lake)
+dl_disconnect(lake)
+unlink(root, recursive = TRUE)
+}

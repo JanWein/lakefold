@@ -40,3 +40,11 @@ A rule specification or counts object.
 \description{
 Define a quality rule
 }
+\examples{
+rule <- dl_rule("positive", function(data) {
+  counts <- dplyr::summarise(data, failed = sum(amount <= 0), total = dplyr::n())
+  if (inherits(counts, "tbl_sql")) counts <- dplyr::collect(counts)
+  dl_quality_counts(counts$failed, counts$total)
+})
+rule$name
+}

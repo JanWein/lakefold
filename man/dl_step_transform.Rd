@@ -7,9 +7,11 @@
 dl_step_transform(pipeline, transform, id)
 }
 \arguments{
-\item{pipeline}{Pipeline specification after extraction and before validation.}
+\item{pipeline}{Pipeline specification after extraction and before
+validation.}
 
-\item{transform}{Function of one data argument, returning a lazy table or data frame.}
+\item{transform}{Function of one data argument, returning a lazy table or
+data frame.}
 
 \item{id}{Unique step identifier within this pipeline.}
 }
@@ -22,4 +24,12 @@ the candidate and validating its contract. Each receives a lazy table or the
 prior transform's data frame. No collection is performed by this step.
 The original file and raw table remain intact. Change the pipeline version
 and code_version whenever transformation behavior changes.
+}
+\examples{
+pipeline <- dl_pipeline("orders.import", dl_config(backend = "duckdb"),
+  code_version = "v1") |>
+  dl_step_land(dl_source("orders.file", "orders.csv", utils::read.csv)) |>
+  dl_step_extract() |>
+  dl_step_transform(function(data) dplyr::filter(data, amount > 0), "positive")
+dl_plan(pipeline)
 }

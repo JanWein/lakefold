@@ -10,11 +10,17 @@ dl_plan(pipeline)
 \item{pipeline}{A pipeline specification.}
 }
 \value{
-A tibble with position, step, id and target columns. The `complete`
-  attribute indicates whether the mandatory steps and configured layers validate.
+A tibble with position, step, id and target columns. The \code{complete}
+attribute indicates whether the mandatory steps and configured layers
+validate.
 }
 \description{
-Does not connect, read source files, execute user functions or write metadata.
+Does not connect, read source files, execute user functions or write
+metadata.
 Incomplete specifications can be inspected. This is a declared plan, not a
 dry-run of SQL, file availability, permissions or data quality.
+}
+\examples{
+dl_pipeline("orders.import", dl_config(backend = "duckdb"),
+  code_version = "v1") |> dl_plan()
 }

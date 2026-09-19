@@ -20,19 +20,20 @@ dl_config(
 
 \item{layers}{Schema names.}
 
-\item{landing}{Local immutable landing directory (also used as staging for S3).}
+\item{landing}{Local immutable landing directory (also used as staging for
+S3).}
 
 \item{backend}{DuckLake, or local DuckDB for offline development.}
 
 \item{install_extensions}{Allow DuckDB to install required extensions.}
 }
 \value{
-A connection-free `dl_config` specification.
+A connection-free \code{dl_config} specification.
 }
 \description{
 This constructor validates configuration and resolves paths, but does not
 create directories, install extensions, connect to databases or read secrets.
-Pass its result to `dl_connect()` or `dl_pipeline()` when ready to execute.
+Pass its result to \code{dl_connect()} or \code{dl_pipeline()} when ready to execute.
 }
 \examples{
 config <- dl_config(backend = "duckdb")

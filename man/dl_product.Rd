@@ -38,3 +38,13 @@ A product specification.
 \description{
 Define a data product
 }
+\examples{
+contract <- dl_contract(
+  "orders", "1.0.0", "Analytics", "Order amounts", "One order",
+  c(order_id = "integer", amount = "numeric"), key = "order_id"
+)
+product <- dl_product("orders.copy", c(orders = "orders"),
+  build = function(tables) tables$orders, contract = contract,
+  code_version = "v1")
+product
+}

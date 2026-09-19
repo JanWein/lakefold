@@ -27,14 +27,16 @@ dl_step_publish(
 \arguments{
 \item{id}{Pipeline identifier.}
 
-\item{lake}{A connection-free dl_config or a connected lake; only configuration is retained.}
+\item{lake}{A connection-free dl_config or a connected lake; only
+configuration is retained.}
 
 \item{version}{Definition version.}
 
 \item{code_version}{Version of all execution code, e.g. a Git commit SHA.
 Change it when imported functions, dependencies or captured values change.}
 
-\item{config}{Optional named alternative to lake for a connection-free dl_config.}
+\item{config}{Optional named alternative to lake for a connection-free
+dl_config.}
 
 \item{pipeline}{Pipeline specification.}
 
@@ -57,4 +59,17 @@ A pipeline specification, with no open connection or loaded data.
 }
 \description{
 Build a pipeline specification
+}
+\examples{
+contract <- dl_contract(
+  "orders", "1.0.0", "Analytics", "Order amounts", "One order",
+  c(order_id = "integer", amount = "numeric"), key = "order_id"
+)
+pipeline <- dl_pipeline("orders.import", dl_config(backend = "duckdb"),
+  code_version = "v1") |>
+  dl_step_land(dl_source("orders.file", "orders.csv", utils::read.csv)) |>
+  dl_step_extract() |>
+  dl_step_validate(contract) |>
+  dl_step_publish("orders")
+dl_plan(pipeline)
 }

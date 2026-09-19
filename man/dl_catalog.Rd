@@ -26,3 +26,16 @@ A Shiny app object (when launch = FALSE).
 \description{
 Start a read-only data catalog
 }
+\examples{
+root <- tempfile("lakefold-example-")
+config <- dl_config(
+  dl_catalog_duckdb(file.path(root, "lake.db")),
+  dl_storage_local(file.path(root, "data")),
+  landing = file.path(root, "landing"), backend = "duckdb"
+)
+lake <- dl_connect(config)
+app <- dl_catalog(lake, launch = FALSE)
+class(app)
+dl_disconnect(lake)
+unlink(root, recursive = TRUE)
+}
