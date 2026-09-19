@@ -69,9 +69,21 @@ old <- dl_tbl(lake, "finance.reserves", release = first_run$release_id)
 current <- dl_tbl(lake, "finance.reserves")
 ```
 
-The API does not modify old releases. An identical repeat returns `cached` and
-references an existing release. Repeating an older delivery after a newer one
-leaves the newer release current. A cache hit does not roll the data back.
+Existing releases remain unchanged. The two entry points have different default
+reuse policies because an interactive write and a scheduled retry express
+different intentions:
+
+| Entry point | Repeating the current delivery | Repeating an older delivery after a newer one |
+|---|---|---|
+| `dl_write()` | Reuses the current matching release | Publishes a new release to make the supplied data current |
+| `dl_run(cache = TRUE)` | Reuses a matching successful release | Reuses the historical match and leaves the newer release current |
+
+A reused result has status `cached`. The advanced runner also accepts
+`cache = "current"` to restrict reuse to the current release, or `cache = FALSE`
+to execute again. Reuse requires matching definitions, code and input identity;
+custom callbacks on the simple path run again unless `code_version` is supplied.
+See the [monthly walkthrough](https://janwein.github.io/lakefold/articles/getting-started.html)
+for concrete current and pinned reads.
 
 ## Full or partition replacement
 
