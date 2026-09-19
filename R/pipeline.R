@@ -69,7 +69,7 @@ add_step <- function(pipeline, type, value) {
     abort(paste("Duplicate pipeline step:", type))
   }
   expected <- c("land", "extract", "validate", "publish")
-  current <- setdiff(names(pipeline$steps), "transform")
+  current <- setdiff(names(pipeline$steps), c("transform", "precheck"))
   if (!identical(type, expected[length(current) + 1L])) {
     abort(
       paste("Next pipeline step must be", expected[length(current) + 1L]),
@@ -132,6 +132,12 @@ check_pipeline <- function(p) {
     abort("Use dl_pipeline() to define the workflow.", "dl_pipeline_invalid")
   }
   order <- names(p$steps)
+  if ("precheck" %in% order) {
+    if (match("precheck", order) != 3L) {
+      abort("Input gate must follow extraction.")
+    }
+    order <- setdiff(order, "precheck")
+  }
   expected <- if ("transform" %in% order) {
     c("land", "extract", "transform", "validate", "publish")
   } else {
@@ -436,9 +442,13 @@ dl_run <- function(
   }
   src <- pipeline$steps$land
   contract <- pipeline$steps$validate
+  input_contract <- pipeline$steps$precheck
   pub <- pipeline$steps$publish
   dl_register(lake, src)
   dl_register(lake, contract)
+  if (!is.null(input_contract)) {
+    dl_register(lake, input_contract)
+  }
   dl_register(lake, pipeline)
   definition <- pipeline
   definition$config <- NULL
@@ -481,12 +491,7 @@ dl_run <- function(
         run_result(run, "cached", cached$release_id[[1]])
       } else {
         reader <- pipeline$steps$extract$using %||% src$reader
-        raw <- materialize(
-          lake,
-          reader(landed$path),
-          pipeline$steps$extract$layer,
-          paste0("raw_", run)
-        )
+        extracted <- reader(landed$path)
         if (
           !identical(
             digest::digest(
@@ -499,6 +504,33 @@ dl_run <- function(
         ) {
           abort("Reader modified immutable landing input.")
         }
+        input_quality <- NULL
+        if (!is.null(input_contract)) {
+          if (!is.data.frame(extracted)) {
+            abort(
+              "An input gate requires a materialized data frame from the reader."
+            )
+          }
+          input_quality <- dl_validate(
+            extracted,
+            input_contract,
+            stage = "ingest"
+          )
+          persist_quality(lake, run, input_contract, input_quality)
+          if (!quality_ok(input_quality)) {
+            abort(
+              "Input quality gate blocked writing the raw table.",
+              "dl_input_blocked",
+              quality = input_quality
+            )
+          }
+        }
+        raw <- materialize(
+          lake,
+          extracted,
+          pipeline$steps$extract$layer,
+          paste0("raw_", run)
+        )
         insert_meta(
           lake,
           "lineage_edges",
@@ -538,6 +570,7 @@ dl_run <- function(
         candidate <- compose_candidate(lake, transformed, pub, run)
         quality <- dl_validate(candidate$data, contract)
         persist_quality(lake, run, contract, quality)
+        quality <- dplyr::bind_rows(input_quality, quality)
         if (!quality_ok(quality)) {
           finish_run(
             lake,
@@ -570,6 +603,24 @@ dl_run <- function(
           )
         }
       }
+    },
+    dl_input_blocked = function(e) {
+      finish_run(
+        lake,
+        run,
+        "blocked",
+        "Input quality gate blocked raw ingestion."
+      )
+      emit_event(
+        lake,
+        run,
+        pub$asset,
+        "quality_failed",
+        input_contract$producer,
+        "Input blocked before raw ingestion; inspect quality_results.",
+        notify
+      )
+      run_result(run, "blocked", quality = e$quality)
     },
     error = function(e) {
       status <- if (inherits(e, "dl_missing_delivery")) "missing" else "error"

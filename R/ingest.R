@@ -13,6 +13,9 @@
 #'   dependencies. Change both versions when behavior changes.
 #' @param layer Character scalar giving the publication schema, `"validated"`
 #'   by default. Raw extraction always uses the configured `"raw"` schema.
+#' @param input_contract Optional separate contract for an input gate before
+#'   writing Raw. Requires a reader returning a data frame. The final candidate
+#'   is still validated against `contract`.
 #' @param ... Arguments passed to [dl_run()], such as `business_date` or
 #'   `stop_on_failure`. Do not pass another `lake` argument.
 #' @returns A `dl_run_result` with `run_id`, `status`, `release_id` and
@@ -48,6 +51,7 @@ dl_ingest <- function(
   version = "1.0.0",
   code_version,
   layer = "validated",
+  input_contract = NULL,
   ...
 ) {
   asset_id(asset)
@@ -58,7 +62,11 @@ dl_ingest <- function(
     code_version = code_version
   ) |>
     dl_step_land(source) |>
-    dl_step_extract() |>
+    dl_step_extract()
+  if (!is.null(input_contract)) {
+    pipeline <- dl_step_precheck(pipeline, input_contract)
+  }
+  pipeline <- pipeline |>
     dl_step_validate(contract) |>
     dl_step_publish(asset, layer = layer)
   dl_execute(pipeline, lake = lake, ...)

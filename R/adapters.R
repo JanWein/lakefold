@@ -22,6 +22,8 @@ dl_contract_yaml <- function(contract, path) {
     version = contract$version,
     owner = contract$owner,
     producer = contract$producer,
+    operator = contract$operator %||% contract$owner,
+    column_metadata = contract$column_metadata %||% list(),
     description = contract$description,
     grain = contract$grain,
     columns = contract$columns,
@@ -36,6 +38,7 @@ dl_contract_yaml <- function(contract, path) {
         engine = r$engine,
         severity = r$severity,
         max_failure = r$max_failure,
+        policy = r$policy %||% "rule",
         description = r$description %||% "",
         implementation = "R code in versioned project"
       )

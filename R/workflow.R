@@ -29,7 +29,7 @@ dl_step_transform <- function(pipeline, transform, id) {
   }
   if (
     !identical(
-      setdiff(names(pipeline$steps), "transform"),
+      setdiff(names(pipeline$steps), c("transform", "precheck")),
       c("land", "extract")
     )
   ) {
@@ -82,6 +82,11 @@ dl_plan <- function(pipeline) {
       name,
       land = add(name, x$id, "immutable original"),
       extract = add(name, "reader", x$layer),
+      precheck = add(
+        name,
+        paste(x$id, x$version, sep = "@"),
+        "before raw write"
+      ),
       transform = for (item in x) {
         add(name, item$id, "candidate input")
       },

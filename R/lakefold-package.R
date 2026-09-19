@@ -8,6 +8,7 @@
 #' * `vignette("dbt-workflows")`: dbt setup, builds, diagnostics and dm models.
 #' * `vignette("workflow-design")`: specifications and the execution lifecycle.
 #' * `vignette("quality-history")`: quality gates and reproducible releases.
+#' * `vignette("quality-gates")`: pointblank, input gates and quality reports.
 #' * `vignette("products-metrics")`: products, metrics and report manifests.
 #'
 #' @section Two execution paths:
@@ -16,6 +17,9 @@
 #' dbt's own materialization semantics. A successful dbt build does not create
 #' a lakefold release automatically. [dl_model()] opens governed releases;
 #' [dl_dbt_model()] opens current dbt relations.
+#' [dl_dbt_publish()] snapshots one current dbt relation, validates its contract
+#' and publishes it as a governed release. [dl_status()] and [dl_quality()]
+#' provide common inspection functions across both execution paths.
 #'
 #' @section Resource ownership:
 #' Specifications do not contain live database connections. Close connections
