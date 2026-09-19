@@ -11,7 +11,9 @@
 * Order grouped metric results deterministically before hashing, so database
   row order does not change report identity.
 * Make repeated report saves ignore only calculation timestamps and retain the
-  first saved evidence. Deduplicate identical measurement lineage edges.
+  first saved evidence and native return types. Deduplicate identical measurement
+  lineage edges. Retain legacy registry aliases and require recorded delivery
+  evidence when notifications are requested.
 
 ## Everyday workflows
 
