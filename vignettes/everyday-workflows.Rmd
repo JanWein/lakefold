@@ -150,8 +150,9 @@ Repeat calculation and saving are safe when the report content is identical:
 
 ```{r repeat-report}
 again <- dl_measure(lake, total)
-dl_report_release(lake, "orders-report-v1", list(total = again),
+saved_again <- dl_report_release(lake, "orders-report-v1", list(total = again),
   code_version = "reporting-v1")
+saved_again$id
 ```
 
 Only the calculation time is ignored when comparing a retry. The first saved
