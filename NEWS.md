@@ -3,6 +3,8 @@
 * `dl_contract()` and `dl_contract_from()` make descriptive metadata optional.
   Contracts default to version `1.0.0`; `max_age_hours = NULL` disables the
   freshness deadline without inventing a business requirement.
+* `dl_open()` rejects nonempty folders without a saved configuration so existing
+  custom layouts are never shadowed by a new local lake.
 * `dl_open()` creates or reopens a local folder with DuckDB defaults and a saved
   backend choice. `dl_close()` provides the matching connection helper.
 * `dl_read()` returns a tibble by default, with optional lazy and historical reads.
@@ -12,7 +14,8 @@
 * `dl_write()` accepts data frames and CSV, TSV or RDS paths with automatic names,
   structural schema checks and definition versions. Contracts, custom readers,
   input gates and explicit code versions are optional. Custom callbacks are
-  re-evaluated by default, and explicit contracts cannot be silently dropped.
+  re-evaluated by default, and explicit contracts cannot be silently dropped,
+  including after a blocked first run or a blocked contract upgrade.
 
 # lakefold 0.4.0
 

@@ -91,7 +91,8 @@ contract <- dl_contract("orders.checked",
 dl_write(lake, orders, contract = contract)
 ```
 
-Continue supplying this contract on later writes. Omitting it raises an error
+Continue supplying a contract on later writes, including after a blocked first
+run or a blocked contract upgrade. Omitting it raises an error
 instead of silently removing its rules. To change a registered contract, change
 its `version`; `dl_contract_diff()` helps review the change. To intentionally
 change the automatic schema, supply an explicit contract for the new schema.
@@ -135,7 +136,8 @@ dl_close(lake)
 choose `backend = "ducklake"` once. Its extension must be available. Reopening
 remembers that choice and rejects accidental backend changes. Existing lakes
 created with `dl_setup()` still use their original `dl_config()`; the simple
-opener does not guess their layout or migrate them.
+opener does not guess their layout or migrate them. Creating a new local lake
+requires an empty or nonexistent folder.
 
 ## Optional complexity
 
