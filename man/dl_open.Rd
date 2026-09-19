@@ -26,6 +26,8 @@ returns \code{TRUE}; it is an alias for \code{\link[=dl_disconnect]{dl_disconnec
 Creates or reopens a self-contained local folder. DuckDB is the default and
 needs no extension download or external service. The backend is remembered
 in \code{lakefold.json}; reopening a folder never silently switches backends.
+A new lake needs an empty or nonexistent folder. Existing lakes made with
+custom configuration still open through \code{\link[=dl_connect]{dl_connect()}}.
 Use \code{\link[=dl_config]{dl_config()}} and \code{\link[=dl_connect]{dl_connect()}} for custom layers or remote storage.
 }
 \examples{

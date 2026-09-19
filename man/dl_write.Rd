@@ -52,8 +52,9 @@ blocked. No keys, business rules, owners or freshness deadlines are guessed.
 }
 \details{
 Supply \code{contract} whenever you need business checks or an intentional schema
-change. Once an asset uses an explicit contract, subsequent writes must
-supply it too. This prevents accidentally dropping its rules. Draft contracts
+change. Once an execution attempt uses an explicit contract, subsequent writes
+must supply one too, even if that attempt was blocked. This prevents
+accidentally dropping its rules. Draft contracts
 still require \code{\link[=dl_contract_confirm]{dl_contract_confirm()}}.
 
 Data frames are archived as RDS snapshots. File inputs preserve their original
