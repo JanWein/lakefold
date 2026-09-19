@@ -1,9 +1,11 @@
-# API as of 0.4.0
+# API as of 0.5.0
 
 The complete grouped reference is available on the [documentation website](https://janwein.github.io/lakefold/reference/index.html).
-All 62 exported functions have package help. In R, use `help(package = "lakefold")`.
+All 66 exported functions have package help. In R, use `help(package = "lakefold")`.
 
-Existing function names remain available. Input checks are optional; the final
+Start with `dl_open()`, `dl_write()`, `dl_read()` and `dl_close()`.
+Configuration and business contracts are optional on this path. Existing
+function names remain available. Input checks are optional; the final
 publication check is mandatory. `dl_status()` and `dl_quality()` provide common
 diagnostics. See the [quality guide](https://janwein.github.io/lakefold/articles/quality-gates.html) for worked examples.
 
@@ -17,6 +19,7 @@ diagnostics. See the [quality guide](https://janwein.github.io/lakefold/articles
 | `dl_catalog_postgres()` | [dl_catalog_duckdb.Rd](../man/dl_catalog_duckdb.Rd) |
 | `dl_check_delivery()` | [dl_check_delivery.Rd](../man/dl_check_delivery.Rd) |
 | `dl_cleanup()` | [dl_cleanup.Rd](../man/dl_cleanup.Rd) |
+| `dl_close()` | [dl_open.Rd](../man/dl_open.Rd) |
 | `dl_commons_yaml()` | [dl_commons_yaml.Rd](../man/dl_commons_yaml.Rd) |
 | `dl_config()` | [dl_config.Rd](../man/dl_config.Rd) |
 | `dl_connect()` | [dl_setup.Rd](../man/dl_setup.Rd) |
@@ -45,6 +48,7 @@ diagnostics. See the [quality guide](https://janwein.github.io/lakefold/articles
 | `dl_metric()` | [dl_metric.Rd](../man/dl_metric.Rd) |
 | `dl_model()` | [dl_model.Rd](../man/dl_model.Rd) |
 | `dl_pipeline()` | [dl_pipeline.Rd](../man/dl_pipeline.Rd) |
+| `dl_open()` | [dl_open.Rd](../man/dl_open.Rd) |
 | `dl_plan()` | [dl_plan.Rd](../man/dl_plan.Rd) |
 | `dl_pointblank()` | [dl_rule.Rd](../man/dl_rule.Rd) |
 | `dl_pointblank_report()` | [dl_pointblank_report.Rd](../man/dl_pointblank_report.Rd) |
@@ -52,6 +56,7 @@ diagnostics. See the [quality guide](https://janwein.github.io/lakefold/articles
 | `dl_quality()` | [dl_quality.Rd](../man/dl_quality.Rd) |
 | `dl_quality_counts()` | [dl_rule.Rd](../man/dl_rule.Rd) |
 | `dl_quality_report()` | [dl_quality_report.Rd](../man/dl_quality_report.Rd) |
+| `dl_read()` | [dl_read.Rd](../man/dl_read.Rd) |
 | `dl_register()` | [dl_register.Rd](../man/dl_register.Rd) |
 | `dl_registry()` | [dl_registry.Rd](../man/dl_registry.Rd) |
 | `dl_releases()` | [dl_releases.Rd](../man/dl_releases.Rd) |
@@ -71,3 +76,4 @@ diagnostics. See the [quality guide](https://janwein.github.io/lakefold/articles
 | `dl_storage_s3()` | [dl_catalog_duckdb.Rd](../man/dl_catalog_duckdb.Rd) |
 | `dl_tbl()` | [dl_tbl.Rd](../man/dl_tbl.Rd) |
 | `dl_validate()` | [dl_validate.Rd](../man/dl_validate.Rd) |
+| `dl_write()` | [dl_write.Rd](../man/dl_write.Rd) |

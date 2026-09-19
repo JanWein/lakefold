@@ -27,6 +27,24 @@ A dbt project is an additional specification, separate from registered
 The resulting dbt relations are not automatically registered as immutable
 lakefold releases.
 
+## From 0.4.0 to 0.5.0
+
+The simple API is additive: `dl_open()`, `dl_write()`, `dl_read()` and `dl_close()`.
+Existing lakes still open with their original configuration; `dl_open()` does
+not adopt or move unmarked catalogs. No additional registry migration is needed.
+Existing explicit contracts and definition versions keep their fingerprints.
+Owner, description and grain may now be omitted in new contracts.
+
+`dl_write()` derives technical versions when omitted. It records a structural
+schema after the first successful write, but no business approval. Supply an
+explicit contract to change that schema or add rules, and keep supplying that
+contract for later writes. Custom callbacks default to fresh evaluation.
+
+`dl_run()` still reuses historical matching releases for idempotent retries.
+`dl_write()` only reuses the current release so a successful write is reflected
+by the next default read. `dl_run(cache = "current")` opts into that policy;
+`cache = FALSE` forces fresh evaluation. Historical releases stay immutable.
+
 ## From 0.3.0 to 0.4.0
 
 On connection, lakefold creates `_dl.schema_version` and transactionally migrates

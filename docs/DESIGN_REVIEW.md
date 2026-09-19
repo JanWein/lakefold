@@ -1,6 +1,6 @@
 # Design review: simple composition for complex data workflows
 
-Review of lakefold 0.4.0, 19 September 2026.
+Review of lakefold 0.5.0, 19 September 2026.
 
 ## Purpose and design goal
 
@@ -21,7 +21,7 @@ records publication evidence.
 
 | Principle | Current implementation | Boundary |
 |---|---|---|
-| Start with a concise operation | `dl_ingest()` and `dl_ingest_data()` cover common ingestion paths | Source-specific acquisition can still require ordinary R code |
+| Start with a concise operation | `dl_open()`, `dl_write()` and `dl_read()` cover the minimal local workflow | Source-specific acquisition can still require ordinary R code |
 | Compose when complexity grows | Explicit landing, extraction, precheck, transformation, validation and publication steps | A pipeline describes one ingestion workflow |
 | Define before executing | Configuration and specification objects can be constructed without opening connections | External resources are checked during execution |
 | Inspect the work | Compact print methods and `dl_plan()` reveal definitions and step order | A structural plan does not execute SQL or validate source data |
@@ -38,8 +38,8 @@ ownership, consistent failures and useful documentation are part of the design.
 
 ## How users move from a small task to a larger workflow
 
-1. Configure a lake with `dl_config()` and define a contract.
-2. Ingest a file or data frame with a convenience function.
+1. Open a local folder with `dl_open()` and write data with `dl_write()`.
+2. Add a contract or custom configuration only when the workflow needs it.
 3. Introduce an explicit pipeline when input gates or named transformations are
    needed. The same validation and publication rules still apply.
 4. Build derived products from named, pinned input releases. Reuse ordinary
@@ -114,8 +114,9 @@ code are outside the current scope.
 
 `approved = TRUE` records a declared approval state; it does not implement a
 review workflow. API immutability does not protect tables from direct SQL writes.
-`code_version` must cover changed closure values and dependencies as well as
-function bodies. Calling `collect()` can bring large datasets into R memory.
+On the explicit API, `code_version` must cover changed closure values and
+dependencies as well as function bodies. `dl_write()` re-evaluates custom
+callbacks by default; supplying a code version opts into cache reuse. Calling `collect()` can bring large datasets into R memory.
 Even metric calculation registers definitions and lineage, so it participates
 in writer coordination.
 
@@ -127,6 +128,7 @@ in writer coordination.
 | 0.2.0 | Connection-free configuration, inspectable plans, named transformations and a common execution entry point |
 | 0.3.0 | dbt project specifications, isolated invocations, diagnostics and native lazy dm models |
 | 0.4.0 | Input gates, richer pointblank evidence, shared diagnostics, contract tooling, explicit dbt publication and operational helpers |
+| 0.5.0 | Minimal open/write/read workflow, optional metadata and automatic structural schemas and versions |
 
 These changes extend the framework's own data workflow concepts. Future work
 should be judged by whether it makes real workflows easier to compose, inspect,

@@ -103,3 +103,21 @@ and snapshot expiry remain separate operating tasks.
 Quality reports and native pointblank reports can contain segment names and
 business rules. Compact reports omit complete source rows. Save reports to the
 operating project's intended location.
+
+## Simple local workflows
+
+`dl_open("my-lake")` stores the catalog, landing snapshots, data directory and
+`lakefold.json` in one folder. Keep that configuration file with the catalog;
+it records the backend. Reopen with the same call and close with `dl_close()`.
+Back up the folder with all connections closed, using the backend's documented
+backup requirements. Historical metadata can contain absolute file paths.
+
+`dl_write()` checks the schema automatically. It sets no freshness deadline and
+requires no owner or notification transport. Supply a contract when those
+business requirements are known. After adopting an explicit contract, continue
+supplying it on each write. The simple API shares the one-writer requirement.
+
+For custom readers and rules, fresh evaluation is the default. Opt into cache
+reuse with an explicit `code_version` covering dependencies and captured values.
+Schema preparation for a first file happens before the normal run is created;
+parsing failures retain the archived bytes but have no run-level quality report.

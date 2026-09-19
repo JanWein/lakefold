@@ -1,4 +1,30 @@
-# Validation record for lakefold 0.4.0
+# Validation record for lakefold 0.5.0
+
+Check date: 19 September 2026. Local environment: Ubuntu 24.04 and R 4.3.3.
+
+| Check | Result |
+|---|---|
+| Full `R CMD check --no-manual` | 0 errors, 0 warnings, 0 notes |
+| Expectations in the local package check | 319 passed, 0 failed, 0 warnings, 0 skipped |
+| Separate full DuckLake suite | 319 expectations passed, including actual dbt execution |
+| Examples and vignettes | All package examples checked; seven vignettes built and executable chunks run |
+| pkgdown | Reference index checked and complete site built |
+| API and reference | 66 exported functions, 55 help topics, complete pkgdown index |
+| Tests | 69 test cases, including 13 new simple-workflow cases |
+
+New coverage checks the minimal open/write/read workflow, automatic naming,
+reopening on DuckDB and DuckLake, immutable CSV/TSV/RDS originals, nullable
+columns, schema drift, empty writes, failed first deliveries, historical reads,
+writing an older payload as current data, explicit contract preservation and
+changed callback closures. Backend mismatch and ambiguous-name errors are
+snapshot-tested. Existing job retry semantics remain covered unchanged.
+
+The main package check includes the optional dbt integration and the new
+DuckLake entry-point test. GitHub checks run on both backend configurations;
+see [GitHub Actions](https://github.com/JanWein/lakefold/actions) for evidence tied
+to published commits. The limits below still apply to version 0.5.0.
+
+## Historical record: 0.4.0
 
 Check date: 19 September 2026. Local environment: Ubuntu 24.04 and R 4.3.3.
 
