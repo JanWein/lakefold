@@ -34,6 +34,6 @@ lake <- dl_setup(
 
 # S3 Parquet storage uses DuckDB httpfs.
 # S3 originals use paws.storage and conditional PutObject.
-# Configure one writer process/job at a time for dataloom 0.2.
+# Configure one writer process/job at a time for the lakefold registry.
 print(dl_capabilities(lake))
 # dl_disconnect(lake)
