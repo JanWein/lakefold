@@ -45,7 +45,7 @@ dl_dbt_publish <- function(
   notify = NULL,
   stop_on_failure = TRUE
 ) {
-  assert_lake(lake)
+  assert_writable(lake)
   asset_id(asset)
   scalar(model, "model")
   scalar(code_version, "code_version")

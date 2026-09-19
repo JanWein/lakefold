@@ -70,6 +70,8 @@ dl_product <- function(
 #'   by input alias.
 #' @param business_date Reporting date.
 #' @param notify Optional function(event).
+#' @param cache Reuse a matching release. Set `FALSE` to re-evaluate builders
+#'   that consult external state. Change `code_version` for intentional changes.
 #' @param stop_on_failure Fail the job after metadata has been saved.
 #' @return Run result.
 #' @export
@@ -102,9 +104,11 @@ dl_build <- function(
   releases = NULL,
   business_date = NA_character_,
   notify = NULL,
-  stop_on_failure = TRUE
+  stop_on_failure = TRUE,
+  cache = TRUE
 ) {
-  assert_lake(lake)
+  assert_writable(lake)
+  flag(cache, "cache")
   if (!inherits(product, "dl_product")) {
     abort("product must be a dl_product.")
   }
@@ -158,7 +162,7 @@ dl_build <- function(
         )
       }
       cached <- find_cached(lake, product$id, ih, dh)
-      if (nrow(cached)) {
+      if (cache && nrow(cached)) {
         finish_run(lake, run, "cached", release = cached$release_id[[1]])
         run_result(run, "cached", cached$release_id[[1]])
       } else {

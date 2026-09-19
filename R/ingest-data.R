@@ -41,6 +41,7 @@ dl_ingest_data <- function(
   }
   asset_id(asset)
   with_execution_lake(lake, function(con) {
+    assert_writable(con)
     parent <- file.path(con$config$landing, ".lakefold-staging")
     dir.create(parent, recursive = TRUE, showWarnings = FALSE)
     slot <- file.path(parent, asset)
@@ -50,6 +51,7 @@ dl_ingest_data <- function(
       )
     }
     on.exit(unlink(slot, recursive = TRUE), add = TRUE)
+    writeLines(jencode(writer_identity()), file.path(slot, "writer.json"))
     path <- file.path(slot, "delivery.rds")
     saveRDS(as.data.frame(data), path, compress = FALSE, version = 3)
     source <- dl_source(

@@ -1,7 +1,9 @@
 #' Check an expected business-date delivery, even when no ingest job ran
 #'
 #' Compares the latest published stand with an explicit due time and business
-#' date. A newly loaded old reporting period does not satisfy the expectation.
+#' date. Partitioned releases are checked for the expected date in their current
+#' data, so correcting an older partition does not hide a retained delivery.
+#' A full replacement does not inherit historical delivery evidence.
 #' This function must be called by an existing scheduler; it creates none.
 #' Missing deliveries generate deduplicated metadata events. No message is sent
 #' unless the caller supplies a notification transport.
@@ -11,6 +13,10 @@
 #' @param business_date Expected date, as `Date` or ISO `YYYY-MM-DD` string.
 #' @param due_at,at Due time and evaluation time, both POSIXct scalars.
 #' @param notify Optional function receiving an event without source rows.
+#' @param date_column Optional business-date column to inspect in the current
+#'   release. Inferred for a single date partition; otherwise the delivery's
+#'   recorded business date is used. Supply explicitly for multi-date full writes.
+#' @param record Persist monitoring events. Defaults to `FALSE` on read-only lakes.
 #' @returns A tibble with status `pending`, `received` or `missing`. Once due,
 #'   the result is also persisted as an operational event.
 #' @export
@@ -33,9 +39,18 @@ dl_check_delivery <- function(
   business_date,
   due_at,
   at = Sys.time(),
-  notify = NULL
+  notify = NULL,
+  date_column = NULL,
+  record = !isTRUE(lake$config$read_only)
 ) {
   assert_lake(lake)
+  flag(record, "record")
+  if (record) {
+    assert_writable(lake)
+  }
+  if (!is.null(date_column)) {
+    column_name(date_column)
+  }
   asset_id(asset)
   if (!inherits(contract, "dl_contract")) {
     abort("contract must be a dl_contract.")
@@ -58,7 +73,31 @@ dl_check_delivery <- function(
     abort("at and due_at must be POSIXct scalars.")
   }
   releases <- dl_releases(lake, asset)
-  received <- nrow(releases) > 0 && identical(releases$business_date[[1]], date)
+  received <- FALSE
+  if (nrow(releases)) {
+    ref <- releases[1, ]
+    column <- date_column %||% delivery_partition_column(lake, ref)
+    if (!is.null(column)) {
+      data <- dl_tbl(lake, asset, ref$release_id[[1]])
+      if (!column %in% colnames(data)) {
+        abort("Delivery date column is missing from the current release.")
+      }
+      type <- infer_column_types(dplyr::select(data, dplyr::all_of(column)))[[
+        1
+      ]]
+      if (!type %in% c("Date", "character")) {
+        abort("Delivery date column must contain Date or ISO character values.")
+      }
+      value <- if (type == "Date") as.Date(date) else date
+      received <- count_rows(utils::head(
+        dplyr::filter(data, !!rlang::sym(column) == !!value),
+        1
+      )) >
+        0
+    } else {
+      received <- identical(ref$business_date[[1]], date)
+    }
+  }
   status <- if (received) {
     "received"
   } else if (at < due_at) {
@@ -67,7 +106,7 @@ dl_check_delivery <- function(
     "missing"
   }
   event_id <- NA_character_
-  if (status != "pending") {
+  if (status != "pending" && record) {
     dl_register(lake, contract)
     incident <- fingerprint(list(
       asset = asset,
@@ -143,4 +182,35 @@ dl_check_delivery <- function(
     release_id = if (received) releases$release_id[[1]] else NA_character_,
     event_id = event_id
   )
+}
+
+
+delivery_partition_column <- function(lake, release) {
+  rows <- query(
+    lake,
+    paste(
+      "SELECT definition FROM",
+      meta(lake, "assets"),
+      "WHERE fingerprint = ? AND kind = 'pipeline'"
+    ),
+    list(release$definition_hash[[1]])
+  )
+  if (!nrow(rows)) {
+    return(NULL)
+  }
+  definition <- jdecode(rows$definition[[1]])
+  publish <- definition$steps$publish
+  if (!identical(publish$mode, "replace_partition")) {
+    return(NULL)
+  }
+  columns <- unlist(publish$partition_by, use.names = FALSE)
+  types <- unlist(definition$steps$validate$columns)
+  dates <- intersect(columns, names(types)[types == "Date"])
+  if (length(dates) == 1L) {
+    return(dates[[1]])
+  }
+  if (length(columns) == 1L && types[[columns]] == "character") {
+    return(columns[[1]])
+  }
+  NULL
 }

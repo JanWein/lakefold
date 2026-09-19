@@ -71,6 +71,8 @@ dl_storage_s3 <- function(
 #'   S3).
 #' @param backend DuckLake, or local DuckDB for offline development.
 #' @param install_extensions Allow DuckDB to install required extensions.
+#' @param read_only Attach existing storage read-only and skip schema creation
+#'   and migration. A lake created by a newer package may require an upgrade.
 #' @param config A configuration from a previously connected lake.
 #' @return A connected lake handle. Close it with dl_disconnect().
 #' @export
@@ -91,7 +93,8 @@ dl_setup <- function(
   layers = c("raw", "validated", "products"),
   landing = "landing",
   backend = c("ducklake", "duckdb"),
-  install_extensions = TRUE
+  install_extensions = TRUE,
+  read_only = FALSE
 ) {
   dl_connect(dl_config(
     catalog,
@@ -99,7 +102,8 @@ dl_setup <- function(
     layers,
     landing,
     backend,
-    install_extensions
+    install_extensions,
+    read_only
   ))
 }
 
@@ -120,8 +124,10 @@ dl_config <- function(
   layers = c("raw", "validated", "products"),
   landing = "landing",
   backend = c("ducklake", "duckdb"),
-  install_extensions = TRUE
+  install_extensions = TRUE,
+  read_only = FALSE
 ) {
+  flag(read_only, "read_only")
   backend <- match.arg(backend)
   if (
     !inherits(catalog, "dl_catalog_spec") ||
@@ -145,7 +151,8 @@ dl_config <- function(
       layers = layers,
       landing = absolute_path(landing),
       backend = backend,
-      install_extensions = install_extensions
+      install_extensions = install_extensions,
+      read_only = read_only
     ),
     class = "dl_config"
   )
@@ -153,22 +160,41 @@ dl_config <- function(
 
 #' @rdname dl_setup
 #' @export
-dl_connect <- function(config) {
+dl_connect <- function(config, read_only = config$read_only %||% FALSE) {
+  flag(read_only, "read_only")
+  config$read_only <- read_only
+  if (
+    read_only &&
+      config$catalog$type == "duckdb" &&
+      !file.exists(config$catalog$path)
+  ) {
+    abort("A read-only catalog must already exist.")
+  }
   con <- DBI::dbConnect(duckdb::duckdb(), dbdir = ":memory:")
   ok <- FALSE
   on.exit(if (!ok) DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
   lake <- structure(list(con = con, config = config), class = "dl_lake")
   cat <- config$catalog
   st <- config$storage
-  dir.create(config$landing, recursive = TRUE, showWarnings = FALSE)
-  if (cat$type == "duckdb") {
-    dir.create(dirname(cat$path), recursive = TRUE, showWarnings = FALSE)
-  }
-  if (st$type == "local") {
-    dir.create(st$path, recursive = TRUE, showWarnings = FALSE)
+  if (!read_only) {
+    dir.create(config$landing, recursive = TRUE, showWarnings = FALSE)
+    if (cat$type == "duckdb") {
+      dir.create(dirname(cat$path), recursive = TRUE, showWarnings = FALSE)
+    }
+    if (st$type == "local") {
+      dir.create(st$path, recursive = TRUE, showWarnings = FALSE)
+    }
   }
   if (config$backend == "duckdb") {
-    exec(lake, paste("ATTACH", qlit(lake, cat$path), "AS lake"))
+    exec(
+      lake,
+      paste(
+        "ATTACH",
+        qlit(lake, cat$path),
+        "AS lake",
+        if (read_only) "(READ_ONLY)" else ""
+      )
+    )
   } else {
     extensions <- c(
       "ducklake",
@@ -243,7 +269,7 @@ dl_connect <- function(config) {
           qlit(lake, uri),
           "AS lake (DATA_PATH",
           qlit(lake, data_path),
-          ")"
+          if (read_only) ", READ_ONLY)" else ")"
         )
       ),
       error = function(e) {
@@ -253,16 +279,30 @@ dl_connect <- function(config) {
       }
     )
   }
-  for (s in c(config$layers, "_dl")) {
-    exec(
-      lake,
-      paste(
-        "CREATE SCHEMA IF NOT EXISTS",
-        paste(qident(lake, c("lake", s)), collapse = ".")
+  if (!read_only) {
+    for (s in c(config$layers, "_dl")) {
+      exec(
+        lake,
+        paste(
+          "CREATE SCHEMA IF NOT EXISTS",
+          paste(qident(lake, c("lake", s)), collapse = ".")
+        )
       )
+    }
+    registry_init(lake)
+  } else {
+    versions <- tryCatch(
+      dl_registry(lake, "schema_version")$version,
+      error = function(e) {
+        abort("Registry is missing. Open with a writable connection first.")
+      }
     )
+    if (!length(versions) || anyNA(versions) || max(versions) != 3L) {
+      abort(
+        "Unsupported registry version. Open with a compatible writable package first."
+      )
+    }
   }
-  registry_init(lake)
   query(lake, "SELECT 1 AS connection_test")
   ok <- TRUE
   lake

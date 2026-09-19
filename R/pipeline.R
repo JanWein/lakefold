@@ -119,7 +119,7 @@ dl_step_publish <- function(
   if (mode == "replace_partition" && !length(partition_by)) {
     abort("replace_partition needs partition_by.")
   }
-  invisible(lapply(partition_by, ident))
+  invisible(lapply(partition_by, column_name))
   add_step(
     pipeline,
     "publish",
@@ -175,6 +175,7 @@ new_run <- function(lake, id, asset, definition_hash, code_version) {
       release_id = NA_character_
     )
   )
+  insert_meta(lake, "run_owners", c(list(run_id = run), writer_identity()))
   run
 }
 finish_run <- function(
@@ -463,8 +464,10 @@ dl_run <- function(
     lake <- dl_connect(pipeline$config)
     on.exit(dl_disconnect(lake), add = TRUE)
   }
-  assert_lake(lake)
-  if (!identical(lake$config, pipeline$config)) {
+  assert_writable(lake)
+  expected_config <- pipeline$config
+  expected_config$read_only <- expected_config$read_only %||% FALSE
+  if (!identical(lake$config, expected_config)) {
     abort("Pipeline and execution lake configurations differ.")
   }
   src <- pipeline$steps$land
