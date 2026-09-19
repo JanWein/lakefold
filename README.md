@@ -7,8 +7,8 @@ Quellen, Verträge und Workflows sind explizite Spezifikationen; ausgeführt wir
 erst mit einem eigenen Aufruf. Das Paket hieß bisher **dataloom**. Die bisherigen
 `dl_*`-Funktionen bleiben erhalten.
 
-> Entwicklungsstand 0.3.0: lokal einsetzbar und mit automatisierten Tests versehen.
-> Der Paket-Registry benötigt einen einzelnen schreibenden Prozess. dbt-Ausgaben
+> Entwicklungsstand 0.4.0: lokal einsetzbar und mit automatisierten Tests versehen.
+> Die Paket-Registry benötigt einen einzelnen schreibenden Prozess. dbt-Ausgaben
 > und unveränderliche Paket-Releases haben unterschiedliche Garantien.
 
 ## Installation
@@ -86,6 +86,40 @@ zeigt Installation, DuckLake-Anbindung, Fehlerdiagnose und das anschließende
 | Kennzahlen und Berichte | `dl_metric()`, `dl_measure()`, `dl_report_release()` | Versionierte Definitionen und Eingabereferenzen |
 | Metadaten ansehen | `dl_registry()`, `dl_catalog()` | Register und lesender Shiny-Katalog |
 
+## Qualitätsgates mit pointblank
+
+Installiere dafür das optionale Paket mit `install.packages("pointblank")`.
+
+Version 0.4.0 ergänzt den vollständigen Weg von der Eingangskontrolle bis zum
+Qualitätsbericht. pointblank prüft Werte und Segmente, dbt baut und testet
+SQL-Modelle, dm beschreibt deren ausdrücklich deklarierte Beziehungen.
+
+```r
+rule <- dl_pointblank("amounts", function(data) {
+  pointblank::create_agent(data,
+    actions = pointblank::action_levels(warn_at = 0.005, stop_at = 0.05)) |>
+    pointblank::col_vals_gte("amount", 0, segments = pointblank::vars(entity))
+}, policy = "agent")
+```
+
+Mit `input_contract` in `dl_ingest()` oder `dl_ingest_data()` wird die Lieferung
+vor dem Schreiben in Raw geprüft. `dl_step_precheck()` bietet denselben Schritt
+in einer expliziten Pipeline. Landing bleibt erhalten; der abschließende
+Kandidatencheck bleibt Pflicht. Fehler, ausgelassene Prüfungen und leere Pläne
+können nicht als Erfolg passieren.
+
+| Neuer Baustein | Nutzen |
+|---|---|
+| `dl_contract_from()` / `dl_contract_confirm()` / `dl_contract_diff()` | Typenentwurf, bewusste fachliche Prüfung und Änderungsvergleich |
+| `dl_status()` / `dl_quality()` / `dl_releases()` / `dl_lineage()` | Diagnose und Herkunft ohne Registry-Interna |
+| `dl_quality_report()` / `dl_pointblank_report()` / `dl_expect_quality()` | HTML/JSON, nativer pointblank-Bericht und testthat |
+| `dl_dbt_publish()` | Aktuelle dbt-Relation kopieren, prüfen und als unveränderlichen Release veröffentlichen |
+| `dl_check_delivery()` | Überfällige fachliche Stichtage auch ohne gestarteten Import erkennen |
+| `dl_cleanup()` | Vorschau und gezielte Bereinigung alter unveröffentlichter Fehlversuche |
+
+Der [ausführbare Qualitätsleitfaden](https://janwein.github.io/lakefold/articles/quality-gates.html)
+zeigt Warnschwellen, Segmentierung, blockierte Lieferungen und Berichte.
+
 ## Wie ähnlich ist es tidymodels?
 
 Die Bedienidee ist verwandt: **definieren, ansehen, ausführen, auswerten**.
@@ -94,9 +128,9 @@ Spezifikationen lassen sich per `|>` zusammensetzen und separat drucken;
 Tibbles, dbplyr und dm statt eigener Tabellenformate.
 
 Das Paket erreicht noch nicht die Reife und Erweiterbarkeit von tidymodels.
-Es fehlen unter anderem ein einheitliches Diagnosesystem über beide Engines,
-ein stabiler Adapter-Vertrag, Schema-Migrationen und koordinierte parallele
-Schreibzugriffe. dbt deckt seinen SQL-DAG ab; einen gemeinsamen DAG für beliebige
+Gemeinsame Status-/Qualitätsabfragen und eine versionierte Registry-Migration
+sind vorhanden. Ein stabiler allgemeiner Adapter-Vertrag und koordinierte
+parallele Schreibzugriffe fehlen weiterhin. dbt deckt seinen SQL-DAG ab; einen gemeinsamen DAG für beliebige
 R- und dbt-Aufgaben bietet das Paket noch nicht. Details und Prioritäten stehen
 in der [Designbewertung](https://github.com/JanWein/lakefold/blob/main/docs/DESIGN_REVIEW.md).
 
@@ -111,6 +145,7 @@ in der [Designbewertung](https://github.com/JanWein/lakefold/blob/main/docs/DESI
 | Kennzahlen reproduzieren | [Produkte und Kennzahlen](https://github.com/JanWein/lakefold/blob/main/docs/PRODUCTS_AND_METRICS.md) |
 | Betrieb und Grenzen | [Betriebsleitfaden](https://github.com/JanWein/lakefold/blob/main/docs/OPERATIONS.md) |
 | Prüfstand nachvollziehen | [Validierung](https://github.com/JanWein/lakefold/blob/main/docs/VALIDATION.md) |
+| Pointblank und Qualitätsgates | [Qualitätsleitfaden](https://janwein.github.io/lakefold/articles/quality-gates.html) |
 | Von dataloom wechseln | [Migration](https://github.com/JanWein/lakefold/blob/main/docs/MIGRATION.md) |
 
 In R: `help(package = "lakefold")`, `?dl_ingest`, `?dl_dbt_build` und

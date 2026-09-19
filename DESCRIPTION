@@ -1,6 +1,6 @@
 Package: lakefold
 Title: R Workflows for Data Lakes, dbt and Relational Models
-Version: 0.3.0
+Version: 0.4.0
 Authors@R: person("Jan-Hendrik", "Weinert", role = c("aut", "cre"), email = "65009403+JanWein@users.noreply.github.com")
 Description: A modular grammar for landing source files, validating immutable
     candidates, publishing versioned data products and calculating governed
