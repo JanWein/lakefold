@@ -7,7 +7,7 @@ Check date: 19 September 2026. Local environment: Ubuntu 24.04 and R 4.3.3.
 | Full `R CMD check --no-manual` | 0 errors, 0 warnings, 0 notes |
 | Expectations in the local package check | 329 passed, 0 failed, 0 warnings, 0 skipped |
 | Separate full DuckLake suite | 329 expectations passed, including actual dbt execution |
-| Examples and vignettes | All package examples checked; seven vignettes built and executable chunks run |
+| Examples and vignettes | All package examples checked; eight vignettes built and executable chunks run |
 | pkgdown | Reference index checked and complete site built |
 | API and reference | 66 exported functions, 55 help topics, complete pkgdown index |
 | Tests | 72 test cases, including 16 new simple-workflow cases |
@@ -24,6 +24,22 @@ The main package check includes the optional dbt integration and the new
 DuckLake entry-point test. GitHub checks run on both backend configurations;
 see [GitHub Actions](https://github.com/JanWein/lakefold/actions) for evidence tied
 to published commits. The limits below still apply to version 0.5.0.
+
+## Documentation walkthrough verification
+
+The monthly reporting walkthrough executes the same synthetic story from the
+first delivery through corrections, a blocked duplicate, partition replacement,
+a prepared product, a stock metric and a report record. Assertions check the
+original August total of 350, the corrected total of 370, September's separate
+390, the retained historical release and the blocked-delivery behavior.
+The optional pointblank example is executed when pointblank is installed.
+
+The bundled `inst/examples/monthly_reporting.R` runs the core sequence without
+knitr or optional integrations and checks the same outcomes. The Excel block
+is explicitly a template requiring a user's workbook and readxl; no external
+workbook is assumed to have been tested. The explanatory diagram is shipped
+with the vignette and the website. This update changes documentation and
+examples, with no runtime API changes.
 
 ## Historical record: 0.4.0
 

@@ -1,5 +1,10 @@
 # Products, relational models, metrics and reports
 
+This is an advanced reference with illustrative snippets that assume your own
+connected lake, contracts and registered assets. For a complete runnable example,
+start with the [monthly reporting walkthrough](https://janwein.github.io/lakefold/articles/getting-started.html),
+which introduces products and metrics only after a working import and quality check.
+
 ## Build a product from releases
 
 ```r

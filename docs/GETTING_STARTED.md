@@ -1,57 +1,52 @@
-# Getting started: open, write and read
+# Build a monthly reporting workflow, step by step
 
-Install the package and try the minimal local workflow:
+Start with [Why lakefold?](WHY_LAKEFOLD.md) if you are unsure what the package
+adds to an ordinary import script. Then follow the
+[complete executable walkthrough](https://janwein.github.io/lakefold/articles/getting-started.html).
+It uses synthetic monthly reserve data and runs locally without credentials.
+
+| Step | What you do | What you learn |
+|---|---|---|
+| 1 | Open a local lake | A dedicated folder is enough to start |
+| 2 | Store August's delivery: North 100, South 250 | Write and read a dataset totaling 350 |
+| 3 | Correct South to 270 | Current data totals 370; the first release still totals 350 |
+| 4 | Require one row per entity/date | A duplicate is blocked and the successful data stays available |
+| 5 | Add a complete September delivery | Month replacement keeps August 370 and September 390 together |
+| 6, optional | Build monthly totals | Reuse a prepared table with recorded inputs |
+| 7, optional | Define a reserve metric | Record the formula and select one reporting date |
+| 8, optional | Record the original report | Preserve its value of 350 and the input version used |
+
+Each step explains why it is needed, what each call does and the expected
+result. Stop after Step 2 if you only need local storage, or after Step 4 if
+checked complete replacement deliveries cover your use case. Products, metrics,
+pointblank, dbt and remote infrastructure are optional.
+
+The guide also explains real Excel/CSV readers, original-file preservation,
+current versus historical data, retries, connection cleanup and recurring jobs.
+Later steps reuse earlier objects in the same R session.
+
+## Run the complete example
+
+Install lakefold, then run the bundled script:
 
 ```r
 install.packages("remotes")
 remotes::install_github("JanWein/lakefold")
-library(lakefold)
-
-orders <- data.frame(id = 1:3, amount = c(25, 75, 50))
-lake <- dl_open("my-lake")
-dl_write(lake, orders)
-dl_read(lake, "orders")
-dl_close(lake)
+source(system.file("examples", "monthly_reporting.R", package = "lakefold"),
+  echo = TRUE)
 ```
 
-R >= 4.2 and DuckDB >= 1.5.5 are required. No remote service, credentials,
-DuckLake extension, dbt or pointblank installation is needed for this workflow.
-Reopen the same folder with `dl_open("my-lake")` in a later session.
+The script needs only lakefold and its normal dependencies. It uses a temporary
+folder, verifies the central results and removes its own demo data afterwards.
+Read or download [monthly_reporting.R](../inst/examples/monthly_reporting.R).
+The canonical [vignette source](../vignettes/getting-started.Rmd) is checked as
+part of `R CMD check`; its optional pointblank example runs when installed.
+The Excel block is a template requiring your own workbook and readxl.
 
-`dl_write(lake, "orders.csv")` also reads files directly. CSV, TSV and RDS are
-supported by default. Data-frame expressions need an explicit asset name:
-`dl_write(lake, data.frame(id = 1:3), "orders")`.
+For persistent data, use a dedicated project path in your own script and close
+it with `dl_close(lake)` when finished. Do not use the demo's temporary directory
+for a production project.
 
-The first successful write records column names and types. Later schema
-changes and empty deliveries block publication and leave the previous release
-available. Missing values are permitted; no business rules are inferred.
-
-## Optional additions
-
-* Add a contract for keys, business rules, ownership or freshness requirements.
-* Add `reader` for other file formats or explicit parsing choices.
-* Set `lazy = TRUE` in `dl_read()` to filter in the database before collecting.
-* Supply `release` to read an exact historical version.
-* Use `dl_config()` and `dl_pipeline()` for custom storage and explicit steps.
-* Adopt pointblank, dbt, dm and metrics only when their capabilities are needed.
-
-A custom contract needs an identifier and columns:
-
-```r
-contract <- dl_contract("orders.checked",
-  columns = c(id = "integer", amount = "numeric"), key = "id")
-lake <- dl_open("my-lake")
-dl_write(lake, orders, contract = contract)
-dl_close(lake)
-```
-
-Explicit contracts require non-missing declared columns by default. Continue
-supplying the contract on subsequent writes so its checks remain active.
-The simple API chooses technical versions automatically; custom callbacks run
-again unless an explicit `code_version` enables reuse.
-
-The canonical [executable getting-started guide](https://janwein.github.io/lakefold/articles/getting-started.html)
-includes failure handling, file parsing, historical reads, reopen behavior,
-cache semantics and the progression to advanced workflows. Its R chunks run
-as part of the package check. See also the [API](API.md),
-[workflow guide](WORKFLOWS.md) and [validation record](VALIDATION.md).
+Once the walkthrough makes sense, use the [API](API.md),
+[workflow guide](WORKFLOWS.md) and [operations guide](OPERATIONS.md) for specific
+next steps. The [validation record](VALIDATION.md) describes tested behavior.

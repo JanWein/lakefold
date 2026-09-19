@@ -1,5 +1,8 @@
 # API as of 0.5.0
 
+New to the package? Read [Why lakefold?](WHY_LAKEFOLD.md), then follow the
+[monthly reporting walkthrough](GETTING_STARTED.md) before browsing all functions.
+
 The complete grouped reference is available on the [documentation website](https://janwein.github.io/lakefold/reference/index.html).
 All 66 exported functions have package help. In R, use `help(package = "lakefold")`.
 
