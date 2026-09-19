@@ -85,33 +85,14 @@
     amount = c(110, 280)
   )
 
-  path <- file.path(root, "monthly.csv")
-
-  utils::write.csv(september, path, row.names = FALSE)
-
-  monthly <- dl_step_publish(
-    dl_step_validate(
-      dl_step_extract(dl_step_land(
-        dl_pipeline("reserves.monthly", lake, code_version = "tutorial-v1"),
-        dl_source("reserves.delivery", path, reader = function(path) {
-          utils::read.csv(
-            path,
-            colClasses = c(
-              entity = "character",
-              date = "Date",
-              amount = "numeric"
-            )
-          )
-        })
-      )),
-      contract
-    ),
+  september_run <- dl_write(
+    lake,
+    september,
     "reserves",
-    mode = "replace_partition",
-    partition_by = "date"
+    contract = contract,
+    partition_by = "date",
+    business_date = "2026-09-30"
   )
-
-  september_run <- dl_run(monthly, lake, business_date = "2026-09-30")
 
   print(dplyr::arrange(dl_read(lake, "reserves"), date, entity))
 

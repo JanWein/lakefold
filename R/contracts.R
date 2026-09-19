@@ -62,7 +62,7 @@ dl_contract <- function(
   ) {
     abort("columns must be a named type vector.")
   }
-  invisible(lapply(names(columns), ident))
+  invisible(lapply(names(columns), column_name))
   if (
     !all(
       columns %in%
@@ -383,6 +383,9 @@ pointblank_results <- function(rule, data, keep_agent = FALSE) {
 #'   `"candidate"`.
 #' @param keep_agents Retain interrogated pointblank agents as an in-memory
 #'   attribute for [dl_pointblank_report()]. Defaults to `FALSE`.
+#' @param keep_errors Retain original R conditions in an in-memory `dl_errors`
+#'   attribute. They can contain private data and are never persisted in the
+#'   registry. Inspect with [dl_quality_errors()]. Defaults to `FALSE`.
 #' @return A tibble with one row per check. Only passed and warning permit
 #'   publication.
 #' @export
@@ -396,7 +399,8 @@ dl_validate <- function(
   data,
   contract,
   stage = "candidate",
-  keep_agents = FALSE
+  keep_agents = FALSE,
+  keep_errors = FALSE
 ) {
   if (!inherits(contract, "dl_contract")) {
     abort("contract must be a dl_contract.")
@@ -404,11 +408,16 @@ dl_validate <- function(
   assert_contract_ready(contract)
   scalar(stage, "stage")
   flag(keep_agents, "keep_agents")
+  flag(keep_errors, "keep_errors")
+  errors <- list()
   result <- list()
   agents <- list()
   add <- function(x) result[[length(result) + 1L]] <<- x
   protect <- function(name, fn) {
     tryCatch(fn(), error = function(e) {
+      if (keep_errors) {
+        errors[[name]] <<- e
+      }
       quality_row(
         name,
         "error",
@@ -436,6 +445,9 @@ dl_validate <- function(
   if (!identical(result[[1]]$status[[1]], "passed")) {
     out <- dplyr::bind_rows(result)
     out$stage <- stage
+    if (keep_errors) {
+      attr(out, "dl_errors") <- errors
+    }
     return(out)
   }
   add(protect("types", function() {
@@ -483,9 +495,14 @@ dl_validate <- function(
     n_failed = as.numeric(is.na(n) || (n == 0 && !contract$allow_empty)),
     n_total = 1
   ))
-  for (column in union(contract$required, contract$key)) {
+  required <- union(contract$required, contract$key)
+  missing <- tryCatch(null_counts(data, required), error = function(e) e)
+  for (column in required) {
     add(protect(paste0("not_null:", column), function() {
-      k <- count_rows(dplyr::filter(data, is.na(!!rlang::sym(column))))
+      if (inherits(missing, "error")) {
+        stop(missing)
+      }
+      k <- missing[[column]]
       quality_row(
         paste0("not_null:", column),
         if (k == 0) "passed" else "failed",
@@ -549,6 +566,9 @@ dl_validate <- function(
         }
       },
       error = function(e) {
+        if (keep_errors) {
+          errors[[rule$name]] <<- e
+        }
         quality_row(
           rule$name,
           "error",
@@ -571,6 +591,9 @@ dl_validate <- function(
           paste0("not_null:", union(contract$required, contract$key))
         )
   ] <- "r"
+  if (keep_errors) {
+    attr(out, "dl_errors") <- errors
+  }
   if (keep_agents) {
     attr(out, "pointblank_agents") <- agents
   }
@@ -579,4 +602,18 @@ dl_validate <- function(
 
 quality_ok <- function(results) {
   nrow(results) > 0 && all(results$status %in% c("passed", "warning"))
+}
+
+
+#' Inspect locally retained quality exceptions
+#' @param quality Results from `dl_validate(..., keep_errors = TRUE)`.
+#' @returns A named list of original R conditions, empty when none were retained.
+#' @export
+#' @examples
+#' contract <- dl_contract("example", columns = c(id = "integer"),
+#'   rules = list(dl_rule("broken", function(data) stop("Check configuration"))))
+#' quality <- dl_validate(data.frame(id = 1L), contract, keep_errors = TRUE)
+#' lapply(dl_quality_errors(quality), conditionMessage)
+dl_quality_errors <- function(quality) {
+  attr(quality, "dl_errors") %||% list()
 }

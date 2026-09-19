@@ -88,8 +88,11 @@ retention is not implemented.
 
 Call `dl_check_delivery()` from the existing scheduler. It checks an explicitly
 expected business date and `due_at`, even without a preceding import attempt.
-It compares the expected date with the latest published release; a recently
-published older business date does not meet a new expectation. Notifications
+For partitioned releases it inspects the current date partition values, so an
+older correction retains evidence for newer months still present. For a full
+replacement with several dates, supply `date_column`. Without an identifiable
+date column it compares the recorded delivery date. Removed historical data
+does not count as a current delivery. Notifications
 are deduplicated after successful delivery, and transport failures remain
 retryable. The catalog displays delivery status alongside data age and the
 latest attempt.
@@ -121,3 +124,59 @@ For custom readers and rules, fresh evaluation is the default. Opt into cache
 reuse with an explicit `code_version` covering dependencies and captured values.
 Schema preparation for a first file happens before the normal run is created;
 parsing failures retain the archived bytes but have no run-level quality report.
+
+
+## Read-only analysis and report reuse
+
+After closing the writer, open `dl_open("my-lake", read_only = TRUE)` for analysis.
+The backend enforces read-only storage access. No registry migration runs;
+upgrade once through a writable connection when needed. `dl_measure()` and
+`dl_check_delivery()` default to `record = FALSE` on this handle. Queries still
+need the backend's normal storage permissions, and local DuckDB connection
+locking rules still apply.
+
+Read saved values with `dl_report_read(lake, "report-id", values_only = TRUE)`.
+This does not execute a formula. Re-saving a recalculated identical report keeps
+its original timestamps. Changed inputs or values require a new report ID.
+
+## Recover an interrupted writer
+
+Inspect `dl_interrupted(lake)`, stop the original writer, and preview explicitly:
+
+```r
+# Replace these IDs with the selected run and asset from your own job.
+plan <- dl_recover(lake, run_ids = interrupted_run_id,
+  staging_assets = "orders")
+print(plan)
+```
+
+Execute the same selection with `dry_run = FALSE`. A known live process blocks
+recovery. For a legacy, remote or unsupported owner, set `writer_stopped = TRUE`
+only after stopping that writer externally. Linux process identity includes the
+boot and process start, so PID reuse does not establish liveness. This is not a
+replacement for shared writer coordination.
+
+Recovered runs become errors; releases, landing archives and evidence remain.
+Staging cleanup happens after the metadata transaction and reports filesystem
+failures separately. Retry a remaining staging slot explicitly. A later
+`dl_cleanup()` can remove eligible unpublished tables under your retention policy.
+
+## Inspect a rule failure locally
+
+Run `q <- dl_validate(candidate, contract, keep_errors = TRUE)` and inspect
+`lapply(dl_quality_errors(q), conditionMessage)`. Original conditions remain in
+memory and are not stored in `_dl.quality_results`. They may include data values.
+Use `keep_agents = TRUE` and `dl_pointblank_report()` for native pointblank detail.
+
+## Measure your own workload
+
+Source `system.file("examples", "benchmark.R", package = "lakefold")`, then run
+`benchmark_lakefold(100000, "duckdb")` or choose DuckLake. The deterministic
+synthetic workload times an initial write, a complete partition correction and a
+keyed comparison. Its assertions check changed-row counts; its timings describe
+that machine only. `dl_compare()` limits collected previews by default.
+
+Partition replacement still materializes a full candidate and each published
+release retains its table. Increasing history therefore increases storage.
+The benchmark does not establish production throughput, incremental storage
+or remote backup guarantees.

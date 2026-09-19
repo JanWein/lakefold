@@ -9,7 +9,7 @@ registry_init <- function(lake) {
     )
   )
   versions <- query(lake, paste("SELECT version FROM", registry_table))$version
-  if (anyNA(versions) || any(versions > 2L)) {
+  if (anyNA(versions) || any(versions > 3L)) {
     abort(
       "Registry schema is newer than this lakefold version supports.",
       "dl_registry_version"
@@ -23,7 +23,8 @@ registry_init <- function(lake) {
     releases = "release_id VARCHAR, asset VARCHAR, schema_name VARCHAR, table_name VARCHAR, run_id VARCHAR, published_at VARCHAR, contract VARCHAR, definition_hash VARCHAR, input_hash VARCHAR, quality VARCHAR, business_date VARCHAR, parent_release VARCHAR",
     lineage_edges = "run_id VARCHAR, from_id VARCHAR, from_version VARCHAR, to_id VARCHAR, to_version VARCHAR, relation VARCHAR",
     events = "event_id VARCHAR, run_id VARCHAR, asset VARCHAR, type VARCHAR, recipient VARCHAR, created_at VARCHAR, status VARCHAR, message VARCHAR",
-    reports = "id VARCHAR, created_at VARCHAR, manifest VARCHAR"
+    reports = "id VARCHAR, created_at VARCHAR, manifest VARCHAR",
+    run_owners = "run_id VARCHAR, host VARCHAR, pid INTEGER, boot VARCHAR, process_start VARCHAR"
   )
   for (name in names(schemas)) {
     exec(
@@ -58,11 +59,11 @@ registry_init <- function(lake) {
         )
       )
     }
-    if (!2L %in% versions) {
+    if (!3L %in% versions) {
       insert_meta(
         lake,
         "schema_version",
-        list(version = 2L, applied_at = now())
+        list(version = 3L, applied_at = now())
       )
     }
   })
@@ -95,10 +96,14 @@ dl_registry <- function(
     "lineage_edges",
     "events",
     "reports",
-    "schema_version"
+    "schema_version",
+    "run_owners"
   )
 ) {
   assert_lake(lake)
+  if (length(table) == 1L && table %in% c("ru", "run")) {
+    table <- "runs"
+  }
   table <- match.arg(table)
   query(lake, paste("SELECT * FROM", meta(lake, table)))
 }
@@ -126,7 +131,7 @@ dl_registry <- function(
 #' dl_disconnect(lake)
 #' unlink(root, recursive = TRUE)
 dl_register <- function(lake, object) {
-  assert_lake(lake)
+  assert_writable(lake)
   if (inherits(object, "dl_contract")) {
     assert_contract_ready(object)
   }
@@ -139,7 +144,7 @@ dl_register <- function(lake, object) {
   old <- query(
     lake,
     paste(
-      "SELECT fingerprint FROM",
+      "SELECT fingerprint, definition FROM",
       meta(lake, "assets"),
       "WHERE id = ? AND version = ? AND kind = ?"
     ),
@@ -147,6 +152,19 @@ dl_register <- function(lake, object) {
   )
   if (nrow(old)) {
     if (any(old$fingerprint != h)) {
+      if (
+        inherits(object, "dl_metric") &&
+          any(vapply(
+            old$definition,
+            function(x) is.character(jdecode(x)$expr),
+            logical(1)
+          ))
+      ) {
+        abort(
+          "Legacy metric formulas used abbreviated labels. Register a new metric version; historical reports remain readable.",
+          "dl_legacy_metric"
+        )
+      }
       abort(paste(
         "Definition changed without a version bump:",
         object$id,

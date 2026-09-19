@@ -45,7 +45,8 @@ dependency; servers, credentials and optional integrations are unnecessary for
 this example. CSV, TSV and RDS files can also be submitted directly. The
 walkthrough shows how to read and preserve an Excel workbook.
 
-The first successful write remembers column names and types. Later schema
+The first successful write remembers column names and types. Automatic numeric columns accept integers and decimals; explicitly declared
+integer contracts stay strict. Later incompatible schema
 changes and empty deliveries block publication, leaving the last successful
 version available. Missing values are allowed on this basic path. Business
 checks, such as one row per entity and date, are rules you add explicitly.
@@ -72,7 +73,11 @@ specific need:
 |---|---|
 | Reject duplicate records or invalid values | A contract, optionally with pointblank rules |
 | Use a previous version | `release = first$release_id` in `dl_read()` |
-| Keep several complete months in the current table | A pipeline with replacement by reporting date |
+| Keep several complete months in the current table | `dl_write(..., partition_by = "date")` |
+| See which records and totals changed | `dl_compare(lake, "reserves", key = "entity")` |
+| Analyze without changing metadata | `dl_open("my-lake", read_only = TRUE)` |
+| Reopen a saved report | `dl_report_read(lake, "report-id")` |
+| Fetch from an existing API or database client | `dl_write(lake, fetch_data, "orders")` |
 | Reuse a prepared table | A product built from recorded input releases |
 | Record the meaning and inputs of a reported number | A metric and a report manifest |
 | Query large tables before collecting into R | `dl_read(..., lazy = TRUE)` |
@@ -89,6 +94,7 @@ You do not need to learn the complete API first.
 
 | Question | Guide |
 |---|---|
+| How do I use the new everyday operations? | [Everyday workflows](https://janwein.github.io/lakefold/articles/everyday-workflows.html) |
 | How do checks, corrections and retries behave? | [Quality and history](https://janwein.github.io/lakefold/articles/quality-history.html) |
 | How do I add pointblank rules and reports? | [Quality gates](https://janwein.github.io/lakefold/articles/quality-gates.html) |
 | How do I compose processing steps? | [Workflow design](https://janwein.github.io/lakefold/articles/workflow-design.html) |
@@ -104,7 +110,7 @@ The online guides need no local vignette installation. To install local guides,
 use `remotes::install_github("JanWein/lakefold", build_vignettes = TRUE)` with
 Pandoc available, then `vignette("why-lakefold", package = "lakefold")`.
 
-Development version **0.5.0** requires one coordinated registry writer.
+Development version **0.6.0** requires one coordinated registry writer.
 Scheduling, access permissions and backups belong to your operating environment.
 Production S3/PostgreSQL and sustained large workloads still need verification
 in the target environment; the validation record states the tested scope.

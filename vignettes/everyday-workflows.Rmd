@@ -1,0 +1,222 @@
+---
+title: "Everyday workflows: import, compare, analyze and recover"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Everyday workflows: import, compare, analyze and recover}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE, purl=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", message = FALSE)
+```
+
+## One small workflow, several useful questions
+
+You already have an R table and want to answer three questions: **what is
+current, what changed, and what did the earlier report actually use?** You can
+start without a pipeline, owner, custom reader or external service.
+
+This example uses synthetic orders. The same pattern works for laboratory
+batches, monthly finance data, inventory snapshots or API extracts. A business
+key identifies a record; a partition identifies a complete group to replace.
+Choose those meanings for your own domain.
+
+```{r open-and-write}
+library(lakefold)
+root <- tempfile("lakefold-everyday-")
+lake <- dl_open(root)
+orders <- data.frame(id = c(1L, 2L), amount = c(10, 20))
+first <- dl_write(lake, orders, "orders")
+```
+
+An automatic structural schema allows integers and decimals in numeric columns.
+It does not invent a unique key or reject missing values. Add `contract` when
+you know the business requirements. Column names such as `Reserve amount` are
+supported; use backticks or `.data[["Reserve amount"]]` in expressions.
+
+## See exactly what changed
+
+A corrected delivery changes order 1, removes order 2, and introduces order 3:
+
+```{r compare-releases}
+corrected <- data.frame(id = c(1L, 3L), amount = c(12, 30))
+second <- dl_write(lake, corrected, "orders")
+difference <- dl_compare(lake, "orders", key = "id")
+difference
+difference$numeric_summary
+difference$changed
+```
+
+| Record | Earlier amount | Current amount | Meaning |
+|---|---:|---:|---|
+| 1 | 10 | 12 | Changed |
+| 2 | 20 | Absent | Removed |
+| 3 | Absent | 30 | Added |
+| Total | 30 | 42 | Increase of 12 |
+
+The total change includes additions and removals. Missing numeric values are
+excluded from totals and counted separately. Missing values compare equal when
+deciding whether a matched row changed. Row order does not matter.
+
+By default the comparison uses the latest two releases, runs counts in the
+database and collects at most 100 rows per preview. Set `from` and `to` to pin
+another pair, or `limit = Inf` when collecting every changed row is appropriate.
+When your published contract declares a key, omit `key`. Nonunique or missing
+keys produce an error instead of an ambiguous comparison.
+
+A structural change is shown in `$schema`. Added, removed or incompatible
+column types mark matched records as changed; compatible integer/decimal
+columns compare by value.
+
+## Keep complete batches or months together
+
+Whole-table replacement is the default. Add one optional argument when each
+delivery contains a complete partition:
+
+```{r partition-example}
+august <- data.frame(id = 1L, month = as.Date("2026-08-31"), amount = 100)
+september <- data.frame(id = 1L, month = as.Date("2026-09-30"), amount = 110)
+dl_write(lake, august, "monthly_orders", partition_by = "month")
+dl_write(lake, september, "monthly_orders", partition_by = "month")
+august$amount <- 105
+dl_write(lake, august, "monthly_orders", partition_by = "month")
+dl_read(lake, "monthly_orders") |> dplyr::arrange(month)
+```
+
+The current table contains August 105 and September 110. A correction for
+August preserves September. Every supplied month replaces the entire month;
+send a complete month rather than individual changed records. Use a batch ID,
+region/date combination or another declared partition where that meaning fits.
+The resulting full table is validated before publication.
+
+Delivery monitoring checks the current date partitions. For a multi-date full
+replacement, pass `date_column = "month"` to `dl_check_delivery()`. If no date
+column can be identified, the recorded `business_date` is used. Historical
+deliveries removed from the current table do not satisfy a current expectation.
+
+## Plug in an existing source client
+
+A zero-argument function can provide data from a database client, API or other
+R package. It must return a data frame:
+
+```{r source-function}
+fetch_orders <- function() {
+  # Replace this body with your existing authenticated client call.
+  data.frame(id = 1:2, amount = c(25, 75))
+}
+dl_write(lake, fetch_orders, "api_orders")
+```
+
+The function runs once per call; its returned table is archived as RDS. A
+changed response produces a new input fingerprint. This records the received
+R object. Use a file source when the exact original workbook or response bytes
+must be retained. Acquisition errors happen before a pipeline run is created.
+For very large inputs, this callback is not a streaming interface.
+
+## Calculate once, preserve the explanation
+
+A metric needs its identity, input asset and formula. Business descriptions and
+units are optional. A governed calculation still needs an explicit approval
+state and a code version:
+
+```{r metric-and-report}
+total <- dl_metric("orders.total", "orders", sum(amount, na.rm = TRUE),
+  approved = TRUE, code_version = "analysis-v1")
+values <- dl_measure(lake, total)
+report <- dl_report_release(lake, "orders-report-v1", list(total = values),
+  code_version = "reporting-v1")
+dl_report_read(lake, "orders-report-v1", values_only = TRUE)
+```
+
+The saved result is 42, together with its formula identity, input release,
+parameters and calculation time. `approved = TRUE` is your declared approval;
+it is not a separate approval system. `code_version` must change when external
+values, custom code or dependencies change. Full formula text is fingerprinted,
+while arbitrary closure environments are not.
+
+With no time column a metric defaults to flow. Supplying `time_column` defaults
+to stock and requires exactly one selected reporting date. A stock metric is
+appropriate for balances; a flow may sum transactions over multiple dates.
+
+Missing values are rejected in metric input columns by default, even when the
+formula uses `na.rm = TRUE`. Set `na_policy = "expression"` only when the
+formula intentionally handles them. Static `.data$amount` and
+`.data[["amount"]]` are checked. For unresolved dynamic selection or a custom
+function, declare `input_columns`. Custom functions without a declaration
+check every input column.
+
+Repeat calculation and saving are safe when the report content is identical:
+
+```{r repeat-report}
+again <- dl_measure(lake, total)
+saved_again <- dl_report_release(lake, "orders-report-v1", list(total = again),
+  code_version = "reporting-v1")
+saved_again$id
+```
+
+Only the calculation time is ignored when comparing a retry. The first saved
+timestamps remain. Changed input releases, metric definitions, parameters,
+report code or values require a new report ID. `dl_report_read()` itself never
+recalculates a metric and can reopen reports created before 0.6.0. JSON readback
+represents date values as ISO strings.
+
+## Analyze with a read-only connection
+
+Close the writer and reopen the existing folder:
+
+```{r read-only}
+dl_close(lake)
+lake <- dl_open(root, read_only = TRUE)
+dl_measure(lake, total)
+dl_report_read(lake, "orders-report-v1", values_only = TRUE)
+```
+
+The persistent database is attached read-only. No schema migration runs, and
+measurements default to `record = FALSE`. Their returned manifests still pin
+the release and include the complete metric definition. New transient metrics
+are allowed, but reusing a registered ID/version with different content fails.
+You can also use `record = FALSE` on a writable connection for exploratory work.
+The backend's normal connection locking and storage access rules still apply.
+
+## Diagnose and recover only when needed
+
+For a rule that fails during evaluation, retain its original local exception:
+
+```{r local-errors}
+contract <- dl_contract("diagnostic", columns = c(id = "integer"),
+  rules = list(dl_rule("configuration", function(data) stop("Missing rule setting"))))
+quality <- dl_validate(data.frame(id = 1L), contract, keep_errors = TRUE)
+lapply(dl_quality_errors(quality), conditionMessage)
+```
+
+The exception remains in memory. Raw exception text is not stored in the
+registry, because it may include private values. For pointblank, retain agents
+with `keep_agents = TRUE` and use `dl_pointblank_report()` for its native detail.
+
+For a crashed writer, first stop the original process and inspect
+`dl_interrupted()`. `dl_recover()` previews explicitly selected runs and staging
+slots, refuses known live processes, and leaves releases and quality evidence
+intact. Unknown ownership requires `writer_stopped = TRUE` after external
+verification. See the [operations guide](https://github.com/JanWein/lakefold/blob/main/docs/OPERATIONS.md)
+for the execution and retry procedure. Recovery is an occasional operational
+step, not part of an ordinary write.
+
+## Boundaries to plan for
+
+The framework still needs one coordinated writer. It materializes a full
+candidate for partition corrections and retains each release table. Multi-table
+atomic publication, incremental upserts, distributed locking and automated
+retention are separate future work. Run the bundled `benchmark.R` against your
+own workload before selecting an operating configuration. Remote S3/PostgreSQL
+and backup restoration require verification in that environment.
+
+```{r verify-and-close, include=FALSE}
+stopifnot(values$value == 42,
+  difference$counts[["changed"]] == 1,
+  difference$numeric_summary$difference == 12,
+  sum(dl_read(lake, "monthly_orders")$amount) == 215,
+  nrow(dl_registry(lake, "reports")) == 1)
+dl_close(lake)
+unlink(root, recursive = TRUE)
+```

@@ -13,6 +13,7 @@ dl_ingest(
   code_version,
   layer = "validated",
   input_contract = NULL,
+  partition_by = character(),
   ...
 )
 }
@@ -36,6 +37,10 @@ by default. Raw extraction always uses the configured \code{"raw"} schema.}
 \item{input_contract}{Optional separate contract for an input gate before
 writing Raw. Requires a reader returning a data frame. The final candidate
 is still validated against \code{contract}.}
+
+\item{partition_by}{Optional column names identifying complete partitions
+to replace. Omit to replace the whole asset. Every row of each supplied
+partition replaces that partition; other partitions remain published.}
 
 \item{...}{Arguments passed to \code{\link[=dl_run]{dl_run()}}, such as \code{business_date} or
 \code{stop_on_failure}. Do not pass another \code{lake} argument.}

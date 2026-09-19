@@ -6,10 +6,12 @@
 #'   metrics.
 #' @param dimensions Permitted grouping columns.
 #' @param time_column Column representing the business date.
-#' @param time_behavior stock requires exactly one selected date; flow may span
-#'   dates.
-#' @param unit Unit.
-#' @param owner,description Business metadata.
+#' @param time_behavior `stock` requires exactly one selected date; `flow` may
+#'   span dates. Defaults to stock when `time_column` is supplied, otherwise flow.
+#' @param input_columns Optional explicit input columns for dynamic expressions
+#'   or custom functions. Known expression columns are always checked as well.
+#' @param unit Optional unit.
+#' @param owner,description Optional business metadata.
 #' @param approved Whether business review is complete.
 #' @param na_policy Policy description; must be consistent with the expression.
 #' @param empty_policy Policy description.
@@ -30,23 +32,30 @@ dl_metric <- function(
   compute = NULL,
   dimensions = character(),
   time_column = NULL,
-  time_behavior = c("stock", "flow"),
-  unit,
-  owner,
-  description,
+  time_behavior = if (is.null(time_column)) "flow" else "stock",
+  unit = "",
+  owner = "",
+  description = "",
   version = "1.0.0",
   approved = FALSE,
   na_policy = "reject",
   empty_policy = "error",
-  code_version
+  code_version,
+  input_columns = NULL
 ) {
   asset_id(id)
   asset_id(product)
   scalar(version, "version")
   scalar(code_version, "code_version")
-  scalar(unit, "unit")
-  scalar(owner, "owner")
-  scalar(description, "description")
+  for (field in c("unit", "owner", "description")) {
+    value <- get(field)
+    if (!is.character(value) || length(value) != 1L || is.na(value)) {
+      abort(paste(field, "must be a string; use an empty string to omit it."))
+    }
+  }
+  if (!is.null(input_columns)) {
+    invisible(lapply(input_columns, column_name))
+  }
   ex <- rlang::enquo(expr)
   if (rlang::quo_is_null(ex) == is.null(compute)) {
     abort("Supply exactly one of expr or compute.")
@@ -54,19 +63,19 @@ dl_metric <- function(
   if (!is.null(compute) && !is.function(compute)) {
     abort("compute must be a function.")
   }
-  time_behavior <- match.arg(time_behavior)
+  time_behavior <- match.arg(time_behavior, c("stock", "flow"))
   if (time_behavior == "stock" && is.null(time_column)) {
     abort("A stock metric requires time_column.")
   }
   if (!is.null(time_column)) {
-    ident(time_column)
+    column_name(time_column)
   }
-  invisible(lapply(dimensions, ident))
+  invisible(lapply(dimensions, column_name))
   if (!identical(na_policy, "reject") && !identical(na_policy, "expression")) {
     abort("na_policy is reject or expression.")
   }
   if (!identical(empty_policy, "error")) {
-    abort("Only explicit error on empty input is supported in v0.1.")
+    abort("Empty metric input always produces an error.")
   }
   structure(
     list(
@@ -85,7 +94,8 @@ dl_metric <- function(
       approved = isTRUE(approved),
       na_policy = na_policy,
       empty_policy = empty_policy,
-      code_version = code_version
+      code_version = code_version,
+      input_columns = input_columns
     ),
     class = "dl_metric"
   )
@@ -99,7 +109,12 @@ dl_metric <- function(
 #' @param release Optional explicit product release id.
 #' @param filters Named list of exact-match filters on permitted dimensions.
 #' @param params Parameters passed to custom compute functions.
+#' @param record Record definition and lineage. Defaults to `TRUE` on a writable
+#'   lake and `FALSE` on a read-only lake. Unrecorded results still carry their
+#'   complete metric definition and pinned release in the manifest.
 #' @return Tibble with a dl_manifest attribute for report reproducibility.
+#'   Grouped results are ordered by the requested dimensions using C collation
+#'   so database row order does not change report identity.
 #' @export
 #' @examples
 #' root <- tempfile("lakefold-example-")
@@ -133,8 +148,14 @@ dl_measure <- function(
   at = NULL,
   release = NULL,
   filters = list(),
-  params = list()
+  params = list(),
+  record = !isTRUE(lake$config$read_only)
 ) {
+  assert_lake(lake)
+  flag(record, "record")
+  if (record) {
+    assert_writable(lake)
+  }
   if (!inherits(metric, "dl_metric")) {
     abort("metric must be a dl_metric.")
   }
@@ -150,7 +171,24 @@ dl_measure <- function(
   ) {
     abort("Filters must be named permitted dimensions.")
   }
-  dl_register(lake, metric)
+  if (record) {
+    dl_register(lake, metric)
+  } else {
+    old <- query(
+      lake,
+      paste(
+        "SELECT fingerprint FROM",
+        meta(lake, "assets"),
+        "WHERE id = ? AND version = ? AND kind = 'metric'"
+      ),
+      list(metric$id, metric$version)
+    )
+    if (nrow(old) && any(old$fingerprint != fingerprint(metric))) {
+      abort(
+        "Definition changed without a version bump; legacy formulas require a new metric version."
+      )
+    }
+  }
   ref <- resolve_release(lake, metric$product, release)
   data <- dl_tbl(lake, metric$product, ref$release_id[[1]])
   if (!all(c(by, names(filters), metric$time_column) %in% colnames(data))) {
@@ -183,17 +221,16 @@ dl_measure <- function(
     }
   }
   if (metric$na_policy == "reject") {
-    columns <- if (!is.null(metric$expr)) {
-      intersect(all.vars(rlang::get_expr(metric$expr)), colnames(data))
-    } else {
-      colnames(data)
-    }
-    for (column in columns) {
-      if (count_rows(dplyr::filter(data, is.na(!!rlang::sym(column)))) > 0) {
-        abort(paste("Missing metric input:", column))
-      }
+    columns <- metric_input_columns(metric, colnames(data))
+    missing <- null_counts(data, columns)
+    if (any(missing > 0)) {
+      abort(paste(
+        "Missing metric input:",
+        paste(names(missing)[missing > 0], collapse = ", ")
+      ))
     }
   }
+
   if (!is.null(metric$compute)) {
     result <- metric$compute(data, by, params)
     if (inherits(result, "tbl_sql")) {
@@ -220,6 +257,12 @@ dl_measure <- function(
   if (!all(by %in% colnames(result))) {
     abort("Custom metric result must include all requested grouping columns.")
   }
+  if (
+    (!length(by) && nrow(result) != 1L) ||
+      (length(by) && anyDuplicated(as.data.frame(result[by])))
+  ) {
+    abort("Metric results must contain exactly one row per requested group.")
+  }
   # NaN/Inf from zero denominators or overflow is never silently reportable.
   if (
     any(vapply(
@@ -231,10 +274,14 @@ dl_measure <- function(
     abort("Metric returned a missing or non-finite numeric result.")
   }
   result <- tibble::as_tibble(result)
+  if (length(by)) {
+    result <- dplyr::arrange(result, !!!rlang::syms(by), .locale = "C")
+  }
   manifest <- list(
     metric = metric$id,
     metric_version = metric$version,
     metric_hash = fingerprint(metric),
+    metric_definition = canonical(metric),
     code_version = metric$code_version,
     product = metric$product,
     release_id = ref$release_id[[1]],
@@ -248,18 +295,31 @@ dl_measure <- function(
     result_hash = fingerprint(result)
   )
   attr(result, "dl_manifest") <- manifest
-  insert_meta(
-    lake,
-    "lineage_edges",
-    list(
-      run_id = "",
-      from_id = metric$product,
-      from_version = ref$release_id[[1]],
-      to_id = metric$id,
-      to_version = metric$version,
-      relation = "measured_from"
+  if (
+    record &&
+      !query(
+        lake,
+        paste(
+          "SELECT count(*) AS n FROM",
+          meta(lake, "lineage_edges"),
+          "WHERE from_id = ? AND from_version = ? AND to_id = ? AND to_version = ? AND relation = 'measured_from'"
+        ),
+        list(metric$product, ref$release_id[[1]], metric$id, metric$version)
+      )$n[[1]]
+  ) {
+    insert_meta(
+      lake,
+      "lineage_edges",
+      list(
+        run_id = "",
+        from_id = metric$product,
+        from_version = ref$release_id[[1]],
+        to_id = metric$id,
+        to_version = metric$version,
+        relation = "measured_from"
+      )
     )
-  )
+  }
   result
 }
 
@@ -269,7 +329,8 @@ dl_measure <- function(
 #' @param results Named list of dl_measure results.
 #' @param code_version Reporting code version.
 #' @param params Report parameters.
-#' @return Report manifest including persisted result values.
+#' @return Report manifest including result values as data frames, both on
+#'   initial save and an identical retry. Retries preserve original timestamps.
 #' @export
 #' @examples
 #' root <- tempfile("lakefold-example-")
@@ -304,10 +365,16 @@ dl_report_release <- function(
   code_version,
   params = list()
 ) {
+  assert_writable(lake)
   scalar(id, "id")
   scalar(code_version, "code_version")
   if (
-    !length(results) || is.null(names(results)) || anyDuplicated(names(results))
+    !is.list(results) ||
+      !length(results) ||
+      is.null(names(results)) ||
+      anyNA(names(results)) ||
+      any(!nzchar(names(results))) ||
+      anyDuplicated(names(results))
   ) {
     abort("results must be a named list.")
   }
@@ -320,7 +387,9 @@ dl_report_release <- function(
       # Tibbles and data.frames have the same canonical JSON representation.
       abort("Metric result changed after calculation.")
     }
-    list(manifest = m, values = as.data.frame(x))
+    values <- as.data.frame(x)
+    attr(values, "dl_manifest") <- NULL
+    list(manifest = m, values = values)
   })
   manifest <- list(
     id = id,
@@ -334,9 +403,20 @@ dl_report_release <- function(
     list(id)
   )
   if (nrow(old)) {
-    if (!identical(old$manifest[[1]], jencode(manifest))) {
+    if (
+      !identical(
+        report_identity(old$manifest[[1]]),
+        report_identity(jencode(manifest))
+      )
+    ) {
       abort("Report id already exists with different content.")
     }
+    saved <- jdecode(old$manifest[[1]])
+    for (name in names(manifest$measures)) {
+      manifest$measures[[name]]$manifest$calculated_at <-
+        saved$measures[[name]]$manifest$calculated_at
+    }
+    return(manifest)
   } else {
     DBI::dbWithTransaction(lake$con, {
       insert_meta(
@@ -361,4 +441,104 @@ dl_report_release <- function(
     })
   }
   manifest
+}
+
+
+metric_input_columns <- function(metric, available) {
+  declared <- metric$input_columns
+  if (!all(declared %in% available)) {
+    abort("Declared metric input columns are missing.")
+  }
+  if (is.null(metric$expr)) {
+    return(declared %||% available)
+  }
+  expression <- rlang::get_expr(metric$expr)
+  found <- intersect(all.vars(expression), available)
+  dynamic <- FALSE
+  visit <- function(x) {
+    if (!is.call(x)) {
+      return(invisible(NULL))
+    }
+    op <- if (is.symbol(x[[1]])) as.character(x[[1]]) else ""
+    if (op %in% c("$", "[[") && identical(x[[2]], as.name(".data"))) {
+      value <- x[[3]]
+      if (op == "$" && is.symbol(value)) {
+        value <- as.character(value)
+      }
+      if (is.character(value) && length(value) == 1L) {
+        if (!value %in% available) {
+          abort(paste("Metric input column is missing:", value))
+        }
+        found <<- union(found, value)
+      } else {
+        dynamic <<- TRUE
+      }
+    }
+    if (op %in% c("get", "mget", "across", "pick", "eval", "eval_tidy")) {
+      dynamic <<- TRUE
+    }
+    invisible(lapply(as.list(x)[-1], visit))
+  }
+  visit(expression)
+  if (dynamic && is.null(declared)) {
+    abort(
+      "Dynamic metric expressions require input_columns for missing-value checks."
+    )
+  }
+  union(found, declared)
+}
+
+report_identity <- function(json) {
+  value <- jdecode(json)
+  value$measures <- lapply(value$measures, function(x) {
+    x$manifest$calculated_at <- NULL
+    x
+  })
+  jencode(value)
+}
+
+#' Read an immutable report and its saved results
+#'
+#' Reads the saved manifest without recalculating any metric. It preserves the
+#' original calculation times. Works on read-only lakes, including reports
+#' created before version 0.6.0. Values use the JSON representation stored in
+#' the report; dates are ISO strings. Use `values_only` for named result tibbles.
+#' @param lake Connected lake.
+#' @param id Report release ID.
+#' @param values_only Return only the named result tables.
+#' @returns A manifest list, or a named list of tibbles.
+#' @export
+#' @examples
+#' # After saving report.v1 with dl_report_release():
+#' # dl_report_read(lake, "report.v1", values_only = TRUE)
+dl_report_read <- function(lake, id, values_only = FALSE) {
+  assert_lake(lake)
+  scalar(id, "id")
+  flag(values_only, "values_only")
+  row <- query(
+    lake,
+    paste("SELECT manifest FROM", meta(lake, "reports"), "WHERE id = ?"),
+    list(id)
+  )
+  if (nrow(row) != 1L) {
+    abort(paste("Report not found:", id), "dl_no_report")
+  }
+  manifest <- jdecode(row$manifest[[1]])
+  if (!values_only) {
+    return(manifest)
+  }
+  lapply(manifest$measures, function(x) {
+    tibble::as_tibble(lapply(x$values, function(column) {
+      if (is.null(column)) {
+        return(NA)
+      }
+      if (is.list(column)) {
+        return(unlist(
+          lapply(column, function(value) value %||% NA),
+          use.names = FALSE
+        ))
+      }
+      column
+    }))
+  })
 }

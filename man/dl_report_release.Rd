@@ -18,7 +18,8 @@ dl_report_release(lake, id, results, code_version, params = list())
 \item{params}{Report parameters.}
 }
 \value{
-Report manifest including persisted result values.
+Report manifest including result values as data frames, both on
+initial save and an identical retry. Retries preserve original timestamps.
 }
 \description{
 Freeze metric results and input versions for a report

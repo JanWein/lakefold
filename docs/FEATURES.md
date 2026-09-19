@@ -1,4 +1,4 @@
-# Feature coverage in 0.5.0
+# Feature coverage in 0.6.0
 
 ## Component responsibilities
 
@@ -11,6 +11,22 @@ evidence and immutable releases.
 The framework is designed for simple entry points and explicit composition as
 workflows become more complex. Integrations retain their own responsibilities
 and can be adopted as needed.
+
+## Everyday workflows added in 0.6.0
+
+* Complete partition replacement through one optional `partition_by` argument.
+* API/database acquisition through ordinary source functions returning tables.
+* Spaced column names and compatible automatic integer/decimal schemas.
+* Read-only connections, unrecorded metrics and read-only delivery inspection.
+* Keyed release comparisons with database-side counts and bounded previews.
+* Immutable report readback and repeatable report saves.
+* Original quality exceptions retained only when explicitly requested locally.
+* Explicit abandoned-run/staging recovery that refuses known live writers.
+* Full metric expression fingerprints, complete input checks and RNG isolation.
+
+See the [everyday workflow guide](https://janwein.github.io/lakefold/articles/everyday-workflows.html)
+and [migration guide](MIGRATION.md). Existing pointblank, dbt and dm gates remain
+covered by the complete regression suite.
 
 ## Simple defaults added in 0.5.0
 

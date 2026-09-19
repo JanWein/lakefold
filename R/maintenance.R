@@ -30,6 +30,9 @@ dl_cleanup <- function(
 ) {
   assert_lake(lake)
   flag(dry_run, "dry_run")
+  if (!dry_run) {
+    assert_writable(lake)
+  }
   if (
     !is.numeric(older_than_days) ||
       length(older_than_days) != 1L ||

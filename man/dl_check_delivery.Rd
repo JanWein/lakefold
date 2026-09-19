@@ -11,7 +11,9 @@ dl_check_delivery(
   business_date,
   due_at,
   at = Sys.time(),
-  notify = NULL
+  notify = NULL,
+  date_column = NULL,
+  record = !isTRUE(lake$config$read_only)
 )
 }
 \arguments{
@@ -25,7 +27,14 @@ dl_check_delivery(
 
 \item{due_at, at}{Due time and evaluation time, both POSIXct scalars.}
 
-\item{notify}{Optional function receiving an event without source rows.}
+\item{notify}{Optional function receiving an event without source rows.
+Requires \code{record = TRUE} to retain deduplication evidence.}
+
+\item{date_column}{Optional business-date column to inspect in the current
+release. Inferred for a single date partition; otherwise the delivery's
+recorded business date is used. Supply explicitly for multi-date full writes.}
+
+\item{record}{Persist monitoring events. Defaults to \code{FALSE} on read-only lakes.}
 }
 \value{
 A tibble with status \code{pending}, \code{received} or \code{missing}. Once due,
@@ -33,7 +42,9 @@ the result is also persisted as an operational event.
 }
 \description{
 Compares the latest published stand with an explicit due time and business
-date. A newly loaded old reporting period does not satisfy the expectation.
+date. Partitioned releases are checked for the expected date in their current
+data, so correcting an older partition does not hide a retained delivery.
+A full replacement does not inherit historical delivery evidence.
 This function must be called by an existing scheduler; it creates none.
 Missing deliveries generate deduplicated metadata events. No message is sent
 unless the caller supplies a notification transport.

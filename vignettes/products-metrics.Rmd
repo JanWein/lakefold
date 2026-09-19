@@ -99,3 +99,24 @@ The package calculates metrics without an LLM. The commons YAML export is a
 limited declarative interface. It does not provide a tested chat/agent server,
 authentication, a protected SQL endpoint or automatic validation of LLM queries.
 Those components must be supplied separately for an authenticated chat service.
+
+
+## Simpler metrics and reusable reports
+
+Owner, description and unit are optional. Without `time_column` a metric defaults
+to flow; with a time column it defaults to stock. Approval and `code_version`
+remain explicit. `input_columns` declares inputs for unresolved selection or
+custom functions. The default missing-value gate checks static data pronouns as
+well as ordinary column symbols.
+
+Use `dl_measure(..., record = FALSE)` for an exploratory calculation without
+registry writes, or open the lake with `read_only = TRUE`. Result manifests still
+contain full formula identity and pinned inputs. Identical recorded measurements
+reuse their lineage edge. Use `dl_build(..., cache = FALSE)` to re-evaluate a
+product builder that consults external state.
+
+`dl_report_read(lake, "report-id", values_only = TRUE)` returns saved result
+tables without recalculating. Identical retries of `dl_report_release()` keep
+the original timestamps; a changed release, definition, parameter or value
+requires a new report ID. See [Everyday workflows](https://janwein.github.io/lakefold/articles/everyday-workflows.html)
+for an executable example and the migration guide for pre-0.6.0 metric versions.

@@ -194,7 +194,7 @@ with it would make September the current table; August would still be available
 in older releases. If each delivery contains one month and you want **August
 and September together in the current table**, use replacement by month.
 
-First create September's delivery as a CSV file:
+Create September's complete delivery and add one argument:
 
 ```{r september-delivery}
 september <- data.frame(
@@ -202,25 +202,8 @@ september <- data.frame(
   date = rep(as.Date("2026-09-30"), 2),
   amount = c(110, 280)
 )
-path <- file.path(root, "monthly.csv")
-utils::write.csv(september, path, row.names = FALSE)
-```
-
-Now describe a reusable **pipeline**, a sequence of processing steps. Most of
-the work is the same as before. The final step adds the month-replacement rule.
-
-```{r monthly-pipeline}
-monthly <- dl_pipeline("reserves.monthly", lake,
-  code_version = "tutorial-v1") |>
-  dl_step_land(dl_source("reserves.delivery", path, reader = function(path) {
-    utils::read.csv(path,
-      colClasses = c(entity = "character", date = "Date", amount = "numeric"))
-  })) |>
-  dl_step_extract() |>
-  dl_step_validate(contract) |>
-  dl_step_publish("reserves", mode = "replace_partition", partition_by = "date")
-
-september_run <- dl_run(monthly, lake, business_date = "2026-09-30")
+september_run <- dl_write(lake, september, "reserves", contract = contract,
+  partition_by = "date", business_date = "2026-09-30")
 dl_read(lake, "reserves") |>
   dplyr::arrange(date, entity)
 ```
@@ -228,22 +211,21 @@ dl_read(lake, "reserves") |>
 **Expected result: four rows. August contains 100 and 270; September contains
 110 and 280.** Both months now belong to the current release.
 
-The pipeline says: archive the file, extract a table, validate the candidate,
-and publish it while replacing only the supplied reporting dates. The reader
-parses dates explicitly so the CSV produces the types declared in the contract.
-`business_date` records the delivery's reporting date in metadata; it does not
-create or replace the data's `date` column.
+`partition_by = "date"` means: replace every date present in this delivery and
+retain the other dates. `business_date` separately records the delivery's
+reporting date in metadata; it does not create a column or select a partition.
+The same argument works with CSV files and a custom date reader.
 
 Each supplied month must be complete. A later September delivery replaces all
 of September, so sending only South would remove North from September's
 current state. This is month replacement, not a row-level upsert. The full
 resulting candidate is checked, including the retained months.
 
-`code_version` names the processing code on this explicit path. In an operating
-project, use a version that covers code, dependencies and captured values,
-such as a recorded project Git commit. Change definition versions when changing
-registered workflow behavior. The simple `dl_write()` path handles its technical
-versions for you. `dl_plan(monthly)` lets you inspect the declared steps.
+No pipeline definition is needed for this common case. Introduce an explicit
+[pipeline](workflow-design.html) when you need named transformations or more
+control over execution. It uses the same landing, quality and release behavior.
+To inspect a change, try `dl_compare(lake, "reserves")`: the contract already
+declares its business key.
 
 ## Step 6. Reuse a prepared reporting table (optional)
 

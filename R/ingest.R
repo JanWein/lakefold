@@ -16,6 +16,7 @@
 #' @param input_contract Optional separate contract for an input gate before
 #'   writing Raw. Requires a reader returning a data frame. The final candidate
 #'   is still validated against `contract`.
+#' @inheritParams dl_write
 #' @param ... Arguments passed to [dl_run()], such as `business_date` or
 #'   `stop_on_failure`. Do not pass another `lake` argument.
 #' @returns A `dl_run_result` with `run_id`, `status`, `release_id` and
@@ -52,6 +53,7 @@ dl_ingest <- function(
   code_version,
   layer = "validated",
   input_contract = NULL,
+  partition_by = character(),
   ...
 ) {
   asset_id(asset)
@@ -68,6 +70,11 @@ dl_ingest <- function(
   }
   pipeline <- pipeline |>
     dl_step_validate(contract) |>
-    dl_step_publish(asset, layer = layer)
+    dl_step_publish(
+      asset,
+      layer = layer,
+      mode = if (length(partition_by)) "replace_partition" else "replace",
+      partition_by = partition_by
+    )
   dl_execute(pipeline, lake = lake, ...)
 }

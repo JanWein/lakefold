@@ -27,6 +27,16 @@ ident <- function(x) {
   }
   x
 }
+column_name <- function(x) scalar(x, "Column name")
+assert_writable <- function(lake) {
+  assert_lake(lake)
+  if (isTRUE(lake$config$read_only)) {
+    abort(
+      "This lake is read-only. Open a writable connection for this operation.",
+      "dl_read_only"
+    )
+  }
+}
 asset_id <- function(x) {
   scalar(x, "Asset id")
   if (!grepl("^[A-Za-z][A-Za-z0-9_.]*$", x)) {
@@ -40,7 +50,7 @@ uid <- function() {
     "r",
     substr(
       digest::digest(
-        list(now(), Sys.getpid(), stats::runif(1)),
+        list(now(), Sys.getpid(), tempfile("lakefold-id-")),
         algo = "sha256"
       ),
       1,
@@ -56,7 +66,13 @@ canonical <- function(x) {
     ))
   }
   if (rlang::is_quosure(x)) {
-    return(rlang::as_label(x))
+    return(list(
+      expression = paste(
+        deparse(rlang::get_expr(x), width.cutoff = 500L),
+        collapse = "\n"
+      ),
+      format = 2L
+    ))
   }
   if (is.list(x)) {
     return(lapply(x, canonical))
@@ -102,6 +118,7 @@ query <- function(lake, sql, params = NULL) {
 }
 meta <- function(lake, name) table_sql(lake, "_dl", name)
 insert_meta <- function(lake, name, values) {
+  assert_writable(lake)
   cols <- paste(qident(lake, names(values)), collapse = ", ")
   marks <- paste(rep("?", length(values)), collapse = ", ")
   exec(
@@ -142,4 +159,22 @@ materialize <- function(lake, data, schema, name) {
     abort("Readers and builders must return a data.frame or a lazy SQL table.")
   }
   dplyr::tbl(lake$con, table_id(schema, name))
+}
+
+
+null_counts <- function(data, columns) {
+  if (!length(columns)) {
+    return(setNames(numeric(), character()))
+  }
+  if (!inherits(data, "tbl_sql")) {
+    return(vapply(data[columns], function(x) sum(is.na(x)), numeric(1)))
+  }
+  expressions <- setNames(
+    lapply(columns, function(column) {
+      rlang::expr(sum(as.integer(is.na(!!rlang::sym(column))), na.rm = TRUE))
+    }),
+    columns
+  )
+  result <- dplyr::collect(dplyr::summarise(data, !!!expressions))
+  setNames(as.numeric(result[1, ]), columns)
 }

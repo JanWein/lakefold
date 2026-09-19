@@ -10,6 +10,7 @@
 #'   the working directory.
 #' @param backend Optional `"duckdb"` or `"ducklake"`. DuckLake requires its
 #'   DuckDB extension. Defaults to the saved choice, or DuckDB for a new folder.
+#' @param read_only Open an existing lake without registry or data writes.
 #' @param lake Connected lake to close.
 #' @returns `dl_open()` returns a connected `dl_lake`. `dl_close()` invisibly
 #'   returns `TRUE`; it is an alias for [dl_disconnect()].
@@ -25,7 +26,8 @@
 #' dl_read(lake, "orders")
 #' dl_close(lake)
 #' unlink(root, recursive = TRUE)
-dl_open <- function(path = "lakefold", backend = NULL) {
+dl_open <- function(path = "lakefold", backend = NULL, read_only = FALSE) {
+  flag(read_only, "read_only")
   path <- absolute_path(path)
   if (!is.null(backend)) {
     backend <- match.arg(backend, c("duckdb", "ducklake"))
@@ -54,6 +56,9 @@ dl_open <- function(path = "lakefold", backend = NULL) {
     }
     backend <- saved$backend
   } else {
+    if (read_only) {
+      abort("A read-only lake must already exist.")
+    }
     if (length(list.files(path, all.files = TRUE, no.. = TRUE))) {
       abort(
         "This folder is not empty and has no lakefold.json. Use its original dl_config() or choose an empty folder."
@@ -73,7 +78,8 @@ dl_open <- function(path = "lakefold", backend = NULL) {
     catalog = dl_catalog_duckdb(file.path(path, "metadata.duckdb")),
     storage = dl_storage_local(file.path(path, "data")),
     landing = file.path(path, "landing"),
-    backend = backend
+    backend = backend,
+    read_only = read_only
   )
 }
 
@@ -85,7 +91,8 @@ dl_close <- function(lake) dl_disconnect(lake)
 #'
 #' Starts the normal landing, validation and publication workflow. Without a
 #' contract, the first successful write establishes a structural schema. Later
-#' writes must match that schema. Missing values are allowed; empty tables are
+#' writes must match that schema. Automatic numeric columns accept integers
+#' and decimals; explicit integer contracts remain strict. Missing values are allowed; empty tables are
 #' blocked. No keys, business rules, owners or freshness deadlines are guessed.
 #'
 #' Supply `contract` whenever you need business checks or an intentional schema
@@ -107,7 +114,11 @@ dl_close <- function(lake) dl_disconnect(lake)
 #' cannot be fingerprinted reliably. Supply `code_version` to enable reuse and
 #' update it whenever code, dependencies or captured values change.
 #' @param lake Connected lake or [dl_config()].
-#' @param data Data frame, or path to a local file.
+#' @param data Data frame, path to a local file, or a zero-argument function
+#'   returning a data frame. A source function is called once per write before
+#'   cache lookup; its returned data is archived as RDS. Use it to connect
+#'   existing API or database clients. It requires `name` and does not archive
+#'   the original transport response.
 #' @param name Optional asset name. Defaults to the data frame's variable name
 #'   or the file name without its extension. Expressions need an explicit name.
 #'   Names start with a letter and use letters, digits, underscores or dots.
@@ -118,6 +129,9 @@ dl_close <- function(lake) dl_disconnect(lake)
 #' @param cache Optional reuse policy. Defaults to safe reuse for built-in
 #'   readers and structural checks; custom callbacks need `code_version` to
 #'   enable reuse. `FALSE` always runs validation again.
+#' @param partition_by Optional column names identifying complete partitions
+#'   to replace. Omit to replace the whole asset. Every row of each supplied
+#'   partition replaces that partition; other partitions remain published.
 #' @param ... Arguments passed to [dl_ingest()], such as `business_date`,
 #'   `notify`, `layer` and `stop_on_failure`.
 #' @returns A `dl_run_result` with status, release ID and quality results.
@@ -144,9 +158,35 @@ dl_write <- function(
   code_version = NULL,
   input_contract = NULL,
   cache = NULL,
+  partition_by = character(),
   ...
 ) {
+  invisible(lapply(partition_by, column_name))
   expression <- substitute(data)
+  if (is.function(data)) {
+    if (is.null(name)) {
+      abort("Supply name when writing from a source function.")
+    }
+    fetch <- data
+    return(with_execution_lake(lake, function(con) {
+      assert_writable(con)
+      received <- fetch()
+      if (!is.data.frame(received)) {
+        abort("A source function must return a data frame.")
+      }
+      dl_write(
+        con,
+        received,
+        name,
+        contract = contract,
+        code_version = code_version,
+        input_contract = input_contract,
+        cache = cache,
+        partition_by = partition_by,
+        ...
+      )
+    }))
+  }
   file_input <- is.character(data) && length(data) == 1L && !is.na(data)
   if (!is.data.frame(data) && !file_input) {
     abort("data must be a data frame or a local file path.")
@@ -191,6 +231,7 @@ dl_write <- function(
     scalar(code_version, "code_version")
   }
   with_execution_lake(lake, function(con) {
+    assert_writable(con)
     if (is.null(contract)) {
       contract <- published_schema(con, name)
     }
@@ -214,10 +255,16 @@ dl_write <- function(
         ) {
           abort("Reader modified immutable landing input.")
         }
-        contract <- automatic_schema(name, infer_column_types(prototype))
+        contract <- automatic_schema(
+          name,
+          automatic_types(infer_column_types(prototype))
+        )
       }
     } else if (is.null(contract)) {
-      contract <- automatic_schema(name, infer_column_types(data))
+      contract <- automatic_schema(
+        name,
+        automatic_types(infer_column_types(data))
+      )
     }
     callbacks <- custom_reader ||
       length(contract$rules) > 0L ||
@@ -241,7 +288,8 @@ dl_write <- function(
         contract = contract,
         input_contract = input_contract,
         source = source,
-        code_version = code_version
+        code_version = code_version,
+        partition_by = partition_by
       ))
     )
     if (file_input) {
@@ -255,6 +303,7 @@ dl_write <- function(
         code_version = code_version,
         input_contract = input_contract,
         cache = if (cache) "current" else FALSE,
+        partition_by = partition_by,
         ...
       )
     } else {
@@ -267,6 +316,7 @@ dl_write <- function(
         version = version,
         input_contract = input_contract,
         cache = if (cache) "current" else FALSE,
+        partition_by = partition_by,
         ...
       )
     }
@@ -283,6 +333,11 @@ simple_reader <- function(path) {
       "Supported file types are CSV, TSV and RDS. Supply reader for another format."
     )
   )
+}
+
+automatic_types <- function(columns) {
+  columns[columns == "integer"] <- "numeric"
+  columns
 }
 
 automatic_schema <- function(name, columns) {
@@ -350,7 +405,7 @@ published_schema <- function(lake, name) {
   if (!identical(fingerprint(contract), record$fingerprint[[1]])) {
     abort("Automatic schema metadata does not match its registered definition.")
   }
-  contract
+  automatic_schema(name, automatic_types(unlist(contract$columns)))
 }
 
 #' Read a published asset
