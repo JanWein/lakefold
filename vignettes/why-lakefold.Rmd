@@ -102,7 +102,7 @@ the final candidate check still controls publication.
 | 1. Store and read | You want a repeatable place for one incoming dataset | `dl_open()`, `dl_write()`, `dl_read()` |
 | 2. Keep corrections explainable | New files replace earlier information | Read current data or pin a release ID |
 | 3. Add business checks | Column types alone cannot detect the mistakes that matter | A contract, with optional R or pointblank rules |
-| 4. Keep several months in one current table | Each delivery contains one complete month | A pipeline with replacement by reporting date |
+| 4. Keep several months in one current table | Each delivery contains one complete month | `dl_write(..., partition_by = "date")` |
 | 5. Reuse prepared tables | Several reports need the same joins or aggregates | A product with recorded input releases |
 | 6. Reproduce reported values | You need the formula, date and input version behind a number | Metrics and report manifests |
 | 7. Operate it regularly | Other people depend on the dataset arriving on time | Your scheduler, optional monitoring and a read-only catalog |
