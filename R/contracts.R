@@ -312,15 +312,17 @@ pointblank_results <- function(rule, data, keep_agent = FALSE) {
       rule$max_failure
     )
     if (identical(rule$policy, "agent")) {
-      warn <- row$W[[1]]
-      stop <- if ("E" %in% names(row)) row$E[[1]] else row$S[[1]]
-      critical <- if ("C" %in% names(row)) row$C[[1]] else NA
+      warn <- if ("W" %in% names(row)) row$W[[1]] else NA
+      blocking <- unlist(
+        row[intersect(c("S", "E", "C"), names(row))],
+        use.names = FALSE
+      )
       counts$threshold <- NA_real_
-      if (all(is.na(c(warn, stop, critical)))) {
+      if (all(is.na(c(warn, blocking)))) {
         counts$status <- "error"
         counts$message <- "Agent policy requires a warning or blocking action level."
       } else if (!counts$status %in% c("error", "not_checked")) {
-        counts$status <- if (isTRUE(stop) || isTRUE(critical)) {
+        counts$status <- if (any(blocking, na.rm = TRUE)) {
           "failed"
         } else if (isTRUE(warn)) {
           "warning"
