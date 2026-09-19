@@ -6,15 +6,15 @@ All inputs were synthetic. Results below refer to the 0.6.0 implementation.
 | Check | Result |
 |---|---|
 | Full `R CMD check --no-manual` | 0 errors, 0 warnings, 0 notes |
-| DuckDB package-check expectations | 442 passed; 0 failures, warnings or skips |
-| Separate complete DuckLake suite | 94 test cases; 442 expectations passed; 0 failures, warnings or skips |
+| DuckDB package-check expectations | 445 passed; 0 failures, warnings or skips |
+| Separate complete DuckLake suite | 95 test cases; 445 expectations passed; 0 failures, warnings or skips |
 | External integrations | Actual dbt execution, pointblank gates and dm checks exercised |
 | Documentation | Nine executable vignettes built and rebuilt; package examples checked |
 | Public reference | 70 exported functions and 59 help topics |
 | Monthly example script | Executed; original 350, correction 370 and September 390 verified |
 | Synthetic 100,000-row workload | Initial write, partition correction and complete difference counts passed on both backends |
 
-The 22 additional test cases cover full-formula identities, old metric protection,
+The 23 additional test cases cover full-formula identities, old metric protection,
 missing-value checks with pronouns and explicit inputs, random-seed isolation,
 read-only storage enforcement, unchanged registry reads, report retries and
 historical values, partition-aware delivery monitoring, automatic numeric schema
@@ -24,6 +24,8 @@ exceptions, explicit recovery, product cache bypass and saved configurations.
 The schema migration test starts from schema 2, rejects read-only migration,
 retains release data and definitions, and verifies idempotent migration to 3.
 Known live writers block recovery; unknown owners need external confirmation.
+Grouped metric results use deterministic C collation before result hashing,
+including custom computations that return equivalent groups in another order.
 Linux process identity uses host, boot and process start. Other hosts take the
 conservative unknown-owner path.
 
