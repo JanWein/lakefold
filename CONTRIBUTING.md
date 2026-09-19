@@ -23,6 +23,8 @@ Update `NEWS.md` and the relevant guide when behavior changes.
 Write package documentation, examples, user-facing messages, issue templates
 and repository materials in English. Keep the README as the canonical overview.
 When guide content is shared between `docs/` and `vignettes/`, update both.
+Keep `inst/examples/monthly_reporting.R` aligned with the core steps and result
+assertions in `vignettes/getting-started.Rmd`. Execute both after tutorial edits.
 
 Design for a short path through common tasks and explicit composition for more
 complex workflows. Require only the inputs needed for the selected operation;
