@@ -1,7 +1,16 @@
-#' lakefold: R workflows for data lakes and dbt
+#' lakefold: composable R workflows for governed data products
 #'
-#' Define file ingestion and publication in R, delegate SQL builds to dbt,
-#' and consume lazy relations through dplyr and dm.
+#' Compose complex data workflows from reusable specifications and explicit
+#' steps. Start with concise ingestion calls, add validation and transformations,
+#' publish versioned products and calculate reproducible metrics. Reuse ordinary
+#' R functions, delegate SQL builds to dbt and consume lazy relations with
+#' dplyr and dm.
+#'
+#' @section Design principles:
+#' Define, inspect, execute and examine results through a small set of consistent
+#' concepts. Sources, contracts, pipelines, products, metrics and releases have
+#' explicit responsibilities. Integrations can be adopted as the workflow needs
+#' them. See `vignette("design-review")` for composition and extension boundaries.
 #'
 #' @section Start here:
 #' * `vignette("getting-started")`: an executable, offline ingestion example.

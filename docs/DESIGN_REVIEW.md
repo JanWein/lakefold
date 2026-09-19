@@ -1,177 +1,133 @@
-# Kritisches Design-Review: Wie nah ist lakefold an tidymodels?
+# Design review: simple composition for complex data workflows
 
-Review des Codes und der Bedienabläufe, 18. September 2026. Grundlage ist die
-ursprüngliche Version 0.1.0; die daraus umgesetzten Änderungen bilden 0.2.0.
+Review of lakefold 0.4.0, 19 September 2026.
 
-## Stand 0.4.0: die konkreten Lücken geschlossen
+## Purpose and design goal
 
-Das Grundkonzept aus 0.3.0 bleibt erhalten. Die jetzt umgesetzten Ergänzungen
-schließen folgende Bedienungs- und Nachweislücken:
+lakefold is an independent, modular R framework for governed data workflows.
+Its purpose is to make complex ingestion, validation, transformation, publication
+and reporting tasks accessible through a small set of reusable building blocks.
+Ease of use means that a short workflow is easy to start, while a larger workflow
+can introduce explicit steps without changing its underlying concepts.
 
-| Anforderung | Umsetzung in 0.4.0 |
+The framework has its own domain objects: sources, contracts, pipelines,
+products, metrics and releases. It uses established R data structures and lets
+specialist tools perform the work they already support. DuckDB/DuckLake store
+and query data; dbt builds SQL models; pointblank evaluates quality rules; dm
+represents declared relationships. lakefold connects their lifecycles and
+records publication evidence.
+
+## Principles that guide the interface
+
+| Principle | Current implementation | Boundary |
+|---|---|---|
+| Start with a concise operation | `dl_ingest()` and `dl_ingest_data()` cover common ingestion paths | Source-specific acquisition can still require ordinary R code |
+| Compose when complexity grows | Explicit landing, extraction, precheck, transformation, validation and publication steps | A pipeline describes one ingestion workflow |
+| Define before executing | Configuration and specification objects can be constructed without opening connections | External resources are checked during execution |
+| Inspect the work | Compact print methods and `dl_plan()` reveal definitions and step order | A structural plan does not execute SQL or validate source data |
+| Execute consistently | `dl_execute()` accepts pipelines, products, metrics and dbt projects | Each operation retains its own result type and lifecycle |
+| Inspect results consistently | Status, quality, release and lineage accessors | Metric results also carry their own reproducibility manifest |
+| Reuse familiar tools | Ordinary R callbacks, tibbles, dbplyr lazy tables, pointblank and dm | There is no general stable plugin protocol for every backend and source |
+| Make publication explicit | Validate a candidate before recording its release | Registry writes require one coordinated writer |
+| Keep complexity visible when needed | Contracts, version identities and input releases remain inspectable | Runtime credentials and scheduling belong to the operating environment |
+
+A generic framework should offer reusable concepts across use cases. It should
+also make the supported composition rules clear. Adding functions to a list or
+using a pipe is insufficient: predictable inputs, explicit outputs, resource
+ownership, consistent failures and useful documentation are part of the design.
+
+## How users move from a small task to a larger workflow
+
+1. Configure a lake with `dl_config()` and define a contract.
+2. Ingest a file or data frame with a convenience function.
+3. Introduce an explicit pipeline when input gates or named transformations are
+   needed. The same validation and publication rules still apply.
+4. Build derived products from named, pinned input releases. Reuse ordinary
+   dplyr operations inside the builder.
+5. Add metrics and report manifests when results need reproducible definitions
+   and provenance.
+6. Use dbt for SQL model dependencies and its own materializations. Explicitly
+   snapshot and validate a relation with `dl_dbt_publish()` when a governed
+   release is required.
+
+The package should support this progression without requiring users to adopt
+all integrations at once. Optional components remain optional, and the local
+DuckDB path provides an entry point without remote infrastructure.
+
+## Capabilities added in 0.4.0
+
+| Need | Implementation |
 |---|---|
-| Eingangskontrolle vor Raw | `input_contract` und `dl_step_precheck()`; Original bleibt im Landing |
-| Gestaffelte DQ-Entscheidung | Native pointblank-Action-Levels über `policy = "agent"` |
-| Kleine Segmente nicht verdecken | Eigener Nachweis je pointblank-Segment |
-| Qualitätsberichte und R-Tests | HTML/JSON, nativer pointblank-Report und `dl_expect_quality()` |
-| Nutzung vorhandener R-Daten | `dl_ingest_data()` mit unveränderlichem RDS-Landing und Cache |
-| Contract-Entwurf ohne Scheinsicherheit | Typentwurf, explizite Bestätigung und Änderungsvergleich |
-| Fachliche und technische Verantwortung | Separater Operator sowie Spaltenbeschreibung und Einheit |
-| Diagnose ohne Registry-Interna | Status, Qualität, Releases und rekursive Dataset-Lineage |
-| dbt-Ergebnis für reproduzierbare Reports | Neue Kopie, Contract-Prüfung und expliziter Release pro Relation |
-| Fehlende Lieferung ohne Importlauf | Stichtags-/Fälligkeitsprüfung mit Ereignissen und Deduplizierung |
-| Bestehende Metadaten weiterverwenden | Additive Migration auf Registry-Schema 2 |
-| Speicherpflege ohne Historienverlust | Vorschau und Bereinigung unveröffentlichter Fehlversuch-Tabellen |
+| Validate before Raw writes | `input_contract` and `dl_step_precheck()` preserve the landed original |
+| Respect graded quality decisions | Native pointblank action levels with `policy = "agent"` |
+| Preserve small-segment evidence | Separate results for each pointblank segment |
+| Export evidence and test the gate | HTML/JSON reports, native pointblank reports and `dl_expect_quality()` |
+| Accept existing R data | `dl_ingest_data()` archives an immutable RDS snapshot and uses the existing cache |
+| Draft contracts for review | Type inference, explicit confirmation and a change comparison |
+| Record responsibility and meaning | Operator metadata, column descriptions and units |
+| Inspect without registry internals | Shared status/quality accessors, release history and recursive dataset lineage |
+| Reproduce a dbt output | Copy, validate and publish one current relation |
+| Detect a delivery that never started | Business-date and deadline monitoring with notification deduplication |
+| Reuse existing registry metadata | Additive migration to schema version 2 |
+| Remove failed intermediate tables | Preview and cleanup while retaining release history and evidence |
 
-Die folgenden Bewertungen für 0.3.0 und früher sind historische Befunde. Der
-aktuelle Funktionsumfang und die verbleibenden Grenzen stehen außerdem in
-[FEATURES.md](https://github.com/JanWein/lakefold/blob/main/docs/FEATURES.md).
+## Where the framework works well today
 
-## Ergänzung für 0.3.0: dbt als Build-Engine
+The current implementation provides a usable core for local, coordinated data
+workflows. It preserves originals, validates complete publication candidates and
+computes metrics from recorded input releases. API users can inspect the
+objects and results directly in R. The tutorials explain the common paths and
+make external integration requirements explicit.
 
-Die Architektur wurde am 19. September 2026 um dbt ergänzt. `dl_dbt_project()`
-trennt Konfiguration von Ausführung, `dl_execute()` unterstützt die Spezifikation,
-`dl_dbt_status()` liefert Tibbles und `dl_dbt_model()` ein echtes lazy `dm`.
-Das ist im Bedienkonzept näher an tidymodels, ohne ein eigenes SQL-DAG-System
-aufzubauen. Neue Funktionen sind in roxygen2 dokumentiert und erhalten Beispiele.
+A successful dbt invocation has distinct guarantees from a lakefold release.
+Each invocation receives an isolated artifact directory. Manifest and results
+must share an invocation ID, and failures are checked through both process and
+node outcomes. Primary and foreign keys are declared explicitly for dm; a SQL
+dependency graph cannot establish them.
 
-| Erwartung eines erfahrenen R-Nutzers | Stand 0.3.0 | Nächster sinnvoller Schritt |
+## Remaining priorities
+
+| Priority | Capability | Next concrete step |
 |---|---|---|
-| Ein konsistenter Ausführungseinstieg | S3-Generic für Pipeline, Produkt, Metric und dbt-Projekt | Einheitliche Diagnose-Accessors über beide Engines |
-| Start ohne Infrastrukturwissen | Lokaler Starter mit Daten und Tests | Automatisierte, geprüfte Remote-Provisionierung |
-| Fehler ehrlich erkennen | Exitcode, fehlende Artefakte, Invocation-ID und Node-Status prüfen | Einheitliche strukturierte Qualitätsbedingungen |
-| SQL-Abhängigkeiten bauen | dbt übernimmt seinen DAG und Incremental Models | Gemischte R/dbt-Orchestrierung über vorhandene Scheduler |
-| Relational arbeiten | Native dm-Objekte, explizite PK/FK | Optionaler Import ausdrücklich deklarierter Schlüsselmetadaten |
-| Reproduzierbar berichten | Governed Releases weiterhin vorhanden | Explizite geprüfte Übernahme von dbt-Outputs in Releases |
-| Gute Paketdokumentation | Paket-Hilfe, Funktionsreferenz, Beispiele, Vignetten, pkgdown | Zusätzliche Produktionsfallstudien nach Remote-Tests |
+| High | Verify intended remote infrastructure | Exercise S3/PostgreSQL, restart, backup and restore in the target environment |
+| High | Support larger inputs efficiently | Add database-side readers with explicit snapshot and fingerprint semantics |
+| High | Improve changes to definitions | Provide documented update/remove helpers alongside contract comparisons |
+| High when multiple writers are required | Coordinate concurrent publication | Introduce locking or uniqueness guarantees and conflict tests |
+| Medium | Compose multiple products in execution order | Define an optional scheduler adapter using release fingerprints and cycle checks |
+| Medium | Generalize first-class sources | Specify snapshots, repeatability, fingerprints and runtime credentials for database/API sources |
+| Medium | Publish related tables together | Define a multi-table transaction boundary and relational quality gate |
+| Medium | Add incremental ingestion | Specify keys, deletions and correction semantics before append/upsert support |
+| Medium | Manage the full retention lifecycle | Track references from reports and releases, then define preview and restore behavior |
+| Later | Broaden external metadata integrations | Add versioned target schemas and end-to-end adapter tests |
 
-### Im Review berücksichtigte Fehlerfälle
+Priority depends on the deployment. A locking strategy is required before
+concurrent production writers are introduced. Current migration and conflict
+checks do not supply that coordination. The [feature overview](https://github.com/JanWein/lakefold/blob/main/docs/FEATURES.md)
+distinguishes implemented behavior from these extension points.
 
-Jeder dbt-Aufruf erhält einen eigenen Artefaktordner. Alte Erfolge können damit
-nicht einen fehlgeschlagenen Lauf überdecken. Run Results und Manifest müssen
-dieselbe Invocation-ID tragen. CLI-Argumente werden ohne Shell übergeben;
-Selektoren dürfen nicht als zusätzliche Flags interpretiert werden. Der Starter
-überschreibt keine bestehenden Projektdateien. `dm`-Schlüssel werden nicht aus
-SQL-Abhängigkeiten erfunden. Lokale Katalogverbindungen werden vor dem externen
-Prozess ausdrücklich geschlossen.
+## Responsibilities that remain with the surrounding platform
 
-### Verbleibende Grenzen
+Scheduling, identity, access control, secrets and notification transport belong
+to existing platform services. Standard transformations remain ordinary R or SQL
+operations. A visual ETL editor and automatic column lineage for arbitrary R
+code are outside the current scope.
 
-* dbt-Builds sind nicht atomar und erzeugen nicht automatisch lakefold-Releases.
-* Der Starter erzeugt das dbt-duckdb-Profilformat. dbt v2 `catalogs.yml`, S3 und
-  PostgreSQL benötigen eigene, separat geprüfte Konfigurationen.
-* Ein dbt-Manifest kann nicht beweisen, dass eine Relation noch dem Build entspricht.
-* Es gibt keine universelle Source-Plugin-API, keine Registry-Migrationen und
-  keine vom Paket koordinierte parallele Veröffentlichung.
+`approved = TRUE` records a declared approval state; it does not implement a
+review workflow. API immutability does not protect tables from direct SQL writes.
+`code_version` must cover changed closure values and dependencies as well as
+function bodies. Calling `collect()` can bring large datasets into R memory.
+Even metric calculation registers definitions and lineage, so it participates
+in writer coordination.
 
-Die folgenden Abschnitte dokumentieren das ursprüngliche Review und die
-Änderungen von 0.1.0 auf 0.2.0. Aussagen über den damals fehlenden DAG beziehen
-sich auf den R-Kern; dbt übernimmt seit 0.3.0 die SQL-Seite.
+## Design evolution
 
-## Urteil
+| Version | Main contribution |
+|---|---|
+| 0.1.0 | File ingestion, contracts, immutable releases, products, metrics and catalog |
+| 0.2.0 | Connection-free configuration, inspectable plans, named transformations and a common execution entry point |
+| 0.3.0 | dbt project specifications, isolated invocations, diagnostics and native lazy dm models |
+| 0.4.0 | Input gates, richer pointblank evidence, shared diagnostics, contract tooling, explicit dbt publication and operational helpers |
 
-**Ein brauchbarer, fokussierter Kern für dateibasierte Datenprodukte. Noch kein
-universelles, ausgereiftes Framework auf dem Niveau von tidymodels.** Die
-Pipe-Schreibweise allein reicht für diesen Anspruch nicht. Entscheidend sind
-vorhersagbare Objekte, getrennte Definition und Ausführung, überprüfbare Pläne,
-eine konsistente Erweiterungsschnittstelle, hilfreiche Fehler und gute Beispiele.
-
-Der Kern ist fachlich sinnvoll: Original sichern, Kandidat prüfen, nur dann
-veröffentlichen; Kennzahlen rechnen auf festgehaltenen Releases. R-Funktionen,
-Tibbles, Lazy Tables, pointblank und dm werden weiterverwendet. Es gibt keine
-zweite eigene Tabellen- oder Ausdruckssprache.
-
-Für einen erfahrenen R-Nutzer ist das für kleine bis mittlere, dateibasierte
-Strecken mit einem Writer gut nachvollziehbar. Beim Übertragen auf beliebige
-Datenquellen, mehrere abhängige Produkte und regulären Mehrbenutzerbetrieb muss
-er derzeit noch zu viel Betriebslogik selbst ergänzen.
-
-## Was aus dem Review direkt verbessert wurde
-
-| Lücke in 0.1.0 | Änderung in 0.2.0 | Bedeutung |
-|---|---|---|
-| Pipeline-Definition verlangt eine offene Verbindung | `dl_config()` plus `dl_pipeline(id, config, ...)` | Definition und Code-Review funktionieren ohne Infrastrukturzugriff |
-| Listen werden nahezu ungefiltert ausgegeben | Kompakte Print-Methoden für die zentralen Spezifikationen | Objektzustand, Inputs und Freigaben sind direkt sichtbar |
-| Kein lesbarer Ausführungsplan | `dl_plan()` liefert ein Tibble, auch für unvollständige Definitionen | Struktur kontrollieren, bevor Daten gelesen werden |
-| Transformationen verstecken sich im Reader | Beliebig viele benannte `dl_step_transform()`-Schritte | Lesen, Aufbereiten und Prüfen sind sichtbar getrennt |
-| Unterschiedliche erste Argumente für Run, Build und Measure | `dl_execute()` als S3-Generic mit Objekt zuerst | Alle drei Spezifikationen lassen sich gleichartig pipen |
-| Fehlerhafte Schrittreihenfolge fällt spät auf | Prüfung beim Anfügen eines Schritts | Früher verständliche Rückmeldung |
-| Custom Metric kann trotz vorhandener Eingabe ein leeres Ergebnis liefern | Leere Ergebnisse werden abgewiesen | Kein scheinbar gültiges leeres Reportergebnis |
-| CI-Matrix setzt den Demo-Schalter statt des Test-Schalters | `DATALOOM_TEST_BACKEND` wird korrekt gesetzt | Die gesamte Suite läuft tatsächlich auf beiden Backends |
-
-Die bisherigen `dl_setup()`, `dl_run()`, `dl_build()` und `dl_measure()` bleiben
-verfügbar. 0.2.0 erweitert die Bedienung, ersetzt aber keine Datenbankarchitektur.
-Definitionen mit Transformationsschritten benötigen 0.2.0 oder neuer.
-
-## Vergleich der Denkmodelle
-
-Die Zuordnung ist eine Designanalogie, keine API- oder Funktionsgleichheit.
-
-| Prinzip aus tidymodels | Entsprechung in lakefold | Grenze |
-|---|---|---|
-| Spezifikation vor Ausführung | Contract, Quelle, Produkt, Metric und Pipeline sind R-Objekte | Keine vollständige portable Deserialisierung ausführbarer R-Definitionen |
-| Schritte als explizite Rezeptur | `dl_step_*()` und benannte Transformationen | Keine trainierbaren Schritte mit `prep()`/`bake()`-Semantik |
-| Workflow bündelt Komponenten | Pipeline verbindet Quelle, Reader, Schritte, Contract und Veröffentlichung | Ein Import, keine automatische Ausführung eines ganzen Produktgraphen |
-| Einheitlicher Ausführungsaufruf | `dl_execute()` | Resultate unterscheiden sich bewusst: Run-Ergebnis oder Kennzahl-Tibble |
-| Inspektion über strukturierte Ausgaben | Print-Methoden, `dl_plan()`, Registry und Katalog | Noch keine einheitlichen `tidy()`/`glance()`-/`augment()`-Methoden |
-| Austauschbare Engines und Erweiterungen | Konstruktoren, normale R-Callbacks und optionale Adapter | Kein stabiler allgemeiner Backend-/Source-/Step-Pluginvertrag |
-| Komposition mit R-Werkzeugen | Base Pipe, dplyr/dbplyr, dm, pointblank | Keine umfassende tidyselect-Oberfläche für Contracts und Rollen |
-
-Transformationsfunktionen sind normale Verarbeitungsschritte. Ein ML-Rezept
-lernt dagegen je nach Schritt Parameter aus Trainingsdaten und wendet sie später
-auf neue Daten an. Für ein Datenprodukt sollte man dieses Verhalten nicht
-unbeabsichtigt übernehmen. Ein `prep()`-Alias ohne solche Semantik wäre irreführend.
-
-## Was ein erfahrener R-Nutzer als Nächstes erwarten würde
-
-| Priorität | Fähigkeit | Aktueller Stand | Konkreter nächster Schritt |
-|---|---|---|---|
-| P1 | Gute Diagnose ohne Registry-Interna | Run-Ergebnis und rohe Metadatentabellen vorhanden | Run-/Release-/Quality-Accessors und konsistente Condition-Klassen |
-| P1 | Contract-Entwurf aus Beispieldaten | Spalten und Typen werden von Hand deklariert | `dl_contract_from()` als ausdrücklich ungeprüfter Entwurf, keine automatische Freigabe |
-| P1 | Regelbausteine für typische Qualitätsprüfungen | Struktur/Nullwerte/Schlüssel eingebaut; übrige Regeln per Callback | Bereiche, Wertemengen, Referenzen und Periodenvollständigkeit mit klarer NA-Semantik |
-| P1 | Definitionen sicher ändern | Version/Fingerprint blockiert stilles Überschreiben | Dokumentierte Update-/Remove-Funktionen und Änderungsvergleich |
-| P1 | Produktionsnachweis der vorgesehenen Infrastruktur | Konfiguration vorhanden, externe Endpunkte ungetestet | S3/PostgreSQL-Integrationstests einschließlich Neustart und Restore |
-| P1 | Große Dateiimporte | Reader lädt üblicherweise in R; Produkte bleiben lazy | Datenbankseitige CSV-/Parquet-Reader mit explizitem Laufzeitkontext |
-| P2 | Mehrere Produkte in Abhängigkeitsreihenfolge | Inputs und Lineage vorhanden; Aufrufe manuell | Optionaler `targets`-Adapter mit Release-Fingerprints und Zyklusprüfung |
-| P2 | Datenbank- und API-Quellen | Nur lokale Quelldateien sind erstklassige Sources | Source-Protokoll mit Snapshot, Fingerprint, Wiederholbarkeit und Credentials zur Laufzeit |
-| P2 | Append/Upsert und inkrementelle Verarbeitung | Replace und Partitionsersatz; letzterer kopiert vollständigen Bestand | Explizite Schlüssel-/Lösch-/Korrektursemantik vor Implementierung |
-| P2 | Schema-Evolution und Registry-Migrationen | Kein Migrationsmechanismus | Registry-Schemaversion, Migrationsplan, Vorwärts-/Rückwärtskompatibilität |
-| P2 | Sichere parallele Writer | Ausdrücklich nicht unterstützt | Sperren/Eindeutigkeit und Konflikttests, erst danach Multiwriter bewerben |
-| P2 | Retention und Speicherpflege | Keine automatische Bereinigung | Referenzzählung aus Reports/Releases und Vorschau vor Löschung |
-| P3 | Portabler Contract-Standard und echter commons-Adapter | Begrenzte YAML-Exporte | Versionierte Zielschemata und Ende-zu-Ende-Vertragstests |
-| P3 | Weitere Backends und grafischer Editor | Nicht implementiert | Erst bei einem konkreten Bedarf und nach stabiler Kern-API |
-
-P1 bedeutet: hoher Nutzen für die unmittelbar nächste nutzbare Version. P2
-betrifft breiteren oder belastbareren Betrieb. P3 erweitert das Ökosystem.
-Die Priorität hängt vom Einsatz ab: Für parallele Writer ist die Sperrstrategie
-vor der ersten produktiven Nutzung zwingend und nicht erst irgendwann relevant.
-
-## Bewusste Grenzen, die nicht zu eigenen Subsystemen werden sollten
-
-* Scheduling, Identity und Secret-Verwaltung an bestehende Plattformen anbinden.
-* Standardtransformationen dplyr/dbplyr überlassen.
-* Relationale Modelle mit dm abbilden; fachliche Join-Kardinalität ausdrücklich prüfen.
-* Eine eigene Visual-ETL-Plattform erst bei belegtem Bedarf bauen.
-* Das Paket zunächst modular im Code halten. Viele kleine R-Pakete würden
-  Versions- und Schnittstellenpflege erhöhen, bevor die API stabil ist.
-
-## Weitere Befunde, die im Betrieb zählen
-
-* `approved = TRUE` ist Metadatenzustand, kein Vier-Augen-Freigabeworkflow.
-* API-Unveränderlichkeit schützt nicht gegen SQL-Zugriffe mit Schreibrechten.
-* `code_version` muss auch geänderte Closure-Werte und Abhängigkeiten erfassen.
-  Nur Funktionscode zu hashen erkennt nicht jede Verhaltensänderung.
-* Ein historischer Cache-Treffer setzt den aktuellen Release nicht zurück.
-* Qualitätsregeln mit `collect()` können große Datenmengen in R laden.
-* Auch Kennzahlberechnung registriert Definitionen und Lineage. Sie ist daher
-  kein rein lesender Betrieb und gehört zur Single-Writer-Koordination.
-* Der Registry fehlt eine Schemaversion. 0.2.0 verändert deren Schema nicht;
-  künftige Änderungen benötigen einen echten Migrationspfad.
-
-## Referenzen zum Vergleich
-
-* [tidymodels: Rezepte und modulare Vorverarbeitung](https://www.tidymodels.org/start/recipes/)
-* [workflows: Spezifikationen zusammenstellen](https://workflows.tidymodels.org/reference/workflow.html)
-
-Die Bewertung von lakefold beruht auf dem hier vorliegenden Quellcode. Die
-Referenzen erklären die Vergleichsprinzipien und sind keine Bestätigung dieses Pakets.
+These changes extend the framework's own data workflow concepts. Future work
+should be judged by whether it makes real workflows easier to compose, inspect,
+operate and reproduce.

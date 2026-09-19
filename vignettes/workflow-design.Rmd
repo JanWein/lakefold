@@ -14,9 +14,10 @@ library(lakefold)
 
 ## Define before executing
 
-Like a tidymodels workflow, a lakefold specification describes work before it
-is executed. The analogy is conceptual: there is no training/resampling system,
-and `dl_plan()` is structural inspection, not SQL execution or a data dry run.
+A lakefold specification describes work before it is executed. This separation
+lets you assemble reusable components, inspect them and introduce more explicit
+steps as a workflow grows. `dl_plan()` inspects structure; it does not execute
+SQL or perform a data dry run.
 
 ```{r specification}
 config <- dl_config(backend = "duckdb")
@@ -56,7 +57,9 @@ connections remain caller-owned. dbt opens its own connections in a separate
 process, so do not pass `lake` when executing a dbt project.
 
 The result types reflect their operation: run result, metric tibble or dbt
-result. A universal diagnostic accessor is not implemented yet.
+result. `dl_status()` and `dl_quality()` inspect R and dbt execution results.
+`dl_releases()` and `dl_lineage()` expose publication history and provenance.
+Metric tibbles carry a manifest with the input release and calculation details.
 
 ## Inspect incomplete definitions
 
@@ -81,4 +84,5 @@ or dependencies change; function-body hashes cannot capture all environments.
 Specifications can be saved as RDS but are not a portable language-independent
 format. Prefer version-controlled R definitions and explicit dependency locks.
 Update/remove-step helpers and an external adapter extension contract are future
-work. See the design review for the remaining gap to mature tidy frameworks.
+work. See the design review for the framework's composition principles and
+remaining extension boundaries.

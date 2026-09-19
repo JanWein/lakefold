@@ -2,7 +2,7 @@ url: https://janwein.github.io/lakefold/
 destination: site
 home:
   title: lakefold
-  description: R workflows for data lakes, dbt and relational models.
+  description: Compose complex data workflows from simple, reusable R building blocks.
 template:
   bootstrap: 5
 reference:

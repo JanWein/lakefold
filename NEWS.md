@@ -1,5 +1,10 @@
 # lakefold 0.4.0
 
+* Documentation is now maintained entirely in English, including the README,
+  guides, vignettes, example schemas and job templates.
+* Positioning describes an independent framework that makes complex data
+  workflows accessible through simple, composable R building blocks.
+
 * The registry now migrates quality metadata additively to schema version 2,
   preserving existing releases and rejecting unsupported future schemas.
 * `dl_check_delivery()` monitors expected business dates even without an ingest
@@ -48,7 +53,7 @@
 * Earlier errors for invalid pipeline order and invalid transform results.
 * Empty custom metric results are rejected before reporting.
 * Correct backend matrix variable for the full CI test suite.
-* Complete tutorials, explicit tidymodels comparison and prioritized design review.
+* Complete tutorials, workflow design principles and a prioritized design review.
 * Registry schema unchanged; existing execution functions remain supported.
 
 # lakefold 0.1.0

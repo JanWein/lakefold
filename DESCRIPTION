@@ -1,13 +1,15 @@
 Package: lakefold
-Title: R Workflows for Data Lakes, dbt and Relational Models
+Title: Composable R Workflows for Governed Data Products
 Version: 0.4.0
 Authors@R: person("Jan-Hendrik", "Weinert", role = c("aut", "cre"), email = "65009403+JanWein@users.noreply.github.com")
-Description: A modular grammar for landing source files, validating immutable
-    candidates, publishing versioned data products and calculating governed
-    metrics. Uses DuckLake or a local DuckDB backend, lazy tidyverse queries,
-    optional pointblank validation, dm models and a read-only Shiny catalog.
-    Runs dbt through its command-line interface and exposes build results,
-    dependency lineage and lazy relational models in R.
+Description: Combines reusable specifications and explicit execution steps for
+    ingesting data, validating immutable candidates, publishing versioned data
+    products and calculating governed metrics. Supports concise entry points and
+    composition of more complex workflows using ordinary R functions and lazy
+    tidyverse queries. Uses DuckLake or a local DuckDB backend, optional pointblank
+    validation, dm models and a read-only Shiny catalog. Runs dbt through its
+    command-line interface and exposes results, dependency lineage and relational
+    models in R.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Depends: R (>= 4.2.0)

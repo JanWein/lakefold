@@ -1,15 +1,24 @@
 # lakefold
 
-**Daten ingestieren, mit dbt aufbauen und als relationale Modelle in R nutzen.**
+**Complex data workflows, composed from simple R building blocks.**
 
-lakefold verbindet DuckDB/DuckLake, dbt, dplyr und dm mit einer R-Schnittstelle.
-Quellen, Verträge und Workflows sind explizite Spezifikationen; ausgeführt wird
-erst mit einem eigenen Aufruf. Das Paket hieß bisher **dataloom**. Die bisherigen
-`dl_*`-Funktionen bleiben erhalten.
+lakefold is a modular R framework for turning incoming data into validated,
+versioned data products and reproducible metrics. Start with a single ingestion
+call, then compose explicit steps as your workflow grows. Sources, contracts,
+pipelines, products and metrics share a small set of concepts: define, inspect,
+execute and examine the result.
 
-> Entwicklungsstand 0.4.0: lokal einsetzbar und mit automatisierten Tests versehen.
-> Die Paket-Registry benötigt einen einzelnen schreibenden Prozess. dbt-Ausgaben
-> und unveränderliche Paket-Releases haben unterschiedliche Garantien.
+The framework combines DuckDB/DuckLake, dplyr, optional pointblank checks, dbt
+builds and dm models. Ordinary R functions, tibbles and lazy tables remain part
+of the interface. Each component has a clear responsibility, and you can use the
+parts your workflow needs.
+
+> Development version 0.4.0. The registry requires one coordinated writer.
+> Local workflows have automated test coverage. See the
+> [validation record](https://github.com/JanWein/lakefold/blob/main/docs/VALIDATION.md)
+> for tested environments and the
+> [feature overview](https://github.com/JanWein/lakefold/blob/main/docs/FEATURES.md)
+> for current boundaries.
 
 ## Installation
 
@@ -19,15 +28,16 @@ remotes::install_github("JanWein/lakefold", build_vignettes = TRUE)
 library(lakefold)
 ```
 
-R >= 4.2 und DuckDB >= 1.5.5 sind erforderlich. Für Vignetten wird Pandoc benötigt
-(in RStudio normalerweise enthalten). Ohne Pandoc: `build_vignettes = FALSE`.
-Für dbt zusätzlich `install.packages(c("processx", "yaml", "dm"))` und eine
-separate dbt-Installation. Für den reinen R-Workflow ist dbt nicht erforderlich.
+R >= 4.2 and DuckDB >= 1.5.5 are required. Building vignettes requires Pandoc,
+which is normally available with RStudio. Use `build_vignettes = FALSE` if
+Pandoc is unavailable. dbt workflows additionally need
+`install.packages(c("processx", "yaml", "dm"))` and a separate dbt installation.
+The R ingestion workflow works without dbt.
 
-## Der Einstieg in R
+## Start with one ingestion call
 
-Das Beispiel schreibt ausschließlich in einen temporären Ordner und ist auch
-ohne DuckLake-Erweiterung ausführbar.
+This complete example writes to a temporary directory and runs without the
+DuckLake extension.
 
 ```r
 library(lakefold)
@@ -54,45 +64,62 @@ dl_disconnect(lake)
 unlink(root, recursive = TRUE)
 ```
 
-Ungültige Lieferungen werden protokolliert und blockieren die Veröffentlichung.
-Der bisherige gültige Release bleibt erhalten. Identische Eingaben und
-Definitionen können einen vorhandenen Release wiederverwenden.
+Invalid deliveries are recorded and block publication. The previous valid
+release remains available. Identical inputs and definitions can reuse an
+existing release.
 
-## dbt aus R steuern
+## Grow into an explicit workflow
+
+Use `dl_ingest()` for a compact file workflow or `dl_ingest_data()` for a data
+frame already in R. When you need more control, compose `dl_pipeline()` with
+landing, extraction, optional input checks, named transformations, validation and
+publication steps. `dl_plan()` exposes the declared structure before execution.
+
+`dl_execute()` is the common execution entry point for pipelines, products,
+metrics and dbt projects. `dl_status()`, `dl_quality()`, `dl_releases()` and
+`dl_lineage()` make the results inspectable. The
+[workflow guide](https://janwein.github.io/lakefold/articles/workflow-design.html)
+shows how to combine these building blocks.
+
+The design goal is a small, consistent interface that accommodates complex
+workflows through composition. Modules retain explicit inputs, outputs and
+lifecycle rules as a workflow expands. See the
+[design review](https://janwein.github.io/lakefold/articles/design-review.html)
+for the framework's principles and extension boundaries.
+
+## Run dbt from R
 
 ```r
-# Für einen vorhandenen, konfigurierten dbt-Projektordner:
+# For an existing, configured dbt project directory:
 project <- dl_dbt_project("analytics", profiles_dir = "analytics")
 result <- project |> dl_execute(select = "+customer_revenue")
 dl_dbt_status(result)
 dl_dbt_lineage(result)
 ```
 
-`dl_dbt_init(path, config)` erstellt alternativ ein lokales Starterprojekt mit
-synthetischen Daten und Tests. Der [dbt-Leitfaden](https://github.com/JanWein/lakefold/blob/main/vignettes/dbt-workflows.Rmd)
-zeigt Installation, DuckLake-Anbindung, Fehlerdiagnose und das anschließende
-`dm`-Modell. R-Verbindungen zum lokalen Katalog vor dbt schließen und danach neu
-öffnen. Jeder Lauf hat eigene Artefakte, Exitcode und strukturierte Ergebnisse.
+`dl_dbt_init(path, config)` can create a local starter project with synthetic
+data and tests. The [dbt guide](https://janwein.github.io/lakefold/articles/dbt-workflows.html)
+covers installation, DuckLake connections, diagnostics and subsequent use of dm.
+Close R connections to the local catalog before invoking dbt, then reopen them.
+Each invocation has its own artifacts, exit code and structured results.
 
-## Aufgabenverteilung
+## Component responsibilities
 
-| Aufgabe | Schnittstelle | Garantie oder Grenze |
+| Task | Interface | Behavior |
 |---|---|---|
-| Spezifikationen definieren | `dl_config()`, `dl_pipeline()`, `dl_dbt_project()` | Konstruktion startet keine Datenverarbeitung |
-| Quellen einlesen | `dl_ingest()`, Pipeline-Schritte | Originaldatei sichern, Vertrag prüfen, Release veröffentlichen |
-| SQL-Modelle und Tests | `dl_dbt_build()`, `dl_dbt_test()` | dbt übernimmt DAG und Materialisierungen |
-| R-Transformationen | `dl_step_transform()`, `dl_product()` | Normale R-Funktionen, lazy wo möglich |
-| Relationale Analyse | `dl_model()`, `dl_dbt_model()` | `dm` mit ausdrücklich deklarierten Schlüsseln |
-| Kennzahlen und Berichte | `dl_metric()`, `dl_measure()`, `dl_report_release()` | Versionierte Definitionen und Eingabereferenzen |
-| Metadaten ansehen | `dl_registry()`, `dl_catalog()` | Register und lesender Shiny-Katalog |
+| Define specifications | `dl_config()`, `dl_pipeline()`, `dl_dbt_project()` | Construction does not start data processing |
+| Ingest data | `dl_ingest()`, `dl_ingest_data()`, pipeline steps | Preserve an input snapshot, check its contract and publish a release |
+| Build and test SQL models | `dl_dbt_build()`, `dl_dbt_test()` | dbt owns its dependency graph and materializations |
+| Transform in R | `dl_step_transform()`, `dl_product()` | Use ordinary R functions and lazy operations where supported |
+| Work with related tables | `dl_model()`, `dl_dbt_model()` | Use native dm objects with explicitly declared keys |
+| Calculate metrics and record reports | `dl_metric()`, `dl_measure()`, `dl_report_release()` | Record versioned definitions and input references |
+| Inspect metadata | `dl_registry()`, `dl_catalog()` | Query the registry or use the read-only Shiny catalog |
 
-## Qualitätsgates mit pointblank
+## Quality gates with pointblank
 
-Installiere dafür das optionale Paket mit `install.packages("pointblank")`.
-
-Version 0.4.0 ergänzt den vollständigen Weg von der Eingangskontrolle bis zum
-Qualitätsbericht. pointblank prüft Werte und Segmente, dbt baut und testet
-SQL-Modelle, dm beschreibt deren ausdrücklich deklarierte Beziehungen.
+Install the optional integration with `install.packages("pointblank")`.
+pointblank checks values and segments, dbt builds and tests SQL models, and dm
+represents explicitly declared relationships.
 
 ```r
 rule <- dl_pointblank("amounts", function(data) {
@@ -102,63 +129,49 @@ rule <- dl_pointblank("amounts", function(data) {
 }, policy = "agent")
 ```
 
-Mit `input_contract` in `dl_ingest()` oder `dl_ingest_data()` wird die Lieferung
-vor dem Schreiben in Raw geprüft. `dl_step_precheck()` bietet denselben Schritt
-in einer expliziten Pipeline. Landing bleibt erhalten; der abschließende
-Kandidatencheck bleibt Pflicht. Fehler, ausgelassene Prüfungen und leere Pläne
-können nicht als Erfolg passieren.
+Pass `input_contract` to `dl_ingest()` or `dl_ingest_data()` to validate the
+delivery before writing Raw. Use `dl_step_precheck()` in an explicit pipeline.
+Landing evidence is retained, and the final candidate check remains mandatory.
+Evaluation errors, skipped checks and empty plans block publication.
 
-| Neuer Baustein | Nutzen |
+| Building block | Purpose |
 |---|---|
-| `dl_contract_from()` / `dl_contract_confirm()` / `dl_contract_diff()` | Typenentwurf, bewusste fachliche Prüfung und Änderungsvergleich |
-| `dl_status()` / `dl_quality()` / `dl_releases()` / `dl_lineage()` | Diagnose und Herkunft ohne Registry-Interna |
-| `dl_quality_report()` / `dl_pointblank_report()` / `dl_expect_quality()` | HTML/JSON, nativer pointblank-Bericht und testthat |
-| `dl_dbt_publish()` | Aktuelle dbt-Relation kopieren, prüfen und als unveränderlichen Release veröffentlichen |
-| `dl_check_delivery()` | Überfällige fachliche Stichtage auch ohne gestarteten Import erkennen |
-| `dl_cleanup()` | Vorschau und gezielte Bereinigung alter unveröffentlichter Fehlversuche |
+| `dl_contract_from()`, `dl_contract_confirm()`, `dl_contract_diff()` | Draft types, review the contract and compare changes |
+| `dl_status()`, `dl_quality()`, `dl_releases()`, `dl_lineage()` | Inspect outcomes and provenance without querying registry internals |
+| `dl_quality_report()`, `dl_pointblank_report()`, `dl_expect_quality()` | Export HTML/JSON or native reports and use the same gate in testthat |
+| `dl_dbt_publish()` | Copy a current dbt relation, validate it and publish an immutable release |
+| `dl_check_delivery()` | Detect overdue business dates even when no import has started |
+| `dl_cleanup()` | Preview and remove expired unpublished tables from failed runs |
 
-Der [ausführbare Qualitätsleitfaden](https://janwein.github.io/lakefold/articles/quality-gates.html)
-zeigt Warnschwellen, Segmentierung, blockierte Lieferungen und Berichte.
+The [executable quality guide](https://janwein.github.io/lakefold/articles/quality-gates.html)
+walks through thresholds, segmentation, blocked deliveries and reports.
 
-## Wie ähnlich ist es tidymodels?
+## Documentation
 
-Die Bedienidee ist verwandt: **definieren, ansehen, ausführen, auswerten**.
-Spezifikationen lassen sich per `|>` zusammensetzen und separat drucken;
-`dl_execute()` ist der gemeinsame Ausführungseinstieg. Ergebnisse verwenden
-Tibbles, dbplyr und dm statt eigener Tabellenformate.
-
-Das Paket erreicht noch nicht die Reife und Erweiterbarkeit von tidymodels.
-Gemeinsame Status-/Qualitätsabfragen und eine versionierte Registry-Migration
-sind vorhanden. Ein stabiler allgemeiner Adapter-Vertrag und koordinierte
-parallele Schreibzugriffe fehlen weiterhin. dbt deckt seinen SQL-DAG ab; einen gemeinsamen DAG für beliebige
-R- und dbt-Aufgaben bietet das Paket noch nicht. Details und Prioritäten stehen
-in der [Designbewertung](https://github.com/JanWein/lakefold/blob/main/docs/DESIGN_REVIEW.md).
-
-## Dokumentation
-
-| Anliegen | Einstieg |
+| Goal | Start here |
 |---|---|
-| In 10 Minuten loslegen | [Ausführbarer Einstieg](https://github.com/JanWein/lakefold/blob/main/vignettes/getting-started.Rmd) |
-| dbt, DuckLake und dm verbinden | [dbt-Workflow](https://github.com/JanWein/lakefold/blob/main/vignettes/dbt-workflows.Rmd) |
-| Pipeline erweitern | [Workflow-Konzept](https://github.com/JanWein/lakefold/blob/main/vignettes/workflow-design.Rmd) |
-| Qualitätsfehler und historische Daten | [Qualität und Historie](https://github.com/JanWein/lakefold/blob/main/docs/QUALITY_AND_HISTORY.md) |
-| Kennzahlen reproduzieren | [Produkte und Kennzahlen](https://github.com/JanWein/lakefold/blob/main/docs/PRODUCTS_AND_METRICS.md) |
-| Betrieb und Grenzen | [Betriebsleitfaden](https://github.com/JanWein/lakefold/blob/main/docs/OPERATIONS.md) |
-| Prüfstand nachvollziehen | [Validierung](https://github.com/JanWein/lakefold/blob/main/docs/VALIDATION.md) |
-| Pointblank und Qualitätsgates | [Qualitätsleitfaden](https://janwein.github.io/lakefold/articles/quality-gates.html) |
-| Von dataloom wechseln | [Migration](https://github.com/JanWein/lakefold/blob/main/docs/MIGRATION.md) |
+| Create your first data product | [Getting started](https://janwein.github.io/lakefold/articles/getting-started.html) |
+| Connect dbt, DuckLake and dm | [dbt workflows](https://janwein.github.io/lakefold/articles/dbt-workflows.html) |
+| Compose and extend a pipeline | [Workflow design](https://janwein.github.io/lakefold/articles/workflow-design.html) |
+| Handle quality failures and historical data | [Quality and history](https://janwein.github.io/lakefold/articles/quality-history.html) |
+| Reproduce metrics and report values | [Products and metrics](https://janwein.github.io/lakefold/articles/products-metrics.html) |
+| Use pointblank quality gates | [Quality gates](https://janwein.github.io/lakefold/articles/quality-gates.html) |
+| Operate the package | [Operations](https://github.com/JanWein/lakefold/blob/main/docs/OPERATIONS.md) |
+| Understand the design and scope | [Design review](https://janwein.github.io/lakefold/articles/design-review.html) |
+| Inspect test evidence | [Validation record](https://github.com/JanWein/lakefold/blob/main/docs/VALIDATION.md) |
+| Upgrade from dataloom or an earlier version | [Migration](https://github.com/JanWein/lakefold/blob/main/docs/MIGRATION.md) |
 
-In R: `help(package = "lakefold")`, `?dl_ingest`, `?dl_dbt_build` und
-`vignette(package = "lakefold")`. Die Funktionshilfe wird aus roxygen2-Kommentaren
-generiert. Die GitHub-Workflows prüfen das Paket und bauen eine pkgdown-Website
-und veröffentlichen sie auf GitHub Pages. Die Dokumentation ist zusätzlich
-im installierten Paket verfügbar.
+In R, use `help(package = "lakefold")`, `?dl_ingest`, `?dl_dbt_build` and
+`vignette(package = "lakefold")`. Function help is generated from roxygen2
+comments. GitHub Actions checks the package and publishes the pkgdown website.
+All package documentation is maintained in English.
 
-## Entwicklung
+## Development
 
-Die [Beitragsregeln](CONTRIBUTING.md) beschreiben Formatierung, Tests und den
-vollständigen Paketcheck. Die Entwicklung folgt den Posit-Skills
-[`r-package-development` und `testing-r-packages`](https://github.com/posit-dev/skills)
-sowie den [R-Packages-Dokumentationsregeln](https://r-pkgs.org/man.html).
+The [contribution guide](CONTRIBUTING.md) covers formatting, tests and full
+package checks. Development follows the Posit
+[`r-package-development` and `testing-r-packages` skills](https://github.com/posit-dev/skills)
+and the [R Packages documentation guidelines](https://r-pkgs.org/man.html).
 
-MIT-Lizenz. [English overview](README.en.md).
+The package was previously named **dataloom**. Existing `dl_*` function names
+remain available. MIT licensed.

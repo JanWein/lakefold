@@ -1,13 +1,13 @@
-# API ab 0.4.0
+# API as of 0.4.0
 
-Die vollständige gruppierte Referenz steht auf der [Dokumentationswebsite](https://janwein.github.io/lakefold/reference/index.html).
-Alle 62 exportierten Funktionen besitzen Paket-Hilfe. In R: `help(package = "lakefold")`.
+The complete grouped reference is available on the [documentation website](https://janwein.github.io/lakefold/reference/index.html).
+All 62 exported functions have package help. In R, use `help(package = "lakefold")`.
 
-Die bestehenden Funktionsnamen bleiben erhalten. Neue Eingangsprüfungen sind optional;
-der abschließende Veröffentlichungscheck bleibt Pflicht. `dl_status()` und `dl_quality()`
-vereinheitlichen die Diagnose. Konkrete Beispiele stehen im [Qualitätsleitfaden](https://janwein.github.io/lakefold/articles/quality-gates.html).
+Existing function names remain available. Input checks are optional; the final
+publication check is mandatory. `dl_status()` and `dl_quality()` provide common
+diagnostics. See the [quality guide](https://janwein.github.io/lakefold/articles/quality-gates.html) for worked examples.
 
-| Funktion | Hilfeseite |
+| Function | Help topic |
 |---|---|
 | `dl_build()` | [dl_build.Rd](../man/dl_build.Rd) |
 | `dl_capabilities()` | [dl_capabilities.Rd](../man/dl_capabilities.Rd) |

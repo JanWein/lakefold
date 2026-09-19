@@ -13,4 +13,4 @@ assignees: ''
 Use synthetic data only.
 
 ## Environment
-R version, dataloom version, dependency versions, backend and operating system.
+R version, lakefold version, dependency versions, backend and operating system.

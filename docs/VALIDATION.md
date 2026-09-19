@@ -1,140 +1,134 @@
-# Prüfstand lakefold 0.4.0
+# Validation record for lakefold 0.4.0
 
-Prüfdatum: 19. September 2026. Lokal Ubuntu 24.04 und R 4.3.3.
+Check date: 19 September 2026. Local environment: Ubuntu 24.04 and R 4.3.3.
 
-| Prüfung | Ergebnis |
+| Check | Result |
 |---|---|
-| Vollständiger `R CMD check --no-manual` | 0 Errors, 0 Warnings, 0 Notes |
-| Einzelprüfungen im abschließenden Paketcheck | 263 bestanden, 0 fehlgeschlagen, 0 Warnungen, 0 übersprungen |
-| Separater vollständiger DuckLake-Lauf | Bestanden, einschließlich realem dbt und Snapshot-Veröffentlichung |
-| Beispiele und Vignetten | Alle Paketbeispiele geprüft; sieben Vignetten gebaut und deren R-Code ausgeführt |
-| API und Referenz | 62 exportierte Funktionen, 52 Hilfethemen, vollständiger pkgdown-Index |
-| Tests | 56 Testfälle; neue Regressionen für Qualitätsgates, Migration, Berichte und dbt-Veröffentlichung |
+| Full `R CMD check --no-manual` | 0 errors, 0 warnings, 0 notes |
+| Expectations in the final local package check | 263 passed, 0 failed, 0 warnings, 0 skipped |
+| Separate full DuckLake run | Passed, including actual dbt execution and snapshot publication |
+| Examples and vignettes | All package examples checked; seven vignettes built and executable R chunks run |
+| API and reference | 62 exported functions, 52 help topics, complete pkgdown index |
+| Tests | 56 test cases, including quality gates, migration, reports and dbt publication |
 
-Die GitHub-Workflows prüfen jeden veröffentlichten Stand zusätzlich mit R 4.5.1
-auf DuckDB und DuckLake und bauen/deployen die Website. Ihr Ergebnis ist unter
-[GitHub Actions](https://github.com/JanWein/lakefold/actions) nachvollziehbar.
-Die folgenden lokalen Ergebnisse sind kein vorweggenommener CI-Status.
+GitHub workflows additionally check published commits with R 4.5.1 on DuckDB
+and DuckLake, then build and deploy the website. See
+[GitHub Actions](https://github.com/JanWein/lakefold/actions) for results tied to
+a particular commit. Local results and GitHub results are separate evidence.
+The documentation-language update does not change the runtime API.
 
-## Neue fachliche Nachweise
+## Behavior covered by the new checks
 
-* Native pointblank-Schwellen warnen oder blockieren je Segment. Kleine Segmente
-  werden nicht durch eine globale Fehlerquote verdeckt.
-* Fehlende Action Levels, inaktive Schritte und Auswertungsfehler blockieren.
-* Gleichzeitig vorhandene pointblank-Abbruchspalten `S`, `E` und `C` werden
-  gemeinsam ausgewertet. Acht Berichtsvarianten sichern diese Regel ab.
-* Ein fehlgeschlagenes Eingangsgate erhält Landing und alten Release, schreibt
-  aber keine neue Raw-Tabelle. Das abschließende Kandidatengate bleibt aktiv.
-* Data-Frame-Zulieferungen erhalten Datumstypen und wiederverwenden identische
-  Lieferungen über den bestehenden Cache.
-* Qualitätsberichte zeigen den Gate-Entscheid, escapen HTML-Inhalte und enthalten
-  keine Fehlzeilen-Extrakte oder Samples.
-* Contract-Drafts benötigen explizite Bestätigung; der Vergleich zeigt
-  strukturelle Verschärfungen und semantisch zu prüfende Änderungen.
-* Diagnose-Accessors unterscheiden letzten Versuch, festgehaltenen Release und
-  Cache-Herkunft. Ein dbt-Prozessfehler bleibt neben erfolgreichen Nodes sichtbar.
-* dbt-Relationen werden erneut kopiert und geprüft. Spätere Änderungen an einer
-  Relation verändern keinen früher veröffentlichten Release.
-* Fehlende fachliche Stichtage werden ohne Importversuch erkannt. Erfolgreiche
-  Benachrichtigungen werden dedupliziert; Transportfehler bleiben retryfähig.
-* Die additive Registry-Migration erhält alte Nachweise und kann wiederholt
-  aufgerufen werden; unbekannte neuere Schemata werden abgewiesen.
-* Cleanup startet mit einer Vorschau und lässt veröffentlichte Tabellen und
-  Qualitätsnachweise auch bei tatsächlicher Bereinigung unverändert.
+* Native pointblank thresholds warn or block per segment, preserving evidence
+  that a global failure ratio could hide.
+* Missing action levels, inactive checks and evaluation errors block publication.
+* All present blocking columns (`S`, `E` and `C`) are evaluated together.
+  Eight report layouts cover this behavior.
+* A failed input gate retains landing evidence and the old release while
+  preventing a new Raw table. The final candidate gate remains active.
+* Data-frame ingestion preserves date types and reuses identical deliveries
+  through the existing cache.
+* Quality reports show the gate decision, escape HTML and omit failed-row
+  extracts and samples.
+* Contract drafts require explicit confirmation. Comparisons identify structural
+  restrictions and changes that need semantic review.
+* Diagnostic accessors distinguish the latest attempt, a pinned release and
+  cache provenance. dbt process failures remain visible even when nodes pass.
+* dbt relations are copied and validated afresh. Later relation changes do not
+  modify a previously published release.
+* Missing business dates can be detected without an import attempt. Successful
+  notifications are deduplicated; transport failures remain retryable.
+* Additive registry migration retains old evidence, is idempotent and rejects
+  unknown newer schemas.
+* Cleanup defaults to a preview and retains published tables and quality evidence
+  when eligible intermediate tables are actually removed.
 
-Geprüfte Kernkombination: DuckDB 1.5.5 in R und Python, pointblank 0.12.4,
-dbt-core 1.12.5, dbt-duckdb 1.10.1 und dm 1.1.2. dbt-Telemetrie ist deaktiviert.
-Produktives S3, PostgreSQL, dbt v2/Fusion, parallele Writer, Windows/macOS und
-Last-/Dauerbetrieb werden weiterhin nicht als nachgewiesen ausgegeben.
+Tested core combination: DuckDB 1.5.5 in R and Python, pointblank 0.12.4,
+dbt-core 1.12.5, dbt-duckdb 1.10.1 and dm 1.1.2. dbt telemetry is disabled.
+Production S3, PostgreSQL, dbt v2/Fusion, concurrent writers, Windows/macOS and
+sustained load testing remain outside the verified environments.
 
-## Historischer Prüfstand 0.3.0
+## Historical record: 0.3.0
 
+Check date: 19 September 2026. Ubuntu 24.04, R 4.3.3.
 
-Prüfdatum: 19. September 2026. Ubuntu 24.04, R 4.3.3.
-
-| Prüfung | Ergebnis |
+| Check | Result |
 |---|---|
-| Vollständige Testsuite mit DuckDB | Bestanden, keine Testfehler oder Warnungen |
-| Vollständige Testsuite mit DuckLake | Bestanden, keine Testfehler oder Warnungen |
-| Echte dbt-Integration auf beiden Backends | Build, fünf dbt-Datentests, separater Test-Aufruf und dm-Abfrage bestanden |
-| `R CMD build` einschließlich Vignetten | Erfolgreich |
-| `R CMD check --no-manual` | Status OK: 0 Errors, 0 Warnings, 0 Notes |
-| R-Beispiele und alle sechs Vignetten | Im Paketcheck ausgeführt bzw. neu gebaut |
-| `pkgdown::check_pkgdown()` | Keine Probleme, vollständiger Referenzindex |
-| `pkgdown::build_site()` | Vollständige Website mit Referenz und Artikeln gebaut |
+| Full DuckDB suite | Passed without test failures or warnings |
+| Full DuckLake suite | Passed without test failures or warnings |
+| Actual dbt integration on both backends | Build, five dbt data tests, a separate test invocation and a dm query passed |
+| `R CMD build` including vignettes | Successful |
+| `R CMD check --no-manual` | 0 errors, 0 warnings, 0 notes |
+| R examples and six vignettes | Executed or rebuilt in the package check |
+| `pkgdown::check_pkgdown()` | No issues; complete reference index |
+| `pkgdown::build_site()` | Full website, reference and articles built |
 
-38 Tests sind definiert. Der abschließende lokale Paketcheck mit aktiviertem
-dbt-Integrationstest besteht **165 Einzelprüfungen**, ohne Fehler, Warnungen oder
-übersprungene Tests. Ein zusätzlicher Check ohne externe CLI bestand 161
-Einzelprüfungen und übersprang genau den opt-in geschalteten Integrationstest.
+Version 0.3.0 defined 38 test cases. The final local check with dbt integration
+enabled passed 165 expectations without failures, warnings or skipped tests.
+An additional run without the external CLI passed 161 expectations and skipped
+exactly the opt-in integration test.
 
-Die dbt-Integration verwendet `dbt-core 1.12.5`, `dbt-duckdb 1.10.1` und
-Python-DuckDB 1.5.5. R-DuckDB ist ebenfalls 1.5.5. Telemetrie ist in allen neuen
-CLI-Aufrufen ausdrücklich deaktiviert. Die normale Paketprüfung benötigt keine
-dbt-Installation und überspringt genau diesen externen Integrationstest;
-die beiden gesonderten Backend-Läufe führten ihn tatsächlich aus.
+The integration used dbt-core 1.12.5, dbt-duckdb 1.10.1 and DuckDB 1.5.5 in both
+Python and R, with telemetry disabled. Ordinary checks do not require dbt and
+skip that external integration test; both separate backend runs executed it.
 
-Zusätzliche Regressionstests prüfen isolierte Artefaktordner, fehlende Dateien,
-abweichende Invocation-IDs, beschädigte skalare Ergebnisfelder, fehlgeschlagene
-Nodes trotz Exitcode 0, Argumentübergabe ohne Shell, Schutz vor Überschreiben,
-dm-Schlüssel sowie unveränderte Cache-/Release-Semantik bei `dl_ingest()`.
+Additional regressions covered isolated artifact directories, missing files,
+mismatched invocation IDs, malformed scalar result fields, failed nodes despite
+exit code 0, arguments passed without a shell, overwrite protection, dm keys
+and unchanged cache/release semantics through `dl_ingest()`.
 
-Nicht als geprüft gelten dbt v2/Fusion, produktives S3, PostgreSQL-Kataloge,
-parallele Writer, Windows/macOS und Last-/Dauerbetrieb. Der lokale Starter
-unterstützt das dbt-duckdb-Profilformat, keine automatische v2-Kataloggenerierung.
-Der GitHub-Actions-Status ist separat von lokalen Ergebnissen zu betrachten.
+The local starter used dbt-duckdb profiles. Automatic v2 catalog generation,
+dbt v2/Fusion, production S3/PostgreSQL, concurrent writers, Windows/macOS and
+sustained load testing were not verified.
 
-## Historischer Prüfstand 0.2.0
+## Historical record: 0.2.0
 
-Version 0.2.0 bestand jeweils 26 Tests mit 126 erfolgreichen Einzelprüfungen.
-Diese historischen Ergebnisse sind kein Nachweis für 0.3.0. Lokale Session- und
-Rohlogs werden nicht veröffentlicht; die Ergebnisse sind hier zusammengefasst.
+Version 0.2.0 passed 26 test cases with 126 expectations on each backend.
+These historical results do not establish the behavior of later versions.
+Local session files and raw logs are not part of the public source tree.
 
-## Historischer Prüfstand 0.1.0
+## Historical record: 0.1.0
 
+Check date: 18 September 2026. Ubuntu 24.04, R 4.3.3.
 
-Prüfdatum: 18. September 2026. Umgebung: Ubuntu 24.04, R 4.3.3.
-
-## Ergebnisse
-
-| Prüfung | Ergebnis |
+| Check | Result |
 |---|---|
-| Gesamte Suite mit lokalem DuckDB-Backend und zusätzlichem DuckLake-Test | 21 Tests, 97 erfolgreiche Einzelprüfungen |
-| Gesamte Suite mit echtem DuckLake als Standardbackend | 21 Tests, 97 erfolgreiche Einzelprüfungen |
-| Fehlgeschlagene, übersprungene oder warnende Tests | jeweils 0 |
-| `R CMD build` | erfolgreich |
-| `R CMD check --no-manual --no-build-vignettes`, DuckLake-Test aktiviert | Status OK: 0 Errors, 0 Warnings, 0 Notes |
-| Mitgeliefertes End-to-End-Beispiel auf DuckLake | erfolgreich |
-| Shiny-Reaktivität, Suche, Definitionen, Qualitätsausgabe und Graph | automatisch geprüft |
-| Shiny im Chromium-Browser: Übersicht und Herkunftsgraph | gerendert, 0 Shiny-Ausgabefehler; Screenshots geprüft |
-| S3-Landing gegen lokalen HTTP-Testserver mit paws.storage | Originalbytes exakt erhalten; Wiederholung über bedingtes PUT ohne Überschreiben |
+| Full suite on local DuckDB plus an additional DuckLake test | 21 tests, 97 passing expectations |
+| Full suite with DuckLake as the default backend | 21 tests, 97 passing expectations |
+| Failed, skipped or warning tests | 0 in each category |
+| `R CMD build` | Successful |
+| `R CMD check --no-manual --no-build-vignettes` with DuckLake enabled | 0 errors, 0 warnings, 0 notes |
+| Included end-to-end example on DuckLake | Successful |
+| Shiny reactivity, search, definitions, quality and graph output | Automatically checked |
+| Shiny overview and lineage graph in Chromium | Rendered with no Shiny output errors; screenshots inspected |
+| S3 landing against a local HTTP test server using paws.storage | Original bytes preserved; conditional PUT retries did not overwrite them |
 
-Die damaligen Rohlogs und Screenshots gehören nicht zum öffentlichen Quellbaum;
-die verwendeten Testdaten waren synthetisch.
+All test data were synthetic. Raw logs and screenshots were kept outside the
+public source tree.
 
-## Abgedeckte Fehlerfälle
+### Failure cases covered
 
-* Gute, fehlerhafte, fehlende und korrigierte Lieferungen.
-* Keine Änderung des freigegebenen Datenstands durch ein fehlgeschlagenes Gate.
-* Wiederanlauf ohne doppelte Veröffentlichung und ohne Reaktivierung alter Releases.
-* Zugriff auf historische Releases nach Korrektur und nach Neuverbindung.
-* Fehlende Spalten, Dubletten, fehlerhafte/ausgelassene Regeln und leere Kandidaten.
-* Toleranzgrenzen und explizite Warnungsregeln.
-* Definitionen mit geändertem Inhalt bei gleicher Version.
-* Benachrichtigungs-Deduplizierung, erneutes Auftreten nach Behebung und Transportfehler.
-* Datenalter ohne neuen Job sowie stabile Pfade nach Arbeitsverzeichniswechsel.
-* Partitionskorrekturen mit unveränderten übrigen Perioden.
-* Simulierter Fehler vor Transaktions-Commit: Release und Erfolgsstatus werden zurückgerollt.
-* Produkte mit festgehaltenen Eingabeversionen.
-* Nicht freigegebene Metrics, unerlaubte Dimensionen und mehrere Stichtage bei Stock-Metrics.
-* Nachträglich veränderte Kennzahlenwerte bei der Report-Freigabe.
-* pointblank-Prüfungen inklusive inaktiver Schritte.
-* dm-Primär- und Fremdschlüssel inklusive verwaister Referenzen.
-* Expliziter YAML-Export und unzulässige Bezeichner.
+* Valid, invalid, missing and corrected deliveries.
+* Failed gates leaving published data unchanged.
+* Retries without duplicate publication or reactivation of old releases.
+* Historical reads after corrections and reconnection.
+* Missing columns, duplicates, failed/skipped rules and empty candidates.
+* Tolerance boundaries and explicitly non-blocking warnings.
+* Changed definitions reusing the same version.
+* Notification deduplication, recurrence after recovery and transport failure.
+* Data age without a new job and stable paths after a working-directory change.
+* Partition corrections retaining other periods.
+* Failure before transaction commit rolling back release and success markers.
+* Products with pinned input versions.
+* Unapproved metrics, forbidden dimensions and multiple dates for stock metrics.
+* Metric values changed before report publication.
+* pointblank checks including inactive steps.
+* dm primary/foreign keys including orphaned references.
+* Explicit YAML export and invalid identifiers.
 
-## Verwendete Hauptversionen
+### Main dependency versions
 
-| Paket | Version |
+| Package | Version |
 |---|---|
 | duckdb | 1.5.5 |
 | DBI | 1.2.2 |
@@ -146,20 +140,19 @@ die verwendeten Testdaten waren synthetisch.
 | bslib | 0.12.0 |
 | paws.storage | 0.10.0 |
 
-Dies ist eine geprüfte Kombination, keine Aussage, dass jede ältere oder
-künftige Paketversion kompatibel ist. Abhängigkeiten im Einsatzprojekt sperren.
+This records a tested combination rather than compatibility with every past or
+future dependency version. Lock dependencies in each operating project.
 
-## Noch nicht praktisch geprüft
+## Operational verification still required
 
-* Ein produktiver S3-Endpunkt einschließlich Authentifizierung und dessen vollständiger
-  Unterstützung von Conditional PutObject. Der HTTP-Testserver ist kein Ersatz dafür.
-* Ein echter PostgreSQL-Katalog, dessen Backups oder ein Katalogumzug.
-* Betrieb auf Workbench, Connect und GitHub. Die Vorlagen wurden nicht dort deployed.
-* Rendering mit Quarto auf Connect und produktive Benachrichtigungszustellung.
-* Ein geladenes commons-/data-dict-Projekt. Der Export orientiert sich an der
-  dokumentierten Syntax und bleibt eine begrenzte Schnittstelle.
-* Große Produktionsdaten, parallele Writer, Last-/Dauerbetrieb sowie Windows/macOS.
+* A production S3 endpoint with authentication and conditional PutObject support.
+  The local HTTP test server does not establish those endpoint guarantees.
+* A PostgreSQL catalog, its backup/restore process and catalog migration.
+* Deployment of the operating templates to Workbench, Connect or a scheduled
+  GitHub workflow. Package CI and documentation deployment are separate.
+* Quarto rendering on Connect and production notification transport.
+* A running commons/data-dict project. YAML export is a limited interface.
+* Large production datasets, concurrent writers, sustained load and Windows/macOS.
 
-Die Tests begründen einen funktionierenden ersten Stand. Sie ersetzen keine
-betriebliche Abnahme. Das Paket meldet `multi_writer = FALSE` und bereinigt
-historische Daten nicht automatisch.
+The tests establish the recorded behavior in their environments. The package
+reports `multi_writer = FALSE` and does not automatically remove historical data.
