@@ -56,8 +56,15 @@ test_that("real dbt builds and tests the starter project", {
     config,
     executable = executable
   )
-  result <- dl_dbt_build(project, echo = FALSE)
-  expect_equal(result$success, TRUE)
+  result <- dl_dbt_build(project, echo = FALSE, stop_on_failure = FALSE)
+  expect_equal(
+    result$success,
+    TRUE,
+    info = paste(result$stdout, result$stderr, result$artifact_error)
+  )
+  if (!result$success) {
+    return(invisible(NULL))
+  }
   expect_equal(sum(result$results$status == "pass"), 5L)
   expect_equal(dl_dbt_test(project, echo = FALSE)$success, TRUE)
   lake <- dl_connect(config)
