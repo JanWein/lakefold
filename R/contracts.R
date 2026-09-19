@@ -1,12 +1,14 @@
 #' Define a data contract
-#' @param id Unique asset identifier.
+#' @param id Optional contract identifier. An unnamed contract is scoped to
+#'   the product when added with [dl_add_contract()].
 #' @param version Immutable definition version.
 #' @param owner Optional business owner.
 #' @param description Optional business description.
 #' @param grain Optional meaning of one row.
 #' @param columns Named character vector of R types: character, integer,
 #'   numeric,
-#'   logical, Date, POSIXct.
+#'   logical, Date, POSIXct. A named list of zero-length prototypes such as
+#'   `list(id = integer(), amount = double())` is also accepted.
 #' @param required Non-null columns.
 #' @param key Unique key columns.
 #' @param rules List of quality rules.
@@ -28,7 +30,7 @@
 #' )
 #' contract
 dl_contract <- function(
-  id,
+  id = "contract",
   version = "1.0.0",
   owner = "",
   description = "",
@@ -44,6 +46,18 @@ dl_contract <- function(
   operator = NULL,
   column_metadata = list()
 ) {
+  anonymous <- missing(id)
+  if (is.list(columns)) {
+    if (any(lengths(columns) != 0L)) {
+      abort(
+        "Prototype columns must be zero-length R vectors, for example integer()."
+      )
+    }
+    columns <- infer_column_types(tibble::as_tibble(
+      columns,
+      .name_repair = "minimal"
+    ))
+  }
   asset_id(id)
   scalar(version, "version")
   for (field in c("owner", "description", "grain", "producer")) {
@@ -124,13 +138,18 @@ dl_contract <- function(
   if (length(column_metadata)) {
     contract$column_metadata <- column_metadata
   }
+  if (anonymous) {
+    attr(contract, "dl_anonymous") <- TRUE
+  }
   contract
 }
 
 #' Define a quality rule
 #' @param name Rule name.
-#' @param check Function taking a lazy table and returning a scalar logical or
-#'   dl_quality_counts(). No implicit collection of full data is performed.
+#' @param check Function taking a table and returning a scalar logical or
+#'   dl_quality_counts(), or a one-sided row predicate such as `~ amount >= 0`.
+#'   Missing formula results count as failures. Lazy formulas run in the
+#'   database; arbitrary functions remain responsible for their own collection.
 #' @param severity error blocks publication; warning permits publication.
 #' @param max_failure Fraction of permitted failed test units.
 #' @param description Rule description.
@@ -158,8 +177,11 @@ dl_rule <- function(
   description = ""
 ) {
   scalar(name, "name")
-  if (!is.function(check)) {
-    abort("check must be a function.")
+  if (!is.function(check) && !inherits(check, "formula")) {
+    abort("check must be a function or a one-sided formula.")
+  }
+  if (inherits(check, "formula") && length(check) != 2L) {
+    abort("Use a one-sided quality formula, for example ~ amount >= 0.")
   }
   if (
     length(max_failure) != 1 ||
@@ -376,8 +398,13 @@ pointblank_results <- function(rule, data, keep_agent = FALSE) {
   results
 }
 
-#' Validate a candidate against a contract
-#' @param data A data frame or lazy table.
+#' Validate data or check a workflow definition
+#'
+#' With a table and contract, returns quality evidence. With a composed product
+#' or pipeline alone, checks its configuration and returns the definition.
+#' Preflight does not evaluate source callbacks or prove data quality.
+#' @param data A data frame, lazy table, composed product or pipeline.
+#' @param ... Arguments forwarded to a validation method.
 #' @param contract Contract definition.
 #' @param stage Label stored with each check, such as `"ingest"` or
 #'   `"candidate"`.
@@ -386,8 +413,8 @@ pointblank_results <- function(rule, data, keep_agent = FALSE) {
 #' @param keep_errors Retain original R conditions in an in-memory `dl_errors`
 #'   attribute. They can contain private data and are never persisted in the
 #'   registry. Inspect with [dl_quality_errors()]. Defaults to `FALSE`.
-#' @return A tibble with one row per check. Only passed and warning permit
-#'   publication.
+#' @return For data, a tibble with one row per check; only passed and warning
+#'   permit publication. For a workflow, the validated definition.
 #' @export
 #' @examples
 #' contract <- dl_contract(
@@ -395,13 +422,19 @@ pointblank_results <- function(rule, data, keep_agent = FALSE) {
 #'   c(order_id = "integer", amount = "numeric"), key = "order_id"
 #' )
 #' dl_validate(data.frame(order_id = 1:2, amount = c(25, 75)), contract)
-dl_validate <- function(
+dl_validate <- function(data, contract = NULL, ...) UseMethod("dl_validate")
+
+#' @rdname dl_validate
+#' @export
+dl_validate.default <- function(
   data,
   contract,
   stage = "candidate",
   keep_agents = FALSE,
-  keep_errors = FALSE
+  keep_errors = FALSE,
+  ...
 ) {
+  rlang::check_dots_empty()
   if (!inherits(contract, "dl_contract")) {
     abort("contract must be a dl_contract.")
   }
@@ -525,58 +558,13 @@ dl_validate <- function(
       )
     }))
   }
-  for (rule in contract$rules) {
-    add(tryCatch(
-      {
-        if (rule$engine == "pointblank") {
-          rows <- pointblank_results(rule, data, keep_agents)
-          if (keep_agents) {
-            agents[[rule$name]] <- attr(rows, "pointblank_agent")
-          }
-          attr(rows, "pointblank_agent") <- NULL
-          rows
-        } else {
-          value <- rule$check(data)
-          if (inherits(value, "dl_quality_counts")) {
-            from_counts(
-              rule$name,
-              value$n_failed,
-              value$n_total,
-              rule$severity,
-              rule$max_failure
-            )
-          } else if (
-            is.logical(value) && length(value) == 1L && !is.na(value)
-          ) {
-            from_counts(
-              rule$name,
-              as.numeric(!value),
-              1,
-              rule$severity,
-              rule$max_failure
-            )
-          } else {
-            quality_row(
-              rule$name,
-              "error",
-              rule$severity,
-              message = "Rule must return a non-missing scalar logical or dl_quality_counts()."
-            )
-          }
-        }
-      },
-      error = function(e) {
-        if (keep_errors) {
-          errors[[rule$name]] <<- e
-        }
-        quality_row(
-          rule$name,
-          "error",
-          rule$severity,
-          message = "Rule execution failed; no data or raw exception text recorded."
-        )
-      }
-    ))
+  rules <- evaluate_rules(contract$rules, data, keep_agents, keep_errors)
+  add(rules)
+  if (keep_agents) {
+    agents <- attr(rules, "pointblank_agents") %||% list()
+  }
+  if (keep_errors) {
+    errors <- c(errors, attr(rules, "dl_errors"))
   }
   out <- dplyr::bind_rows(result)
   out$stage <- stage
@@ -616,4 +604,18 @@ quality_ok <- function(results) {
 #' lapply(dl_quality_errors(quality), conditionMessage)
 dl_quality_errors <- function(quality) {
   attr(quality, "dl_errors") %||% list()
+}
+
+#' @export
+dl_validate.dl_pipeline <- function(data, contract = NULL, ...) {
+  rlang::check_dots_empty()
+  if (!is.null(contract)) {
+    abort("A pipeline already contains its contract.")
+  }
+  check_pipeline(data)
+  need("duckdb")
+  dl_check_component(data$steps$land)
+  assert_contract_ready(data$steps$validate)
+  attr(data, "dl_validated") <- TRUE
+  data
 }

@@ -1,15 +1,31 @@
 #' Define a data product
-#' @param id,version Product identity and version.
+#'
+#' Start with `dl_product("orders")` and compose it with [dl_add_source()] and
+#' optional `dl_add_*()` verbs. Nothing executes until [dl_run()] or
+#' [dl_publish()]. A composed product uses ordinary R tables, requires no lake
+#' connection, and needs no manual version for everyday execution.
+#'
+#' The existing `inputs` plus `build` form remains supported for derived
+#' products built from pinned lake releases. It retains its lazy-table and
+#' explicit-version semantics; see [dl_build()].
+#' @param id Product identity.
+#' @param version Optional immutable definition version. Composed products
+#'   derive a technical version when omitted; explicit versions require a bump
+#'   after a definition change. Derived products default to `1.0.0`.
 #' @param inputs Named character vector of input asset ids.
 #' @param build Function of a named list of lazy input tables; returns a lazy
 #'   table or a data frame. Inputs are pinned to releases before build runs.
 #' @param contract Product contract.
 #' @param owner,description Metadata.
-#' @param code_version Version of all build code and dependencies.
+#' @param code_version Version of code, captured values and dependencies.
+#'   Optional for composed products, which do not cache by default. Required
+#'   for derived products and to enable caching in a composed lake workflow.
 #' @param layer Output schema.
-#' @return A product specification.
+#' @return A `dl_product_spec` for composition, or a legacy `dl_product` when
+#'   `inputs` and `build` are supplied. Both work with [dl_run()].
 #' @export
 #' @examples
+#' dl_product("orders") |> dl_add_source(data.frame(id = 1:2))
 #' contract <- dl_contract(
 #'   "orders", "1.0.0", "Analytics", "Order amounts", "One order",
 #'   c(order_id = "integer", amount = "numeric"), key = "order_id"
@@ -20,15 +36,26 @@
 #' product
 dl_product <- function(
   id,
-  inputs,
-  build,
-  contract,
+  inputs = NULL,
+  build = NULL,
+  contract = NULL,
   version = "1.0.0",
   owner = contract$owner,
   description = contract$description,
-  code_version,
+  code_version = NULL,
   layer = "products"
 ) {
+  if (is.null(inputs) && is.null(build)) {
+    return(new_product(
+      id,
+      contract,
+      version,
+      code_version,
+      automatic_version = missing(version),
+      owner = owner %||% "",
+      description = description %||% ""
+    ))
+  }
   asset_id(id)
   scalar(version, "version")
   scalar(code_version, "code_version")
@@ -75,7 +102,7 @@ dl_product <- function(
 #' @param stop_on_failure Fail the job after metadata has been saved.
 #' @return Run result.
 #' @export
-#' @examples
+#' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("lakefold-example-")
 #' config <- dl_config(
 #'   dl_catalog_duckdb(file.path(root, "lake.db")),
@@ -246,7 +273,7 @@ dl_build <- function(
 #' @param check Validate all declared keys and relationships.
 #' @return A dm object containing lazy tables. No automatic flattening is done.
 #' @export
-#' @examples
+#' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("lakefold-example-")
 #' config <- dl_config(
 #'   dl_catalog_duckdb(file.path(root, "lake.db")),

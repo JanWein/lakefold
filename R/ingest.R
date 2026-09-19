@@ -24,7 +24,7 @@
 #'   Connections opened from a config are closed before returning.
 #' @seealso [dl_pipeline()], [dl_tbl()], [dl_execute()]
 #' @export
-#' @examples
+#' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("lakefold-example-")
 #' config <- dl_config(
 #'   dl_catalog_duckdb(file.path(root, "lake.db")),

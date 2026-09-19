@@ -19,7 +19,7 @@
 #' @returns A [dl_dbt_project()] specification pointing to the written project
 #'   and profile. Files contain synthetic data and local paths, no credentials.
 #' @seealso [dl_dbt_build()], [dl_ingest()]
-#' @examples
+#' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("lakefold-example-")
 #' config <- dl_config(
 #'   catalog = dl_catalog_duckdb(file.path(root, "lake.duckdb")),

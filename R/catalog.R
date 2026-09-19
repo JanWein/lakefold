@@ -3,7 +3,7 @@
 #' @param at Evaluation time.
 #' @return Tibble of published assets with latest attempt and freshness.
 #' @export
-#' @examples
+#' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("lakefold-example-")
 #' config <- dl_config(
 #'   dl_catalog_duckdb(file.path(root, "lake.db")),
@@ -146,7 +146,7 @@ catalog_summary <- function(snapshot, at = Sys.time()) {
 #' @return The normalized path, invisibly. No row data or credentials are
 #'   exported.
 #' @export
-#' @examples
+#' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("lakefold-example-")
 #' config <- dl_config(
 #'   dl_catalog_duckdb(file.path(root, "lake.db")),
@@ -198,7 +198,7 @@ dl_catalog_export <- function(lake, path) {
 #' @param refresh_seconds Metadata refresh interval.
 #' @return A Shiny app object (when launch = FALSE).
 #' @export
-#' @examples
+#' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("lakefold-example-")
 #' config <- dl_config(
 #'   dl_catalog_duckdb(file.path(root, "lake.db")),

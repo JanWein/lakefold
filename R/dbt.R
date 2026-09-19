@@ -134,13 +134,6 @@ dl_execute.dl_dbt_project <- function(object, lake = NULL, ...) {
   dl_dbt_build(object, ...)
 }
 
-flag <- function(value, name) {
-  if (!is.logical(value) || length(value) != 1L || is.na(value)) {
-    abort(paste(name, "must be TRUE or FALSE."), "dl_dbt_invalid")
-  }
-  value
-}
-
 dbt_selection <- function(value, name) {
   if (is.null(value)) {
     return(character())

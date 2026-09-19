@@ -76,7 +76,7 @@ writer_state <- function(owner) {
 #' @returns A tibble identifying each selected run or staging slot, its writer
 #'   state and planned or completed action.
 #' @export
-#' @examples
+#' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("lakefold-")
 #' lake <- dl_open(root)
 #' dl_recover(lake)

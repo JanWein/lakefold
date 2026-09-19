@@ -2,7 +2,8 @@
 #'
 #' Keep incoming files, check proposed tables and publish data that reports can
 #' read consistently. Corrections create new releases while earlier versions
-#' remain available. Start locally with [dl_open()], [dl_write()] and [dl_read()].
+#' remain available. Start with [dl_product()], [dl_add_source()] and [dl_run()].
+#' Native products need no database. Add [dl_publish()] for durable lake storage.
 #' Add business checks, reusable tables and recorded metrics when needed.
 #'
 #' @section Why use lakefold?:
@@ -21,6 +22,8 @@
 #' them. See `vignette("design-review")` for composition and extension boundaries.
 #'
 #' @section Start here:
+#' * `vignette("composing-products")`: simple workflows and the mental model.
+#' * `vignette("extending-lakefold")`: implement S3 component adapters.
 #' * `vignette("why-lakefold")`: purpose, benefits and concepts in plain language.
 #' * `vignette("getting-started")`: deliveries, corrections, checks and reports, step by step.
 #' * `vignette("dbt-workflows")`: dbt setup, builds, diagnostics and dm models.
@@ -29,8 +32,9 @@
 #' * `vignette("quality-gates")`: pointblank, input gates and quality reports.
 #' * `vignette("products-metrics")`: products, metrics and report manifests.
 #'
-#' @section Two execution paths:
-#' [dl_ingest()] and [dl_execute()] publish immutable lakefold releases after
+#' @section Execution paths:
+#' [dl_run()] executes composed products in memory or through their target.
+#' [dl_ingest()] and lake targets publish immutable lakefold releases after
 #' contract validation. [dl_dbt_build()] runs dbt models and tests, which have
 #' dbt's own materialization semantics. A successful dbt build does not create
 #' a lakefold release automatically. [dl_model()] opens governed releases;
@@ -40,7 +44,8 @@
 #' provide common inspection functions across both execution paths.
 #'
 #' @section Resource ownership:
-#' Specifications do not contain live database connections. Close connections
+#' Core configuration is connection-free. DBI source and lake target adapters
+#' may retain caller-owned connections; factories defer opening. Close connections
 #' with [dl_close()] or [dl_disconnect()]. Close local catalog connections before invoking dbt
 #' in another process. Lazy tables require their originating connection to
 #' remain open. The lakefold registry requires a single writer.

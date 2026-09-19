@@ -5,7 +5,7 @@
 #'   `asset` and `message`. A dbt process failure remains visible even when
 #'   individual nodes passed. No raw stdout or stderr is included.
 #' @export
-#' @examples
+#' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("lakefold-")
 #' lake <- dl_connect(dl_config(dl_catalog_duckdb(file.path(root, "lake.db")),
 #'   dl_storage_local(file.path(root, "data")),
@@ -32,9 +32,9 @@ dl_status <- function(x, asset = NULL) {
       engine = "lakefold",
       id = x$run_id,
       status = x$status,
-      success = x$status %in% c("published", "cached"),
+      success = x$status %in% c("completed", "published", "cached"),
       release_id = x$release_id,
-      asset = NA_character_,
+      asset = x$asset %||% NA_character_,
       message = ""
     ))
   }
@@ -197,7 +197,7 @@ dl_quality <- function(x, run_id = NULL, asset = NULL, release = NULL) {
 #' @param asset Optional asset ID.
 #' @returns A tibble sorted newest first. Historical releases are retained.
 #' @export
-#' @examples
+#' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("lakefold-")
 #' lake <- dl_connect(dl_config(dl_catalog_duckdb(file.path(root, "lake.db")),
 #'   dl_storage_local(file.path(root, "data")),

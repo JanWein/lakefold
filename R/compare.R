@@ -19,7 +19,7 @@
 #'   numeric totals, and row previews. Changed previews contain separate
 #'   `before` and `after` tables in the same key order.
 #' @export
-#' @examples
+#' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("lakefold-")
 #' lake <- dl_open(root)
 #' dl_write(lake, data.frame(id = c(1L, 2L), amount = c(10, 20)), "orders")

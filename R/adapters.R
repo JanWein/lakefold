@@ -104,7 +104,7 @@ dl_commons_yaml <- function(metric, table, sql_expr, path) {
 #' @param lake Connected lake.
 #' @return A named list of explicit implementation capabilities.
 #' @export
-#' @examples
+#' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("lakefold-example-")
 #' config <- dl_config(
 #'   dl_catalog_duckdb(file.path(root, "lake.db")),

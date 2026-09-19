@@ -55,7 +55,7 @@ dl_step_transform <- function(pipeline, transform, id) {
 #'   metadata.
 #' Incomplete specifications can be inspected. This is a declared plan, not a
 #' dry-run of SQL, file availability, permissions or data quality.
-#' @param pipeline A pipeline specification.
+#' @param pipeline A pipeline or composed product specification.
 #' @return A tibble with position, step, id and target columns. The `complete`
 #'   attribute indicates whether the mandatory steps and configured layers
 #'   validate.
@@ -64,6 +64,9 @@ dl_step_transform <- function(pipeline, transform, id) {
 #' dl_pipeline("orders.import", dl_config(backend = "duckdb"),
 #'   code_version = "v1") |> dl_plan()
 dl_plan <- function(pipeline) {
+  if (inherits(pipeline, "dl_product_spec")) {
+    return(product_plan(pipeline))
+  }
   if (!inherits(pipeline, "dl_pipeline")) {
     abort("Use dl_pipeline() first.")
   }
@@ -121,7 +124,8 @@ dl_plan <- function(pipeline) {
 #' dl_measure(). Their original functions remain supported. Products and metrics
 #' require an explicit lake or dl_config. A connection opened here is closed on
 #' exit; an existing connection remains owned by its caller.
-#' @param object Pipeline, product, metric or dbt project specification.
+#' @param object Pipeline, composed or derived product, metric or dbt project
+#'   specification. Composed products use [dl_run()] as the shorter equivalent.
 #' @param lake Connected lake or dl_config. NULL uses a pipeline's stored
 #'   config.
 #' @param ... Arguments forwarded to the underlying execution function.
@@ -129,7 +133,7 @@ dl_plan <- function(pipeline) {
 #'   with a dl_manifest attribute. Return types intentionally reflect the
 #'   operation.
 #' @export
-#' @examples
+#' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("lakefold-example-")
 #' config <- dl_config(
 #'   dl_catalog_duckdb(file.path(root, "lake.db")),
