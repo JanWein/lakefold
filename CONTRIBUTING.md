@@ -20,6 +20,14 @@ Add meaningful regression coverage for publication, idempotency and quality-gate
 changes. Keep database identifiers quoted and credentials out of registry records.
 Update `NEWS.md` and the relevant guide when behavior changes.
 
+Write package documentation, examples, user-facing messages, issue templates
+and repository materials in English. Keep the README as the canonical overview.
+When guide content is shared between `docs/` and `vignettes/`, update both.
+
+Design for a short path through common tasks and explicit composition for more
+complex workflows. Keep sources, contracts, steps, products, metrics and releases
+consistent in their inputs, outputs and lifecycle.
+
 Core principles: explicit release identity, failed checks block publication,
 normal R functions and tidyverse-compatible data objects, optional integrations,
 and accurate statements about tested behavior.
