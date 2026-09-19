@@ -1,6 +1,6 @@
 # lakefold
 
-The canonical English overview is now [README.md](README.md).
+The canonical English overview is now [README.md](https://github.com/JanWein/lakefold/blob/main/README.md).
 
 - [Documentation](https://janwein.github.io/lakefold/)
 - [Getting started](https://janwein.github.io/lakefold/articles/getting-started.html)
