@@ -69,7 +69,7 @@ dl_dbt_lineage(result)
 ```
 
 `dl_dbt_init(path, config)` erstellt alternativ ein lokales Starterprojekt mit
-synthetischen Daten und Tests. Der [dbt-Leitfaden](vignettes/dbt-workflows.Rmd)
+synthetischen Daten und Tests. Der [dbt-Leitfaden](https://github.com/JanWein/lakefold/blob/main/vignettes/dbt-workflows.Rmd)
 zeigt Installation, DuckLake-Anbindung, Fehlerdiagnose und das anschließende
 `dm`-Modell. R-Verbindungen zum lokalen Katalog vor dbt schließen und danach neu
 öffnen. Jeder Lauf hat eigene Artefakte, Exitcode und strukturierte Ergebnisse.
@@ -104,9 +104,9 @@ in der [Designbewertung](https://github.com/JanWein/lakefold/blob/main/docs/DESI
 
 | Anliegen | Einstieg |
 |---|---|
-| In 10 Minuten loslegen | [Ausführbarer Einstieg](vignettes/getting-started.Rmd) |
-| dbt, DuckLake und dm verbinden | [dbt-Workflow](vignettes/dbt-workflows.Rmd) |
-| Pipeline erweitern | [Workflow-Konzept](vignettes/workflow-design.Rmd) |
+| In 10 Minuten loslegen | [Ausführbarer Einstieg](https://github.com/JanWein/lakefold/blob/main/vignettes/getting-started.Rmd) |
+| dbt, DuckLake und dm verbinden | [dbt-Workflow](https://github.com/JanWein/lakefold/blob/main/vignettes/dbt-workflows.Rmd) |
+| Pipeline erweitern | [Workflow-Konzept](https://github.com/JanWein/lakefold/blob/main/vignettes/workflow-design.Rmd) |
 | Qualitätsfehler und historische Daten | [Qualität und Historie](https://github.com/JanWein/lakefold/blob/main/docs/QUALITY_AND_HISTORY.md) |
 | Kennzahlen reproduzieren | [Produkte und Kennzahlen](https://github.com/JanWein/lakefold/blob/main/docs/PRODUCTS_AND_METRICS.md) |
 | Betrieb und Grenzen | [Betriebsleitfaden](https://github.com/JanWein/lakefold/blob/main/docs/OPERATIONS.md) |

@@ -23,8 +23,8 @@ Close local R catalog connections before running dbt in a separate process.
 Development release: a single registry writer is required. A dbt build is not
 an atomic governed release. Automatic schema migrations, remote profile
 provisioning, mixed R/dbt DAG scheduling and coordinated multi-writer execution
-are not implemented. See the [design review](docs/DESIGN_REVIEW.md),
-[validation record](docs/VALIDATION.md) and [migration guide](docs/MIGRATION.md).
+are not implemented. See the [design review](https://github.com/JanWein/lakefold/blob/main/docs/DESIGN_REVIEW.md),
+[validation record](https://github.com/JanWein/lakefold/blob/main/docs/VALIDATION.md) and [migration guide](https://github.com/JanWein/lakefold/blob/main/docs/MIGRATION.md).
 
 Full function help ships in the installed package; the pkgdown site is built by
-CI. MIT licensed. [German overview](README.md).
+CI. MIT licensed. [German overview](https://github.com/JanWein/lakefold/blob/main/README.md).
