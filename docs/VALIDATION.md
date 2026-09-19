@@ -6,8 +6,8 @@ All inputs were synthetic. Results below refer to the 0.6.0 implementation.
 | Check | Result |
 |---|---|
 | Full `R CMD check --no-manual` | 0 errors, 0 warnings, 0 notes |
-| DuckDB package-check expectations | 445 passed; 0 failures, warnings or skips |
-| Separate complete DuckLake suite | 95 test cases; 445 expectations passed; 0 failures, warnings or skips |
+| DuckDB package-check expectations | 450 passed; 0 failures, warnings or skips |
+| Separate complete DuckLake suite | 95 test cases; 450 expectations passed; 0 failures, warnings or skips |
 | External integrations | Actual dbt execution, pointblank gates and dm checks exercised |
 | Documentation | Nine executable vignettes built and rebuilt; package examples checked |
 | Public reference | 70 exported functions and 59 help topics |
