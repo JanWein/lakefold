@@ -1,9 +1,9 @@
 #' Define a data contract
 #' @param id Unique asset identifier.
 #' @param version Immutable definition version.
-#' @param owner Business owner.
-#' @param description Business description.
-#' @param grain Meaning of one row.
+#' @param owner Optional business owner.
+#' @param description Optional business description.
+#' @param grain Optional meaning of one row.
 #' @param columns Named character vector of R types: character, integer,
 #'   numeric,
 #'   logical, Date, POSIXct.
@@ -11,7 +11,8 @@
 #' @param key Unique key columns.
 #' @param rules List of quality rules.
 #' @param producer Contact for failed deliveries.
-#' @param max_age_hours Maximum release age.
+#' @param max_age_hours Maximum release age, or `NULL` to leave freshness
+#'   unmonitored.
 #' @param allow_empty Whether an empty candidate may be published.
 #' @param allow_extra Whether additional columns are permitted.
 #' @param operator Optional technical operator, distinct from business owner
@@ -28,10 +29,10 @@
 #' contract
 dl_contract <- function(
   id,
-  version,
-  owner,
-  description,
-  grain,
+  version = "1.0.0",
+  owner = "",
+  description = "",
+  grain = "",
   columns,
   required = names(columns),
   key = character(),
@@ -45,8 +46,12 @@ dl_contract <- function(
 ) {
   asset_id(id)
   scalar(version, "version")
-  scalar(owner, "owner")
-  scalar(grain, "grain")
+  for (field in c("owner", "description", "grain", "producer")) {
+    value <- get(field)
+    if (!is.character(value) || length(value) != 1L || is.na(value)) {
+      abort(paste(field, "must be a string; use an empty string to omit it."))
+    }
+  }
   flag(allow_empty, "allow_empty")
   flag(allow_extra, "allow_extra")
   if (!is.null(operator)) {
@@ -70,12 +75,14 @@ dl_contract <- function(
     abort("required and key must refer to declared columns.")
   }
   if (
-    !is.numeric(max_age_hours) ||
-      length(max_age_hours) != 1 ||
-      is.na(max_age_hours) ||
-      max_age_hours <= 0
+    !is.null(max_age_hours) &&
+      (!is.numeric(max_age_hours) ||
+        length(max_age_hours) != 1 ||
+        is.na(max_age_hours) ||
+        !is.finite(max_age_hours) ||
+        max_age_hours <= 0)
   ) {
-    abort("max_age_hours must be positive.")
+    abort("max_age_hours must be positive and finite, or NULL.")
   }
   if (!all(vapply(rules, inherits, logical(1), "dl_rule"))) {
     abort("Use dl_rule() or dl_pointblank() for rules.")

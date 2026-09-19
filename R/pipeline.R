@@ -271,16 +271,33 @@ persist_quality <- function(lake, run, contract, quality) {
     )
   }
 }
-find_cached <- function(lake, asset, input_hash, definition_hash) {
-  query(
+find_cached <- function(
+  lake,
+  asset,
+  input_hash,
+  definition_hash,
+  current = FALSE
+) {
+  cached <- query(
     lake,
     paste(
       "SELECT release_id FROM",
       meta(lake, "releases"),
-      "WHERE asset = ? AND input_hash = ? AND definition_hash = ? ORDER BY published_at DESC LIMIT 1"
+      "WHERE asset = ? AND input_hash = ? AND definition_hash = ? ORDER BY published_at DESC, release_id DESC LIMIT 1"
     ),
     list(asset, input_hash, definition_hash)
   )
+  if (
+    current &&
+      nrow(cached) &&
+      !identical(
+        cached$release_id[[1]],
+        resolve_release(lake, asset)$release_id[[1]]
+      )
+  ) {
+    cached <- cached[0, , drop = FALSE]
+  }
+  cached
 }
 
 compose_candidate <- function(lake, raw, publish, run) {
@@ -397,6 +414,10 @@ publish_candidate <- function(
 #'   transport.
 #' @param stop_on_failure Stop after persisting failure metadata (recommended
 #'   for jobs).
+#' @param cache `TRUE` reuses any matching historical release, preserving
+#'   idempotent job retries. `"current"` only reuses the current release;
+#'   [dl_write()] uses this policy so writing older data makes it current again.
+#'   Set `FALSE` to re-evaluate callbacks with external or changing state.
 #' @return A run result with run_id, status, release_id and quality results.
 #' @export
 #' @examples
@@ -428,8 +449,14 @@ dl_run <- function(
   lake = NULL,
   business_date = NA_character_,
   notify = NULL,
-  stop_on_failure = TRUE
+  stop_on_failure = TRUE,
+  cache = TRUE
 ) {
+  if (is.character(cache)) {
+    cache <- match.arg(cache, "current")
+  } else {
+    flag(cache, "cache")
+  }
   check_pipeline(pipeline)
   own <- is.null(lake)
   if (own) {
@@ -485,7 +512,17 @@ dl_run <- function(
           business_date = as.character(business_date)
         )
       )
-      cached <- find_cached(lake, pub$asset, ih, dh)
+      cached <- if (!identical(cache, FALSE)) {
+        find_cached(
+          lake,
+          pub$asset,
+          ih,
+          dh,
+          current = identical(cache, "current")
+        )
+      } else {
+        data.frame()
+      }
       if (nrow(cached)) {
         finish_run(lake, run, "cached", release = cached$release_id[[1]])
         run_result(run, "cached", cached$release_id[[1]])

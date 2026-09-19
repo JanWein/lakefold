@@ -136,7 +136,7 @@ dl_config <- function(
   if (
     backend == "duckdb" && (catalog$type != "duckdb" || storage$type != "local")
   ) {
-    abort("The DuckDB test backend only supports local storage and catalog.")
+    abort("The DuckDB backend only supports local storage and catalog.")
   }
   structure(
     list(
