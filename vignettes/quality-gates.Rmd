@@ -1,0 +1,208 @@
+---
+title: "Qualitätsgates: pointblank, dbt und verlässliche Releases"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Qualitätsgates: pointblank, dbt und verlässliche Releases}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", warning = FALSE, message = FALSE)
+library(lakefold)
+if (!requireNamespace("pointblank", quietly = TRUE)) {
+  knitr::opts_chunk$set(eval = FALSE)
+}
+```
+
+## Drei Qualitätsaufgaben
+
+| Zeitpunkt | Werkzeug | Aufgabe |
+|---|---|---|
+| Eingang einer Lieferung | pointblank im lakefold-Contract | Plausibilität, Wertebereiche, Segmente und tolerierte Fehlerquoten |
+| Bau persistierter SQL-Modelle | dbt | Modellabhängigkeiten, Strukturtests, SQL-Regeln und Materialisierung |
+| Relationale Nutzung in R | dm | Explizite Primär-/Fremdschlüssel und Beziehungen |
+
+lakefold trifft die Veröffentlichungsentscheidung und speichert deren Nachweis.
+Ein erfolgreiches dbt-Modell ist zunächst eine veränderliche Relation.
+Ein lakefold-Release verweist dagegen auf einen unveränderlichen Kandidatenstand.
+Die Funktionen ersetzen weder einen Scheduler noch eine Berechtigungsverwaltung.
+
+## Ein Contract mit abgestuften pointblank-Schwellen
+
+Für diesen Leitfaden wird das optionale Paket pointblank benötigt:
+`install.packages("pointblank")`. Ohne dieses Paket werden die Beispiele beim
+Dokumentationsbau angezeigt, aber nicht ausgeführt.
+
+Eine einzige globale Fehlerquote kann Probleme kleiner Gesellschaften verdecken.
+pointblank segmentiert die Regel deshalb nach `entity`. lakefold speichert jedes
+Segment separat und prüft alle Ergebnisse vor einer Veröffentlichung.
+
+```{r pointblank-contract}
+contract <- dl_contract(
+  "orders.contract", "1.0.0", "Analytics", "Order amounts", "One order",
+  columns = c(id = "integer", entity = "character", amount = "numeric"),
+  key = "id", producer = "Data producer", operator = "Platform operations",
+  column_metadata = list(amount = list(description = "Order amount", unit = "EUR")),
+  rules = list(dl_pointblank("plausibility", function(data) {
+    pointblank::create_agent(
+      tbl = data,
+      actions = pointblank::action_levels(warn_at = 0.005, stop_at = 0.05)
+    ) |>
+      pointblank::col_vals_gte("amount", 0, segments = pointblank::vars(entity))
+  }, policy = "agent"))
+)
+orders <- data.frame(
+  id = seq_len(200), entity = rep(c("Alpha", "Beta"), each = 100),
+  amount = rep(10, 200)
+)
+orders$amount[1:3] <- -1
+quality <- dl_validate(orders, contract, keep_agents = TRUE)
+dl_quality(quality) |>
+  dplyr::filter(engine == "pointblank") |>
+  dplyr::select(rule, segment, status, n_failed, n_total, failure_rate)
+```
+
+`policy = "agent"` verwendet die tatsächlich von pointblank ausgewerteten
+Action Levels. Dessen Rundung von Anteilen auf Testeinheiten gilt auch hier.
+Im Beispiel warnen drei Fehler unter 100 Einheiten; fünf Fehler erreichen die
+blockierende Schwelle. Absolute Schwellen sind ebenfalls möglich. Das Beispiel
+verwendet die Argumentnamen von pointblank 0.12.4. Neuere pointblank-Versionen
+können zusätzlich `warn`, `error` und `critical` anbieten.
+
+`policy = "rule"` bleibt der kompatible Standard: `max_failure` ist die maximal
+zulässige Fehlerquote; `severity` bestimmt, ob eine Überschreitung warnt oder
+blockiert. Verwende nicht beide Richtlinien in der Annahme, sie würden kombiniert.
+Bei der Agent-Richtlinie muss jede Prüfung mindestens eine Warn- oder
+Abbruchschwelle besitzen. Ausgelassene Prüfungen, leere Prüfpläne und technische
+Auswertungsfehler blockieren unabhängig von der gewählten Toleranz.
+
+Nutze pointblank-Actions ohne eigene Versandfunktionen, wenn Benachrichtigungen
+über den lakefold-Runner laufen sollen. So wird nach dem Speichern der Diagnose
+ein dedupliziertes Ereignis über den vorhandenen Transport versendet.
+
+## Vor Raw prüfen und den Kandidaten erneut absichern
+
+```{r ingestion}
+root <- tempfile("lakefold-quality-")
+config <- dl_config(
+  dl_catalog_duckdb(file.path(root, "lake.db")),
+  dl_storage_local(file.path(root, "data")),
+  landing = file.path(root, "landing"), backend = "duckdb"
+)
+lake <- dl_connect(config)
+first <- dl_ingest_data(lake, orders, contract, "orders", code_version = "v1",
+  input_contract = contract, business_date = as.Date("2026-08-31"))
+dl_status(first)
+orders$amount[4:5] <- -1
+blocked <- dl_ingest_data(lake, orders, contract, "orders", code_version = "v1",
+  input_contract = contract, business_date = as.Date("2026-08-31"),
+  stop_on_failure = FALSE)
+dl_status(blocked)
+dl_quality(lake, run_id = blocked$run_id) |>
+  dplyr::filter(engine == "pointblank") |>
+  dplyr::select(stage, rule, status, n_failed)
+```
+
+Der abgewiesene RDS-Snapshot bleibt im Landing. Für diesen Fehlversuch wird
+keine Raw-Tabelle geschrieben. Der vorherige Release bleibt abrufbar.
+`dl_ingest_data()` eignet sich auch nach `readxl::read_excel()` oder einer
+API-Abfrage mit vorhandenen R-Werkzeugen. Es archiviert das empfangene R-Objekt.
+Für die unveränderte Originaldatei nutze stattdessen `dl_source()` und
+`dl_ingest(..., input_contract = contract)`.
+
+In einer expliziten Pipeline heißt der Eingangsschritt `dl_step_precheck()`.
+Er folgt direkt auf `dl_step_extract()`, vor Transformationen. Sein Reader muss
+einen Data Frame liefern. Der abschließende `dl_step_validate()` bleibt Pflicht
+und prüft bei Partitionsersatz den zusammengesetzten Gesamtbestand. Eingangs- und
+Produktcontract dürfen sich unterscheiden.
+
+## Diagnose und Berichte
+
+```{r diagnostics}
+dl_releases(lake, "orders") |>
+  dplyr::select(asset, release_id, quality, business_date)
+published_quality <- dl_quality(lake, asset = "orders", release = first$release_id)
+dl_expect_quality(published_quality)
+html <- file.path(root, "quality.html")
+dl_quality_report(dl_quality(blocked), html)
+dl_quality_report(published_quality, file.path(root, "quality.json"), format = "json")
+dl_pointblank_report(quality, "plausibility", file.path(root, "pointblank.html"))
+file.exists(c(html, file.path(root, "pointblank.html")))
+```
+
+`dl_quality(lake, asset = "orders")` zeigt den letzten Versuch.
+Mit zusätzlichem `release` wird gezielt der Nachweis des veröffentlichten Stands
+geladen. Bei einem Cache-Treffer verweist die Diagnose auf die ursprüngliche
+Prüfung. `dl_status()` und `dl_quality()` akzeptieren auch dbt-Ergebnisse; ein
+Prozessfehler wird selbst dann sichtbar, wenn einzelne Nodes bestanden haben.
+
+Der kompakte HTML-/JSON-Bericht enthält Check-Metadaten und Segmentlabels,
+keine vollständigen Quellzeilen. Der native pointblank-Bericht benötigt das
+in-memory Ergebnis von `keep_agents = TRUE`; Agenten werden nicht in der Registry
+gespeichert. Fehlzeilen-Extrakte und Tabellensamples sind deaktiviert.
+`dl_expect_quality()` verwendet in testthat denselben Gate-Entscheid wie der Runner.
+
+## Ein Contract-Entwurf ist noch keine fachliche Freigabe
+
+```{r contract-draft}
+draft <- dl_contract_from(orders, "orders.next", "Analytics", "Order amounts",
+  "One order", key = "id", required = c("id", "entity", "amount"))
+draft
+reviewed <- dl_contract_confirm(draft)
+dl_contract_diff(reviewed, contract) |>
+  dplyr::select(field, breaking)
+```
+
+Die Funktion liest Typen, bei Lazy Tables nur ein Nullzeilen-Prototyp. Sie erfindet
+keine Schlüssel, Einheiten oder fachlichen Regeln aus Stichproben. Ein Draft kann
+erst nach `dl_contract_confirm()` als Gate verwendet werden. Ein `NA` im
+Änderungsvergleich verlangt semantische Prüfung, beispielsweise bei geänderten
+R-Regeln oder einer anderen Granularität.
+
+## Fehlende Lieferungen unabhängig vom Import erkennen
+
+```{r monitoring}
+dl_check_delivery(lake, "orders", contract, business_date = as.Date("2026-09-30"),
+  due_at = as.POSIXct("2026-10-01 09:00:00", tz = "UTC"),
+  at = as.POSIXct("2026-10-01 10:00:00", tz = "UTC"))
+dl_freshness(lake) |>
+  dplyr::select(asset, published_quality, latest_attempt, delivery_status)
+dl_cleanup(lake, older_than_days = 30) # Vorschau, keine Löschung
+```
+
+Rufe die Überwachung aus deinem vorhandenen Scheduler auf. `notify` kann einen
+bestehenden Versandweg anbinden; das Paket benötigt keinen Maildienst.
+Wiederholte identische Vorfälle werden nach erfolgreicher Zustellung unterdrückt,
+Transportfehler bleiben erneut zustellbar. Die Kataloganzeige trennt
+Veröffentlichungsqualität, letzten Versuch und Lieferstatus.
+
+`dl_cleanup(..., dry_run = FALSE)` löscht ausschließlich abgelaufene,
+unveröffentlichte Raw-/Kandidatentabellen abgeschlossener Fehlversuche.
+Veröffentlichte Releases, Berichte, Landing-Dateien und Qualitätsnachweise bleiben
+erhalten. DuckLake-Snapshots und physische Dateien werden dabei nicht bereinigt.
+
+## dbt-Ergebnisse in Reporting-Releases übernehmen
+
+Der folgende Abschnitt benötigt ein echtes dbt-Projekt und wird hier nicht
+ausgeführt. Die Integrationstests führen Build, Test, Snapshot und Abfrage aus.
+
+```{r dbt-release, eval=FALSE}
+dl_disconnect(lake) # Lokalen Katalog vor dem externen dbt-Prozess schließen.
+result <- dl_dbt_build(project)
+lake <- dl_connect(config)
+release <- dl_dbt_publish(lake, result, "model.shop.customer_revenue",
+  revenue_contract, "shop.revenue", code_version = "v1")
+dl_tbl(lake, "shop.revenue", release$release_id)
+```
+
+Das Paket kopiert die aktuell sichtbare Relation und prüft genau diese Kopie.
+Eine alte Invocation-ID allein ist kein Beweis für unveränderte Tabelleninhalte,
+deshalb wird hier nie nur anhand der dbt-ID aus dem Cache freigegeben. Zwischen
+Build und Snapshot muss der Betreiber konkurrierende Writer ausschließen.
+Ein Aufruf veröffentlicht eine Relation, keinen atomaren Verbund aller dbt-Modelle.
+
+```{r cleanup, include=FALSE}
+dl_disconnect(lake)
+unlink(root, recursive = TRUE)
+```

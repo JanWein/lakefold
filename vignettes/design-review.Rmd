@@ -12,6 +12,30 @@ vignette: >
 Review des Codes und der Bedienabläufe, 18. September 2026. Grundlage ist die
 ursprüngliche Version 0.1.0; die daraus umgesetzten Änderungen bilden 0.2.0.
 
+## Stand 0.4.0: die konkreten Lücken geschlossen
+
+Das Grundkonzept aus 0.3.0 bleibt erhalten. Die jetzt umgesetzten Ergänzungen
+schließen folgende Bedienungs- und Nachweislücken:
+
+| Anforderung | Umsetzung in 0.4.0 |
+|---|---|
+| Eingangskontrolle vor Raw | `input_contract` und `dl_step_precheck()`; Original bleibt im Landing |
+| Gestaffelte DQ-Entscheidung | Native pointblank-Action-Levels über `policy = "agent"` |
+| Kleine Segmente nicht verdecken | Eigener Nachweis je pointblank-Segment |
+| Qualitätsberichte und R-Tests | HTML/JSON, nativer pointblank-Report und `dl_expect_quality()` |
+| Nutzung vorhandener R-Daten | `dl_ingest_data()` mit unveränderlichem RDS-Landing und Cache |
+| Contract-Entwurf ohne Scheinsicherheit | Typentwurf, explizite Bestätigung und Änderungsvergleich |
+| Fachliche und technische Verantwortung | Separater Operator sowie Spaltenbeschreibung und Einheit |
+| Diagnose ohne Registry-Interna | Status, Qualität, Releases und rekursive Dataset-Lineage |
+| dbt-Ergebnis für reproduzierbare Reports | Neue Kopie, Contract-Prüfung und expliziter Release pro Relation |
+| Fehlende Lieferung ohne Importlauf | Stichtags-/Fälligkeitsprüfung mit Ereignissen und Deduplizierung |
+| Bestehende Metadaten weiterverwenden | Additive Migration auf Registry-Schema 2 |
+| Speicherpflege ohne Historienverlust | Vorschau und Bereinigung unveröffentlichter Fehlversuch-Tabellen |
+
+Die folgenden Bewertungen für 0.3.0 und früher sind historische Befunde. Der
+aktuelle Funktionsumfang und die verbleibenden Grenzen stehen außerdem in
+[FEATURES.md](https://github.com/JanWein/lakefold/blob/main/docs/FEATURES.md).
+
 ## Ergänzung für 0.3.0: dbt als Build-Engine
 
 Die Architektur wurde am 19. September 2026 um dbt ergänzt. `dl_dbt_project()`
