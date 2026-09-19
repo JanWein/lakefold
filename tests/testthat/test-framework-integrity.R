@@ -221,16 +221,21 @@ test_that("report retries ignore only volatile calculation times", {
   on.exit(cleanup(f))
   dl_run(f$pipeline, f$lake)
   metric <- reserve_metric()
-  first <- dl_measure(f$lake, metric)
-  dl_report_release(f$lake, "monthly", list(total = first), "v1")
+  metric$dimensions <- c("company", "date")
+  first <- dl_measure(f$lake, metric, by = "date")
+  initial <- dl_report_release(f$lake, "monthly", list(total = first), "v1")
   saved <- dl_registry(f$lake, "reports")
-  second <- dl_measure(f$lake, metric)
-  expect_no_error(dl_report_release(
-    f$lake,
-    "monthly",
-    list(total = second),
-    "v1"
-  ))
+  second <- dl_measure(f$lake, metric, by = "date")
+  expect_no_error(
+    retry <- dl_report_release(
+      f$lake,
+      "monthly",
+      list(total = second),
+      "v1"
+    )
+  )
+  expect_identical(initial, retry)
+  expect_s3_class(retry$measures$total$values$date, "Date")
   expect_identical(dl_registry(f$lake, "reports"), saved)
   expect_equal(dl_report_read(f$lake, "monthly", TRUE)$total$value, 300)
   expect_identical(

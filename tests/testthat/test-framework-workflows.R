@@ -30,6 +30,10 @@ test_that("simple partition writes retain months and delivery evidence", {
       ...
     )
   }
+  expect_error(
+    check(record = FALSE, notify = function(event) NULL),
+    "require record"
+  )
   expect_equal(check()$status, "received")
   expect_equal(check()$release_id, corrected$release_id)
   expect_equal(dl_read(f$lake, "monthly", august$release_id)$amount, 350)
@@ -358,4 +362,6 @@ test_that("schema 2 migration retains history and read-only opening never migrat
   registry_init(f$lake)
   expect_equal(dl_registry(f$lake, "schema_version")$version, c(2L, 3L))
   expect_equal(nrow(dl_registry(f$lake, "run_owners")), 0)
+  expect_identical(dl_registry(f$lake, "run"), dl_registry(f$lake, "runs"))
+  expect_identical(dl_registry(f$lake, "ru"), dl_registry(f$lake, "runs"))
 })
