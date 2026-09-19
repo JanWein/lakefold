@@ -15,6 +15,7 @@ Imports: DBI, duckdb (>= 1.5.5), dplyr, dbplyr, tibble, rlang, digest, jsonlite
 Suggests: testthat (>= 3.0.0), pointblank, dm, shiny, bslib, yaml,
     readr, readxl, paws.storage, knitr, rmarkdown, processx, withr
 Config/testthat/edition: 3
+Config/Needs/website: pkgdown, DiagrammeR, DiagrammeRsvg
 Roxygen: list(markdown = TRUE)
 URL: https://janwein.github.io/lakefold/,
     https://github.com/JanWein/lakefold

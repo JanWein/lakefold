@@ -98,7 +98,7 @@ Es fehlen unter anderem ein einheitliches Diagnosesystem über beide Engines,
 ein stabiler Adapter-Vertrag, Schema-Migrationen und koordinierte parallele
 Schreibzugriffe. dbt deckt seinen SQL-DAG ab; einen gemeinsamen DAG für beliebige
 R- und dbt-Aufgaben bietet das Paket noch nicht. Details und Prioritäten stehen
-in der [Designbewertung](docs/DESIGN_REVIEW.md).
+in der [Designbewertung](https://github.com/JanWein/lakefold/blob/main/docs/DESIGN_REVIEW.md).
 
 ## Dokumentation
 
@@ -107,11 +107,11 @@ in der [Designbewertung](docs/DESIGN_REVIEW.md).
 | In 10 Minuten loslegen | [Ausführbarer Einstieg](vignettes/getting-started.Rmd) |
 | dbt, DuckLake und dm verbinden | [dbt-Workflow](vignettes/dbt-workflows.Rmd) |
 | Pipeline erweitern | [Workflow-Konzept](vignettes/workflow-design.Rmd) |
-| Qualitätsfehler und historische Daten | [Qualität und Historie](docs/QUALITY_AND_HISTORY.md) |
-| Kennzahlen reproduzieren | [Produkte und Kennzahlen](docs/PRODUCTS_AND_METRICS.md) |
-| Betrieb und Grenzen | [Betriebsleitfaden](docs/OPERATIONS.md) |
-| Prüfstand nachvollziehen | [Validierung](docs/VALIDATION.md) |
-| Von dataloom wechseln | [Migration](docs/MIGRATION.md) |
+| Qualitätsfehler und historische Daten | [Qualität und Historie](https://github.com/JanWein/lakefold/blob/main/docs/QUALITY_AND_HISTORY.md) |
+| Kennzahlen reproduzieren | [Produkte und Kennzahlen](https://github.com/JanWein/lakefold/blob/main/docs/PRODUCTS_AND_METRICS.md) |
+| Betrieb und Grenzen | [Betriebsleitfaden](https://github.com/JanWein/lakefold/blob/main/docs/OPERATIONS.md) |
+| Prüfstand nachvollziehen | [Validierung](https://github.com/JanWein/lakefold/blob/main/docs/VALIDATION.md) |
+| Von dataloom wechseln | [Migration](https://github.com/JanWein/lakefold/blob/main/docs/MIGRATION.md) |
 
 In R: `help(package = "lakefold")`, `?dl_ingest`, `?dl_dbt_build` und
 `vignette(package = "lakefold")`. Die Funktionshilfe wird aus roxygen2-Kommentaren
