@@ -4,14 +4,24 @@
 \name{lakefold-package}
 \alias{lakefold}
 \alias{lakefold-package}
-\title{lakefold: composable R workflows for governed data products}
+\title{lakefold: checked, versioned data for recurring reports}
 \description{
-Compose complex data workflows from reusable specifications and explicit
-steps. Start with \code{\link[=dl_open]{dl_open()}}, \code{\link[=dl_write]{dl_write()}} and \code{\link[=dl_read]{dl_read()}}, then add validation,
-transformations, publish versioned products and calculate reproducible metrics. Reuse ordinary
-R functions, delegate SQL builds to dbt and consume lazy relations with
-dplyr and dm.
+Keep incoming files, check proposed tables and publish data that reports can
+read consistently. Corrections create new releases while earlier versions
+remain available. Start locally with \code{\link[=dl_open]{dl_open()}}, \code{\link[=dl_write]{dl_write()}} and \code{\link[=dl_read]{dl_read()}}.
+Add business checks, reusable tables and recorded metrics when needed.
 }
+\section{Why use lakefold?}{
+
+A corrected monthly delivery should update the current dataset without losing
+the inputs behind a report already issued. A failed delivery should leave the
+previous successful release available. lakefold records these steps and lets
+you read either the current table or an exact historical release.
+Publishing means making checked data readable in your lake, not on the internet.
+See \code{vignette("why-lakefold")} for an illustrated explanation and
+\code{vignette("getting-started")} for a complete monthly reporting example.
+}
+
 \section{Design principles}{
 
 Define, inspect, execute and examine results through a small set of consistent
@@ -23,7 +33,8 @@ them. See \code{vignette("design-review")} for composition and extension boundar
 \section{Start here}{
 
 \itemize{
-\item \code{vignette("getting-started")}: an executable, offline ingestion example.
+\item \code{vignette("why-lakefold")}: purpose, benefits and concepts in plain language.
+\item \code{vignette("getting-started")}: deliveries, corrections, checks and reports, step by step.
 \item \code{vignette("dbt-workflows")}: dbt setup, builds, diagnostics and dm models.
 \item \code{vignette("workflow-design")}: specifications and the execution lifecycle.
 \item \code{vignette("quality-history")}: quality gates and reproducible releases.
