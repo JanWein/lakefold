@@ -27,7 +27,9 @@ jobs:
       - name: Check and build documentation
         run: |
           pkgdown::check_pkgdown()
-          pkgdown::build_site()
+          options(download.file.method = "curl",
+                  download.file.extra = "--retry 3 --retry-all-errors")
+          pkgdown::build_site(new_process = FALSE)
         shell: Rscript {0}
       - uses: actions/upload-pages-artifact@v3
         with:
