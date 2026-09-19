@@ -40,8 +40,10 @@ jobs:
           python-version: '3.12'
       - name: Install pinned dbt integration engine
         run: |
-          python -m pip install dbt-core==1.12.5 dbt-duckdb==1.10.1 duckdb==1.5.5
-          echo "LAKEFOLD_DBT_EXECUTABLE=$(command -v dbt)" >> "$GITHUB_ENV"
+          python -m venv "$RUNNER_TEMP/lakefold-dbt"
+          "$RUNNER_TEMP/lakefold-dbt/bin/python" -m pip install dbt-core==1.12.5 dbt-duckdb==1.10.1 duckdb==1.5.5
+          "$RUNNER_TEMP/lakefold-dbt/bin/python" -c "import dbt.cli.main, duckdb"
+          echo "LAKEFOLD_DBT_EXECUTABLE=$RUNNER_TEMP/lakefold-dbt/bin/dbt" >> "$GITHUB_ENV"
       - name: Check package
         run: Rscript scripts/check.R
       - uses: actions/upload-artifact@v4
