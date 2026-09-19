@@ -7,8 +7,8 @@
 \title{lakefold: composable R workflows for governed data products}
 \description{
 Compose complex data workflows from reusable specifications and explicit
-steps. Start with concise ingestion calls, add validation and transformations,
-publish versioned products and calculate reproducible metrics. Reuse ordinary
+steps. Start with \code{\link[=dl_open]{dl_open()}}, \code{\link[=dl_write]{dl_write()}} and \code{\link[=dl_read]{dl_read()}}, then add validation,
+transformations, publish versioned products and calculate reproducible metrics. Reuse ordinary
 R functions, delegate SQL builds to dbt and consume lazy relations with
 dplyr and dm.
 }
@@ -47,7 +47,7 @@ provide common inspection functions across both execution paths.
 \section{Resource ownership}{
 
 Specifications do not contain live database connections. Close connections
-with \code{\link[=dl_disconnect]{dl_disconnect()}}. Close local catalog connections before invoking dbt
+with \code{\link[=dl_close]{dl_close()}} or \code{\link[=dl_disconnect]{dl_disconnect()}}. Close local catalog connections before invoking dbt
 in another process. Lazy tables require their originating connection to
 remain open. The lakefold registry requires a single writer.
 }

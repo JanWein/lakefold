@@ -13,8 +13,8 @@ dl_contract_confirm(contract)
 A \code{dl_contract} ready for registration and validation.
 }
 \description{
-Confirms that the caller has reviewed the inferred types and supplied the
-business meaning, nullability, keys and rules. This is a local specification
+Confirms that the caller has reviewed the inferred types and chosen the
+nullability, keys, rules and optional metadata. This is a local specification
 transition, not an approval workflow or a proof that any data passed.
 }
 \examples{
