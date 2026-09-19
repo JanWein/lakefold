@@ -109,3 +109,59 @@ test_that("legacy rule policy remains independent of native action levels", {
   expect_equal(quality$status[quality$engine == "pointblank"], "warning")
   expect_equal(lakefold:::quality_ok(quality), TRUE)
 })
+
+test_that("every native blocking action takes precedence across report layouts", {
+  skip_if_not_installed("pointblank")
+  report <- pointblank::get_agent_report
+  flags <- NULL
+  local_mocked_bindings(
+    get_agent_report = function(...) {
+      out <- report(...)
+      out[intersect(c("W", "S", "E", "C"), names(out))] <- NULL
+      for (name in names(flags)) {
+        out[[name]] <- flags[[name]]
+      }
+      out
+    },
+    .package = "pointblank"
+  )
+  contract <- dl_contract(
+    "amounts",
+    "1",
+    "Analytics",
+    "Amounts",
+    "One amount",
+    c(amount = "numeric"),
+    rules = list(dl_pointblank(
+      "positive",
+      function(data) {
+        pointblank::create_agent(
+          data,
+          actions = pointblank::action_levels(stop_at = 1)
+        ) |>
+          pointblank::col_vals_gte("amount", 0)
+      },
+      policy = "agent"
+    ))
+  )
+  layouts <- list(
+    list(W = FALSE, S = TRUE, E = FALSE, C = NA),
+    list(W = TRUE, S = TRUE, E = NA, C = FALSE),
+    list(W = FALSE, S = FALSE, E = TRUE, C = NA),
+    list(W = FALSE, E = FALSE, C = TRUE),
+    list(S = TRUE),
+    list(W = TRUE, S = FALSE, E = FALSE, C = FALSE),
+    list(W = FALSE, E = FALSE, C = FALSE),
+    list(W = NA, S = NA, E = NA, C = NA)
+  )
+  actual <- vapply(
+    layouts,
+    function(layout) {
+      flags <<- layout
+      quality <- dl_validate(data.frame(amount = -1), contract)
+      quality$status[quality$engine == "pointblank"]
+    },
+    character(1)
+  )
+  expect_equal(actual, c(rep("failed", 5), "warning", "passed", "error"))
+})
