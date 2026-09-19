@@ -34,11 +34,14 @@ Existing lakes still open with their original configuration; `dl_open()` does
 not adopt or move unmarked catalogs. No additional registry migration is needed.
 Existing explicit contracts and definition versions keep their fingerprints.
 Owner, description and grain may now be omitted in new contracts.
+New local lakes require empty or nonexistent folders; custom layouts continue
+to use their original configuration.
 
 `dl_write()` derives technical versions when omitted. It records a structural
 schema after the first successful write, but no business approval. Supply an
 explicit contract to change that schema or add rules, and keep supplying that
-contract for later writes. Custom callbacks default to fresh evaluation.
+contract for later writes, including after a blocked first run or a blocked
+contract upgrade. Custom callbacks default to fresh evaluation.
 
 `dl_run()` still reuses historical matching releases for idempotent retries.
 `dl_write()` only reuses the current release so a successful write is reflected
