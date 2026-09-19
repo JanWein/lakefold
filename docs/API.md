@@ -24,6 +24,7 @@ diagnostics. See the [quality guide](https://janwein.github.io/lakefold/articles
 | `dl_cleanup()` | [dl_cleanup.Rd](../man/dl_cleanup.Rd) |
 | `dl_close()` | [dl_open.Rd](../man/dl_open.Rd) |
 | `dl_commons_yaml()` | [dl_commons_yaml.Rd](../man/dl_commons_yaml.Rd) |
+| `dl_compare()` | [dl_compare.Rd](../man/dl_compare.Rd) |
 | `dl_config()` | [dl_config.Rd](../man/dl_config.Rd) |
 | `dl_connect()` | [dl_setup.Rd](../man/dl_setup.Rd) |
 | `dl_contract()` | [dl_contract.Rd](../man/dl_contract.Rd) |
@@ -50,19 +51,22 @@ diagnostics. See the [quality guide](https://janwein.github.io/lakefold/articles
 | `dl_measure()` | [dl_measure.Rd](../man/dl_measure.Rd) |
 | `dl_metric()` | [dl_metric.Rd](../man/dl_metric.Rd) |
 | `dl_model()` | [dl_model.Rd](../man/dl_model.Rd) |
-| `dl_pipeline()` | [dl_pipeline.Rd](../man/dl_pipeline.Rd) |
 | `dl_open()` | [dl_open.Rd](../man/dl_open.Rd) |
+| `dl_pipeline()` | [dl_pipeline.Rd](../man/dl_pipeline.Rd) |
 | `dl_plan()` | [dl_plan.Rd](../man/dl_plan.Rd) |
 | `dl_pointblank()` | [dl_rule.Rd](../man/dl_rule.Rd) |
 | `dl_pointblank_report()` | [dl_pointblank_report.Rd](../man/dl_pointblank_report.Rd) |
 | `dl_product()` | [dl_product.Rd](../man/dl_product.Rd) |
 | `dl_quality()` | [dl_quality.Rd](../man/dl_quality.Rd) |
 | `dl_quality_counts()` | [dl_rule.Rd](../man/dl_rule.Rd) |
+| `dl_quality_errors()` | [dl_quality_errors.Rd](../man/dl_quality_errors.Rd) |
 | `dl_quality_report()` | [dl_quality_report.Rd](../man/dl_quality_report.Rd) |
 | `dl_read()` | [dl_read.Rd](../man/dl_read.Rd) |
+| `dl_recover()` | [dl_recover.Rd](../man/dl_recover.Rd) |
 | `dl_register()` | [dl_register.Rd](../man/dl_register.Rd) |
 | `dl_registry()` | [dl_registry.Rd](../man/dl_registry.Rd) |
 | `dl_releases()` | [dl_releases.Rd](../man/dl_releases.Rd) |
+| `dl_report_read()` | [dl_report_read.Rd](../man/dl_report_read.Rd) |
 | `dl_report_release()` | [dl_report_release.Rd](../man/dl_report_release.Rd) |
 | `dl_rule()` | [dl_rule.Rd](../man/dl_rule.Rd) |
 | `dl_run()` | [dl_run.Rd](../man/dl_run.Rd) |
@@ -80,8 +84,3 @@ diagnostics. See the [quality guide](https://janwein.github.io/lakefold/articles
 | `dl_tbl()` | [dl_tbl.Rd](../man/dl_tbl.Rd) |
 | `dl_validate()` | [dl_validate.Rd](../man/dl_validate.Rd) |
 | `dl_write()` | [dl_write.Rd](../man/dl_write.Rd) |
-
-| `dl_compare()` | [dl_compare.Rd](../man/dl_compare.Rd) |
-| `dl_quality_errors()` | [dl_quality_errors.Rd](../man/dl_quality_errors.Rd) |
-| `dl_recover()` | [dl_recover.Rd](../man/dl_recover.Rd) |
-| `dl_report_read()` | [dl_report_read.Rd](../man/dl_report_read.Rd) |
