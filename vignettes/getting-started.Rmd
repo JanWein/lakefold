@@ -1,0 +1,99 @@
+---
+title: "Getting started: from file to a governed release"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting started: from file to a governed release}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+library(lakefold)
+```
+
+lakefold connects ordinary R ingestion, quality contracts, DuckDB/DuckLake,
+dbt and relational analysis. Start locally with DuckDB. This example executes
+without network access, database credentials or a dbt installation.
+
+## Configure storage
+
+A specification can be printed and saved before it touches a database. Paths
+are resolved when the specification is created. A config stores environment
+variable names for credentials, never resolved secrets.
+
+```{r configuration}
+root <- tempfile("lakefold-guide-")
+config <- dl_config(
+  dl_catalog_duckdb(file.path(root, "lake.duckdb")),
+  dl_storage_local(file.path(root, "data")),
+  landing = file.path(root, "landing"), backend = "duckdb"
+)
+config
+lake <- dl_connect(config)
+```
+
+In a long-running function, register `on.exit(dl_disconnect(lake))` immediately
+after connecting. Here we explicitly clean up at the end of the example.
+
+## Describe the source and its contract
+
+A reader is a normal R function receiving the immutable landed file path.
+The contract documents the meaning of one row and gates publication.
+
+```{r source}
+path <- file.path(root, "orders.csv")
+utils::write.csv(data.frame(order_id = 1:3, amount = c(25, 75, 50)),
+  path, row.names = FALSE)
+source <- dl_source("orders.file", path, reader = utils::read.csv)
+contract <- dl_contract(
+  "orders.contract", "1.0.0", "Analytics", "Order amounts", "One order",
+  columns = c(order_id = "integer", amount = "numeric"), key = "order_id"
+)
+contract
+```
+
+`numeric` permits integer or double input, while `integer` is strict. Missing
+values are rejected for every declared column by default. Undeclared columns,
+duplicate keys and empty deliveries also fail by default. See `?dl_contract`.
+
+## Execute and query
+
+```{r ingestion}
+release <- dl_ingest(lake, source, contract, "orders", code_version = "v1")
+release
+orders <- dl_tbl(lake, "orders", release = release$release_id)
+dplyr::collect(orders)
+```
+
+The result contains a run ID and an immutable release ID. Queries remain lazy
+until `collect()`. `dl_tbl(lake, "orders")` resolves the latest published release;
+pass a release ID for a reproducible report. Keep the connection open while
+using lazy tables.
+
+## Repeat safely and inspect quality
+
+```{r history}
+repeated <- dl_ingest(lake, source, contract, "orders", code_version = "v1")
+repeated$status
+dl_registry(lake, "quality_results") |>
+  dplyr::select(rule, status, n_failed)
+```
+
+Identical bytes, definitions and business date reuse a prior release. A changed
+reader, captured value or dependency requires a new definition version and
+`code_version`. Fingerprints cannot detect all changes in a function's environment.
+
+Failed validation does not replace the published release. By default it raises
+an error after recording diagnostics. For interactive inspection use
+`stop_on_failure = FALSE` and inspect the returned status.
+
+## Close resources
+
+```{r cleanup}
+dl_disconnect(lake)
+unlink(root, recursive = TRUE)
+```
+
+Next read `vignette("workflow-design")` for transforms or
+`vignette("dbt-workflows")` for SQL models and relational analysis.

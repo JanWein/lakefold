@@ -1,0 +1,84 @@
+---
+title: "Workflow design"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Workflow design}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+library(lakefold)
+```
+
+## Define before executing
+
+Like a tidymodels workflow, a lakefold specification describes work before it
+is executed. The analogy is conceptual: there is no training/resampling system,
+and `dl_plan()` is structural inspection, not SQL execution or a data dry run.
+
+```{r specification}
+config <- dl_config(backend = "duckdb")
+source <- dl_source("orders.file", "orders.csv", utils::read.csv)
+contract <- dl_contract(
+  "orders.contract", "1.0.0", "Analytics", "Order amounts", "One order",
+  c(order_id = "integer", amount = "numeric"), key = "order_id"
+)
+pipeline <- dl_pipeline("orders.import", config, code_version = "v1") |>
+  dl_step_land(source) |>
+  dl_step_extract() |>
+  dl_step_transform(\(data) dplyr::mutate(data, amount = amount * 100),
+    id = "amount_in_cents") |>
+  dl_step_validate(contract) |>
+  dl_step_publish("orders")
+pipeline
+dl_plan(pipeline)
+```
+
+These chunks do not open connections, read `orders.csv` or create folders.
+Transforms are applied in order after extraction. They leave the landed original
+and raw table intact, and return data frames or lazy tables. Use `collect()`
+explicitly when an R-only algorithm needs in-memory data.
+
+## Execute with an object-first API
+
+| Specification | Unified entry point | Specific operation |
+|---|---|---|
+| Pipeline | `dl_execute(pipeline)` | `dl_run(pipeline)` |
+| R product | `dl_execute(product, lake)` | `dl_build(lake, product)` |
+| Metric | `dl_execute(metric, lake)` | `dl_measure(lake, metric)` |
+| dbt project | `dl_execute(project)` | `dl_dbt_build(project)` |
+
+A pipeline carries its connection-free config. Products and metrics need an
+explicit connection or config. Execution closes connections it opens; supplied
+connections remain caller-owned. dbt opens its own connections in a separate
+process, so do not pass `lake` when executing a dbt project.
+
+The result types reflect their operation: run result, metric tibble or dbt
+result. A universal diagnostic accessor is not implemented yet.
+
+## Inspect incomplete definitions
+
+```{r incomplete}
+incomplete <- dl_pipeline("orders.import", config, code_version = "v1") |>
+  dl_step_land(source)
+dl_plan(incomplete)
+attr(dl_plan(incomplete), "complete")
+```
+
+`complete` only means the declared steps and layers form a valid sequence.
+Availability of files, credentials, SQL translations and data quality are
+checked at execution. Errors while adding steps explain invalid ordering early.
+
+## Version definitions deliberately
+
+Registered `(kind, id, version)` definitions are immutable. Reconstruct a changed
+source or contract with a new version. Because a pipeline embeds these objects,
+increase its version too. Change `code_version` when callbacks, captured values
+or dependencies change; function-body hashes cannot capture all environments.
+
+Specifications can be saved as RDS but are not a portable language-independent
+format. Prefer version-controlled R definitions and explicit dependency locks.
+Update/remove-step helpers and an external adapter extension contract are future
+work. See the design review for the remaining gap to mature tidy frameworks.

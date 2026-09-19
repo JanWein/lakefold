@@ -1,0 +1,174 @@
+---
+title: "dbt workflows and relational models"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{dbt workflows and relational models}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+library(lakefold)
+```
+
+Use R to configure and ingest, dbt to build and test SQL models, and `dm` to
+inspect and query their relationships. dbt owns its DAG and incremental model
+strategies. lakefold invokes its CLI through `processx`, never an internal
+Python API. Existing dbt projects can be used without changing their SQL.
+
+## Install an external engine
+
+Install dbt separately from the R package. A tested classic engine combination
+is `dbt-core==1.12.5`, `dbt-duckdb==1.10.1` and `duckdb==1.5.5`:
+
+```sh
+python -m venv .venv
+.venv/bin/python -m pip install dbt-core==1.12.5 dbt-duckdb==1.10.1 duckdb==1.5.5
+.venv/bin/dbt --version
+```
+
+On Windows use `.venv/Scripts/python.exe` and `.venv/Scripts/dbt.exe`.
+These are reproducibility pins, not a claim to be the latest versions. The
+wrapper uses standard CLI arguments and JSON artifacts. It disables anonymous
+usage telemetry for the child process using both classic and v2 dbt settings. dbt v2 projects can be
+supplied explicitly, but their engine, adapter and catalog combinations require
+separate integration validation. The generated starter uses dbt-duckdb profiles;
+it does not generate a v2 `catalogs.yml` or promise interchangeable engines.
+
+## Generate a local starter
+
+The following chunks execute without dbt; generating files is independent of
+running the external engine.
+
+```{r scaffold}
+root <- tempfile("lakefold-dbt-guide-")
+config <- dl_config(
+  dl_catalog_duckdb(file.path(root, "lake.duckdb")),
+  dl_storage_local(file.path(root, "data")),
+  landing = file.path(root, "landing"), backend = "duckdb"
+)
+project <- dl_dbt_init(file.path(root, "dbt"), config)
+project
+list.files(project$path, recursive = TRUE)
+```
+
+The starter builds `raw.raw_orders` from a synthetic seed,
+`staging.stg_orders`, then `marts.customer_revenue`, with five key/null tests.
+It attaches the configured catalog under the same `lake` name used in R. The
+schema macro uses exact layer names; use separate catalogs for dev and production.
+
+## Build, test and inspect
+
+The next chunks require your installed dbt executable and are shown without
+execution during ordinary vignette builds. The repository integration tests run
+these operations against real dbt. Replace `"dbt"` with the executable path if it
+is not on `PATH`.
+
+```{r build, eval=FALSE}
+# Create catalog folders, then release the local database lock.
+lake <- dl_connect(config)
+dl_disconnect(lake)
+
+result <- project |> dl_execute(echo = FALSE)
+dl_dbt_status(result)
+dl_dbt_test(project, select = "customer_revenue", echo = FALSE)
+dl_dbt_lineage(result)
+```
+
+`select` and `exclude` accept dbt expressions such as `"+customer_revenue"` and
+`"tag:reporting"`. `vars` is a named R list; use environment-based credentials in
+your profile instead of passing secrets as variables. `full_refresh = TRUE`
+requests dbt's full refresh. `timeout` is measured in seconds.
+
+Each invocation writes to its own `.lakefold/runs/<id>` directory. The result
+retains the exit code, stdout/stderr, node statuses and parsed manifest. Old
+artifacts cannot become the outcome of a new failed invocation. dbt warnings
+remain visible; configure warning severity in dbt itself if they should fail CI.
+
+```{r failure-inspection, eval=FALSE}
+result <- dl_dbt_build(project, stop_on_failure = FALSE)
+if (!result$success) {
+  dl_dbt_status(result)
+  result$stderr
+  result$artifact_error
+}
+```
+
+A nonzero exit code, failed/skipped node or invalid artifact pair marks the
+result unsuccessful. By default `dl_dbt_failed` carries the result in
+`condition$result`. Process-start or timeout errors use `dl_dbt_process_error`.
+No automatic retry is performed because a retry could repeat writes.
+
+## Understand the returned tables offline
+
+These are explicitly synthetic artifact fixtures bundled for documentation.
+
+```{r artifacts}
+artifacts <- system.file("extdata", "dbt-artifacts", package = "lakefold")
+dl_dbt_status(artifacts)
+dl_dbt_lineage(artifacts)
+```
+
+`run_results.json` lists executed nodes, while the manifest describes the whole
+project. A selected build may leave some manifest relations absent. Choose those
+you want to open by their dbt unique IDs.
+
+## Consume a relational model
+
+```{r model, eval=FALSE}
+lake <- dl_connect(config)
+model <- dl_dbt_model(
+  lake, result,
+  tables = c(orders = "model.lakefold_demo.stg_orders",
+             customers = "model.lakefold_demo.customer_revenue"),
+  primary_keys = list(orders = "order_id", customers = "customer_id"),
+  foreign_keys = list(list(
+    table = "orders", columns = "customer_id",
+    ref_table = "customers", ref_columns = "customer_id"
+  ))
+)
+dm::dm_examine_constraints(model)
+dplyr::collect(model$customers)
+# Optional diagram: dm::dm_draw(model)
+dl_disconnect(lake)
+```
+
+The model borrows the connection. `check = TRUE` validates declared keys, which
+can be expensive on large tables. SQL dependencies alone cannot prove keys.
+The default `database = "lake"` maps manifest schema/table names to the R
+attachment, so ensure both R and dbt point to the same catalog.
+
+## Use your own ingested data
+
+`dl_ingest()` returns a pinned release. To make that exact release a dbt source,
+read its physical schema/table from `dl_registry(lake, "releases")` and declare
+those values in your dbt source YAML. This makes lineage explicit. A subsequent
+ingestion creates a new release; updating dbt's source reference is a deliberate
+project change. The package does not silently repoint dbt sources or copy dbt
+outputs into governed releases.
+
+## DuckLake and deployment
+
+Set `backend = "ducklake"` in the starter config to generate a local DuckLake
+attachment. Close R connections before dbt and reopen afterwards. This also
+avoids DuckDB version and local catalog locking conflicts between processes.
+For S3 or PostgreSQL catalogs, supply an independently verified profile through
+`dl_dbt_project(path, profiles_dir, target, executable)`. Keep credentials in
+environment variables or a secret provider. Automatic remote profile generation
+is not implemented.
+
+A dbt build is not an atomic lakefold publication: earlier models may remain
+written when a later model or test fails. `dl_dbt_model()` opens current relations,
+whereas `dl_model()` pins immutable governed releases. Do not interchange their
+reproducibility guarantees. The registry still requires a single writer.
+
+```{r cleanup}
+unlink(root, recursive = TRUE)
+```
+
+Artifact contracts follow the official
+[run results reference](https://docs.getdbt.com/reference/artifacts/run-results-json)
+and [manifest reference](https://docs.getdbt.com/reference/artifacts/manifest-json).
+Attachment configuration follows the
+[dbt-duckdb adapter](https://github.com/duckdb/dbt-duckdb).

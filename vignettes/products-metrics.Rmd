@@ -1,0 +1,99 @@
+---
+title: "Products and metrics"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Products and metrics}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+# Produkte, relationale Modelle, Metrics und Reports
+
+## Ein Produkt baut auf Releases auf
+
+```r
+product <- dl_product(
+  "finance.reporting", inputs = c(reserves = "finance.reserves"),
+  build = function(inputs) inputs$reserves,
+  contract = contract, code_version = "reporting-v1"
+)
+product |> dl_execute(lake)
+```
+
+`inputs` ist ein benannter Vektor von Asset-IDs. Der Builder erhält eine benannte
+Liste von Lazy Tables. Vor dem Build werden konkrete Input-Releases aufgelöst;
+die Lineage hält sie fest. Ein späterer Quell-Release baut das Produkt nicht
+automatisch neu. Für Wiederholbarkeit lassen sich alle Inputs explizit pinnen:
+
+```r
+dl_build(lake, product, releases = c(reserves = input_release_id))
+```
+
+Der Produkt-Contract beschreibt das Ergebnis, nicht zwingend die Quellschemata.
+Mehrere Inputs können im Builder über dplyr gejoint werden. Granularität,
+Kardinalität und mögliche Vervielfachungen müssen fachlich geprüft werden.
+Ein Produkt ist derzeit eine Ergebnistabelle, kein atomarer Mehrtabellen-Release.
+
+## dm ist ein Modell, keine automatische Join-Engine
+
+```r
+model <- dl_model(
+  lake, tables = c(reserves = "finance.reserves"),
+  primary_keys = list(reserves = c("id", "date"))
+)
+```
+
+`dm` ist optional. Das Objekt enthält Lazy Tables und gepinnte Releases.
+Deklarierte Primär-/Fremdschlüssel werden geprüft. Joins und die Auswahl der
+gewünschten Granularität bleiben in der Produktfunktion. Es wird keine
+Power-BI-/DAX-Semantik emuliert.
+
+## Kennzahlen brauchen fachliche Semantik
+
+| Definition | Regel |
+|---|---|
+| `time_behavior = "stock"` | Genau ein nicht-fehlender Stichtag in der ausgewählten Eingabe |
+| `time_behavior = "flow"` | Mehrere Zeitpunkte sind möglich; die Formel bestimmt die Aggregation |
+| `dimensions` | Ausschließlich diese Spalten sind als `by` und Filter erlaubt |
+| `na_policy = "reject"` | Fehlende relevante Eingaben blockieren die Berechnung |
+| `na_policy = "expression"` | Die Formel legt den Umgang mit fehlenden Werten fest |
+| `approved = FALSE` | Berechnung wird blockiert |
+
+`expr = sum(amount, na.rm = TRUE)` bei gleichzeitigem `na_policy = "reject"`
+entfernt fehlende Eingaben nicht: die vorgelagerte Prüfung blockiert. Für bewusstes
+Ignorieren ausdrücklich `na_policy = "expression"` wählen und fachlich begründen.
+Fehlende/nicht-endliche numerische Ergebnisse sowie leere Custom-Ergebnisse
+werden trotzdem abgewiesen.
+
+```r
+value <- metric |> dl_execute(lake,
+  by = "company", at = as.Date("2026-08-31"),
+  filters = list(company = c("Alpha", "Beta"))
+)
+```
+
+Dieses Beispiel setzt eine Metric mit freigegebener Dimension `company` voraus.
+Für Quoten, gewichtete Mittel oder komplexe Kennzahlen dient
+`compute = function(data, dimensions, params) ...`. Eine solche Funktion muss
+die angeforderte Gruppierung und Rückgabespalten korrekt umsetzen. Das Framework
+prüft nicht automatisch die ökonomische Richtigkeit einer Formel.
+
+## Ein Report-Release ist ein Nachweis
+
+`dl_measure()` hängt ein `dl_manifest` an sein Ergebnis. Es enthält Definition,
+Input-Release, Parameter, Eingabequalität und Ergebnis-Hash. `dl_report_release()`
+speichert Manifest und Werte. Nachträgliche Änderungen an den Werten werden
+abgewiesen; ein vorhandener Reportname darf keine andere Bedeutung bekommen.
+
+Ein neuer Aufruf derselben Kennzahl kann einen anderen Berechnungszeitpunkt im
+Manifest tragen. Deshalb für die idempotente Wiederholung eines Report-Release
+entweder dasselbe Ergebnisobjekt weiterverwenden oder eine neue Reportversion
+vergeben. Report-Release ist kein PDF-/Word-Renderer.
+
+## Sichere KI-Anbindung
+
+Das Paket führt Kennzahlen ohne LLM aus. Der commons-YAML-Export ist eine
+begrenzte deklarative Brücke und kein getesteter Chat-/Agent-Server. Es gibt
+keine Authentifizierung, keinen geschützten SQL-Endpunkt und keine automatische
+Validierung von LLM-Abfragen. Ein sicherer Chatzugriff benötigt diese Komponenten
+zusätzlich; sie werden von lakefold nicht stillschweigend bereitgestellt.
