@@ -1,3 +1,40 @@
+# Validation record for lakefold 0.7.0
+
+## Architecture refactoring verification
+
+Verified locally on R 4.3.3 / Ubuntu 24.04 with synthetic data:
+
+| Check | Result |
+|---|---|
+| Full `R CMD check`, including examples and vignette rebuilds | 0 errors, 0 warnings, 0 notes |
+| Complete suite with DuckDB as the default backend | 548 passed expectations, no failures, warnings or skips |
+| Complete suite with DuckLake as the default backend | 117 tests, 548 passed expectations, no failures, warnings or skips |
+| Isolated installation with hard dependencies and no DuckDB | Native workflow, formula quality, contracts, metadata and missing-target preflight passed |
+| New and existing end-to-end examples | Composed product, optional DBI/SQL/pointblank workflow, custom RDS target and monthly reporting script executed successfully |
+| Documentation | 11 executable vignettes; pkgdown reference check and site build completed |
+| Diagram | Rendered and visually checked; explanatory text accompanies the figure |
+
+The suite retains the earlier integrity tests and adds normalization, no-IO
+preflight, component substitution, connection ownership, formula missing values,
+malformed adapter evidence, catalog warnings, execution warnings, original-file
+preservation, schema baselines, partition retention, explicit version guards and
+ordinary R quality callbacks across native and lake execution.
+
+The external dbt test ran with dbt-core 1.12.5, dbt-duckdb 1.10.1 and DuckDB
+1.5.5. Optional pointblank checks used pointblank 0.12.4. The pkgdown build skips
+the two examples that explicitly require a user-supplied dbt project path;
+that is separate from the real dbt integration test, which ran successfully.
+
+GitHub Actions checks DuckDB and DuckLake on Linux, R 4.2.3 compatibility,
+Windows, macOS and a separate installation without optional integrations.
+See the repository's Actions history for the result on each published commit.
+
+These checks do not establish production S3/PostgreSQL connectivity, distributed
+locking, custom-adapter atomicity or workloads larger than R memory. Those
+boundaries are documented in the architecture and extension guides.
+
+## Earlier validation record (0.6.0)
+
 # Validation record for lakefold 0.6.0
 
 Check date: 19 September 2026. Local environment: Ubuntu 24.04 and R 4.3.3.

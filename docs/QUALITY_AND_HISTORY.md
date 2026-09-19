@@ -1,5 +1,9 @@
 # Quality, failures and historical data
 
+For the new product-first interface, start with the [composition guide](https://janwein.github.io/lakefold/articles/composing-products.html).
+Lake examples require optional DuckDB >= 1.5.5; existing workflows remain supported.
+
+
 ## Four time and version concepts
 
 | Concept | Question answered |

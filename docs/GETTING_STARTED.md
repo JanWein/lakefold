@@ -1,5 +1,9 @@
 # Build a monthly reporting workflow, step by step
 
+For the new product-first interface, start with the [composition guide](https://janwein.github.io/lakefold/articles/composing-products.html).
+Lake examples require optional DuckDB >= 1.5.5; existing workflows remain supported.
+
+
 Start with [Why lakefold?](WHY_LAKEFOLD.md) if you are unsure what the package
 adds to an ordinary import script. Then follow the
 [complete executable walkthrough](https://janwein.github.io/lakefold/articles/getting-started.html).

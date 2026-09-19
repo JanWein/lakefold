@@ -27,6 +27,40 @@ A dbt project is an additional specification, separate from registered
 The resulting dbt relations are not automatically registered as immutable
 lakefold releases.
 
+## From 0.6.0 to 0.7.0
+
+No registry migration is required: schema 3 and existing releases are retained.
+Existing open/write/read, pipeline, derived-product, metric and dbt calls remain
+supported. `dl_run()` and `dl_validate()` are now S3 generics with existing
+argument names preserved. Extension methods should accept `...`.
+
+DuckDB moved from Imports to Suggests. Install `duckdb` >= 1.5.5 explicitly for
+existing lake workflows. Core data-frame workflows need no database package.
+
+For new composition, begin with `dl_product("name")` and add ordinary inputs
+with `dl_add_*()`. `dl_run()` defaults to in-memory execution; `dl_publish()`
+uses the configured target or a local `lakefold` folder. Add a target to use
+`dl_run()` for durable publication. See the composing-products guide.
+
+Existing `dl_product(inputs = ..., build = ...)` calls keep pinned releases and
+lazy tables. New composed transforms receive ordinary data frames. This avoids
+silently changing established execution and memory behavior.
+
+Composed products rerun by default. Set `code_version` before `cache = TRUE`;
+that version must cover closures, imported code and dependencies. Explicit
+product versions remain immutable once registered. Added quality rules derive
+an effective contract version while the original explicit contract is registered
+separately. Existing explicit contracts and quality rules cannot silently vanish
+through a later automatic-schema write.
+
+Native run evidence is in memory; lake ingestion evidence is durable. A catalog
+failure is reported as a warning after data publication and does not undo a
+committed release. Do not treat custom target output descriptors as lake release
+IDs unless their adapter documents those semantics.
+
+The shared boolean validator now raises `dl_invalid_argument`, rather than the
+misleading dbt-specific condition class, for invalid flags across the package.
+
 ## From 0.5.0 to 0.6.0
 
 Open an existing lake once with a writable 0.6.0 connection. The additive schema
