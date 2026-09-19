@@ -320,3 +320,37 @@ test_that("custom metric groups are unique and repeated lineage is deduplicated"
     "one row per requested group"
   )
 })
+
+
+test_that("group order cannot change the identity of identical metric results", {
+  f <- fixture()
+  on.exit(cleanup(f))
+  dl_run(f$pipeline, f$lake)
+  reverse <- FALSE
+  metric <- dl_metric(
+    "ordered",
+    "risk.validated",
+    dimensions = "company",
+    compute = function(data, dimensions, params) {
+      result <- data.frame(company = c("b", "a"), value = c(2, 1))
+      if (reverse) result[2:1, ] else result
+    },
+    approved = TRUE,
+    code_version = "v1"
+  )
+  first <- dl_measure(f$lake, metric, by = "company")
+  reverse <- TRUE
+  second <- dl_measure(f$lake, metric, by = "company")
+  expect_equal(first$company, c("a", "b"))
+  expect_identical(
+    attr(first, "dl_manifest")$result_hash,
+    attr(second, "dl_manifest")$result_hash
+  )
+  dl_report_release(f$lake, "ordered-report", list(total = first), "v1")
+  expect_no_error(dl_report_release(
+    f$lake,
+    "ordered-report",
+    list(total = second),
+    "v1"
+  ))
+})
