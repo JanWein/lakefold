@@ -1,10 +1,18 @@
-#' lakefold: composable R workflows for governed data products
+#' lakefold: checked, versioned data for recurring reports
 #'
-#' Compose complex data workflows from reusable specifications and explicit
-#' steps. Start with [dl_open()], [dl_write()] and [dl_read()], then add validation,
-#' transformations, publish versioned products and calculate reproducible metrics. Reuse ordinary
-#' R functions, delegate SQL builds to dbt and consume lazy relations with
-#' dplyr and dm.
+#' Keep incoming files, check proposed tables and publish data that reports can
+#' read consistently. Corrections create new releases while earlier versions
+#' remain available. Start locally with [dl_open()], [dl_write()] and [dl_read()].
+#' Add business checks, reusable tables and recorded metrics when needed.
+#'
+#' @section Why use lakefold?:
+#' A corrected monthly delivery should update the current dataset without losing
+#' the inputs behind a report already issued. A failed delivery should leave the
+#' previous successful release available. lakefold records these steps and lets
+#' you read either the current table or an exact historical release.
+#' Publishing means making checked data readable in your lake, not on the internet.
+#' See `vignette("why-lakefold")` for an illustrated explanation and
+#' `vignette("getting-started")` for a complete monthly reporting example.
 #'
 #' @section Design principles:
 #' Define, inspect, execute and examine results through a small set of consistent
@@ -13,7 +21,8 @@
 #' them. See `vignette("design-review")` for composition and extension boundaries.
 #'
 #' @section Start here:
-#' * `vignette("getting-started")`: an executable, offline ingestion example.
+#' * `vignette("why-lakefold")`: purpose, benefits and concepts in plain language.
+#' * `vignette("getting-started")`: deliveries, corrections, checks and reports, step by step.
 #' * `vignette("dbt-workflows")`: dbt setup, builds, diagnostics and dm models.
 #' * `vignette("workflow-design")`: specifications and the execution lifecycle.
 #' * `vignette("quality-history")`: quality gates and reproducible releases.
