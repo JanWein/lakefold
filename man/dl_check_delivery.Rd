@@ -27,7 +27,8 @@ dl_check_delivery(
 
 \item{due_at, at}{Due time and evaluation time, both POSIXct scalars.}
 
-\item{notify}{Optional function receiving an event without source rows.}
+\item{notify}{Optional function receiving an event without source rows.
+Requires \code{record = TRUE} to retain deduplication evidence.}
 
 \item{date_column}{Optional business-date column to inspect in the current
 release. Inferred for a single date partition; otherwise the delivery's
