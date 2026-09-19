@@ -9,23 +9,23 @@ reference:
   - title: Package overview
     contents: lakefold-package
   - title: Start here
-    contents: [dl_open, dl_write, dl_read]
+    contents: [dl_open, dl_write, dl_read, dl_compare]
   - title: Configure and connect
     contents: [dl_config, dl_catalog_duckdb, dl_setup, dl_disconnect, dl_capabilities]
   - title: Ingest and publish
     contents: [dl_ingest, dl_ingest_data, dl_source, dl_pipeline, dl_step_precheck, dl_step_transform, dl_plan, dl_execute, dl_run, dl_interrupted]
   - title: Contracts and quality
-    contents: [dl_contract, dl_contract_from, dl_contract_confirm, dl_contract_diff, dl_rule, dl_validate, dl_quality, dl_quality_report, dl_pointblank_report, dl_expect_quality, dl_contract_yaml]
+    contents: [dl_contract, dl_contract_from, dl_contract_confirm, dl_contract_diff, dl_rule, dl_validate, dl_quality, dl_quality_report, dl_quality_errors, dl_pointblank_report, dl_expect_quality, dl_contract_yaml]
   - title: Build with dbt
     contents: [dl_dbt_init, dl_dbt_project, dl_dbt_build, dl_dbt_status, dl_dbt_lineage, dl_dbt_model, dl_dbt_publish]
   - title: Products, models and metrics
-    contents: [dl_product, dl_build, dl_model, dl_tbl, dl_metric, dl_measure, dl_report_release, dl_commons_yaml]
+    contents: [dl_product, dl_build, dl_model, dl_tbl, dl_metric, dl_measure, dl_report_release, dl_report_read, dl_commons_yaml]
   - title: Metadata and catalog
-    contents: [dl_register, dl_registry, dl_status, dl_releases, dl_lineage, dl_freshness, dl_check_delivery, dl_cleanup, dl_catalog_export, dl_catalog]
+    contents: [dl_register, dl_registry, dl_status, dl_releases, dl_lineage, dl_freshness, dl_check_delivery, dl_recover, dl_cleanup, dl_catalog_export, dl_catalog]
 articles:
   - title: Start here
     navbar: Start here
     contents: [why-lakefold, getting-started]
   - title: Go further
     navbar: Guides
-    contents: [quality-history, quality-gates, workflow-design, products-metrics, dbt-workflows, design-review]
+    contents: [everyday-workflows, quality-history, quality-gates, workflow-design, products-metrics, dbt-workflows, design-review]

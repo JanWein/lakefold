@@ -1,3 +1,38 @@
+# lakefold 0.6.0
+
+## Correctness
+
+* Fingerprint complete metric expressions instead of abbreviated labels. Existing
+  metric identities require a new version; historical reports are retained.
+* Check missing input values for data pronouns and explicit dynamic inputs.
+  Reject ambiguous duplicate-group custom metric results.
+* Preserve current delivery evidence across corrections to older partitions.
+* Generate framework IDs without consuming or creating R's random seed.
+* Make repeated report saves ignore only calculation timestamps and retain the
+  first saved evidence. Deduplicate identical measurement lineage edges.
+
+## Everyday workflows
+
+* Add `partition_by` to `dl_write()` and `dl_ingest()`.
+* Accept source functions returning data frames in `dl_write()`.
+* Accept quoted column names and compatible integer/decimal automatic schemas;
+  keep explicit integer contracts strict.
+* Add database-enforced read-only connections and optional metric recording.
+* Add `dl_compare()` with key checks, complete counts, bounded row previews and
+  numeric summaries, and `dl_report_read()` for saved values and manifests.
+* Make metric owner, description and unit optional. Infer flow/stock defaults
+  from the presence of a time column; approval and code versions remain explicit.
+* Add local quality exception inspection and `cache = FALSE` for product builds.
+* Add explicit abandoned-run and staging recovery with live-writer protection.
+  Registry schema 3 adds ownership for new runs without rewriting prior evidence.
+
+## Documentation and verification
+
+* Simplify the monthly walkthrough and add an executable everyday-workflow guide,
+  migration instructions, regression tests and a reproducible benchmark script.
+* Expand CI beyond the two Linux backend jobs to minimum R and Windows/macOS
+  compatibility checks. Results are recorded against the actual checked commit.
+
 # lakefold 0.5.0
 
 * `dl_contract()` and `dl_contract_from()` make descriptive metadata optional.
