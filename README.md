@@ -1,10 +1,10 @@
 # lakefold
 
-**Complex data workflows, composed from simple R building blocks.**
+**Open. Write. Read. Add complexity when you need it.**
 
 lakefold is a modular R framework for turning incoming data into validated,
-versioned data products and reproducible metrics. Start with a single ingestion
-call, then compose explicit steps as your workflow grows. Sources, contracts,
+versioned data products and reproducible metrics. Start with three calls and sensible local defaults, then compose explicit
+steps as your workflow grows. Sources, contracts,
 pipelines, products and metrics share a small set of concepts: define, inspect,
 execute and examine the result.
 
@@ -13,7 +13,7 @@ builds and dm models. Ordinary R functions, tibbles and lazy tables remain part
 of the interface. Each component has a clear responsibility, and you can use the
 parts your workflow needs.
 
-> Development version 0.4.0. The registry requires one coordinated writer.
+> Development version 0.5.0. The registry requires one coordinated writer.
 > Local workflows have automated test coverage. See the
 > [validation record](https://github.com/JanWein/lakefold/blob/main/docs/VALIDATION.md)
 > for tested environments and the
@@ -24,49 +24,68 @@ parts your workflow needs.
 
 ```r
 install.packages("remotes")
-remotes::install_github("JanWein/lakefold", build_vignettes = TRUE)
+remotes::install_github("JanWein/lakefold")
 library(lakefold)
 ```
 
-R >= 4.2 and DuckDB >= 1.5.5 are required. Building vignettes requires Pandoc,
-which is normally available with RStudio. Use `build_vignettes = FALSE` if
-Pandoc is unavailable. dbt workflows additionally need
-`install.packages(c("processx", "yaml", "dm"))` and a separate dbt installation.
-The R ingestion workflow works without dbt.
+R >= 4.2 and DuckDB >= 1.5.5 are required. The basic workflow needs no dbt,
+pointblank, DuckLake extension, credentials or external service. Read the
+[online guides](https://janwein.github.io/lakefold/articles/getting-started.html),
+or install with `build_vignettes = TRUE` for local guides (requires Pandoc).
 
-## Start with one ingestion call
-
-This complete example writes to a temporary directory and runs without the
-DuckLake extension.
+## Start in three calls
 
 ```r
 library(lakefold)
-root <- tempfile("lakefold-")
-config <- dl_config(
-  dl_catalog_duckdb(file.path(root, "lake.duckdb")),
-  dl_storage_local(file.path(root, "data")),
-  landing = file.path(root, "landing"), backend = "duckdb"
-)
-lake <- dl_connect(config)
+orders <- data.frame(id = 1:3, amount = c(25, 75, 50))
 
-path <- file.path(root, "orders.csv")
-utils::write.csv(data.frame(order_id = 1:3, amount = c(25, 75, 50)),
-  path, row.names = FALSE)
-source <- dl_source("orders.file", path, reader = utils::read.csv)
-contract <- dl_contract(
-  "orders.contract", "1.0.0", "Analytics", "Order amounts", "One order",
-  c(order_id = "integer", amount = "numeric"), key = "order_id"
-)
+lake <- dl_open("my-lake")
+dl_write(lake, orders)
+dl_read(lake, "orders")
 
-release <- dl_ingest(lake, source, contract, "orders", code_version = "v1")
-dl_tbl(lake, "orders", release$release_id) |> dplyr::collect()
-dl_disconnect(lake)
-unlink(root, recursive = TRUE)
+# Close when finished. dl_open("my-lake") reopens the same data later.
+dl_close(lake)
 ```
 
-Invalid deliveries are recorded and block publication. The previous valid
-release remains available. Identical inputs and definitions can reuse an
-existing release.
+`dl_write(lake, "orders.csv")` also works directly. CSV, TSV and RDS readers
+are built in; a custom `reader` is optional. Data-frame expressions need a name,
+for example `dl_write(lake, data.frame(id = 1:3), "orders")`.
+
+The first successful write records column names and types. Later writes are
+checked against that schema. Missing values are allowed; empty deliveries and
+schema changes block publication and leave the last successful release intact.
+The automatic schema makes no claims about business correctness.
+
+## Add only what you need
+
+| Need | Optional addition |
+|---|---|
+| Business rules or unique keys | `contract = dl_contract(...)` |
+| Responsibility and meaning | `owner`, `description`, `grain`, column metadata |
+| Detailed validation | pointblank rules in a contract |
+| Nonstandard files | `reader = your_reader` |
+| Freshness monitoring | A contract with `max_age_hours` |
+| Large queries | `dl_read(lake, "orders", lazy = TRUE)` |
+| Historical data | `release =` in `dl_read()` |
+| DuckLake storage | `dl_open("another-lake", backend = "ducklake")` |
+| Remote storage or custom layers | `dl_config()` and `dl_connect()` |
+| Explicit transformation steps | `dl_pipeline()` |
+| SQL models, related tables or metrics | dbt, dm and the corresponding modules |
+
+A custom contract needs only its identifier and columns. Add a key when it
+matters:
+
+```r
+contract <- dl_contract("orders.checked",
+  columns = c(id = "integer", amount = "numeric"), key = "id")
+# Pass contract = contract to dl_write() while the lake is open.
+```
+
+Explicit contracts require non-missing declared columns by default. Use
+`required = character()` if missing values are allowed. Once an asset uses an
+explicit contract, supply it on subsequent writes to keep its checks active.
+Definition versions are automatic on the simple path. Custom readers and rules
+run again by default; an explicit `code_version` enables deliberate cache reuse.
 
 ## Grow into an explicit workflow
 
@@ -108,7 +127,7 @@ Each invocation has its own artifacts, exit code and structured results.
 | Task | Interface | Behavior |
 |---|---|---|
 | Define specifications | `dl_config()`, `dl_pipeline()`, `dl_dbt_project()` | Construction does not start data processing |
-| Ingest data | `dl_ingest()`, `dl_ingest_data()`, pipeline steps | Preserve an input snapshot, check its contract and publish a release |
+| Ingest data | `dl_write()`, `dl_ingest()`, `dl_ingest_data()`, pipeline steps | Preserve an input snapshot, check its contract and publish a release |
 | Build and test SQL models | `dl_dbt_build()`, `dl_dbt_test()` | dbt owns its dependency graph and materializations |
 | Transform in R | `dl_step_transform()`, `dl_product()` | Use ordinary R functions and lazy operations where supported |
 | Work with related tables | `dl_model()`, `dl_dbt_model()` | Use native dm objects with explicitly declared keys |
@@ -161,7 +180,7 @@ walks through thresholds, segmentation, blocked deliveries and reports.
 | Inspect test evidence | [Validation record](https://github.com/JanWein/lakefold/blob/main/docs/VALIDATION.md) |
 | Upgrade from dataloom or an earlier version | [Migration](https://github.com/JanWein/lakefold/blob/main/docs/MIGRATION.md) |
 
-In R, use `help(package = "lakefold")`, `?dl_ingest`, `?dl_dbt_build` and
+In R, use `help(package = "lakefold")`, `?dl_open`, `?dl_write` and
 `vignette(package = "lakefold")`. Function help is generated from roxygen2
 comments. GitHub Actions checks the package and publishes the pkgdown website.
 All package documentation is maintained in English.
