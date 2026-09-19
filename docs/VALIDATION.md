@@ -11,10 +11,12 @@ Prüfdatum: 19. September 2026. Ubuntu 24.04, R 4.3.3.
 | `R CMD check --no-manual` | Status OK: 0 Errors, 0 Warnings, 0 Notes |
 | R-Beispiele und alle sechs Vignetten | Im Paketcheck ausgeführt bzw. neu gebaut |
 | `pkgdown::check_pkgdown()` | Keine Probleme, vollständiger Referenzindex |
+| `pkgdown::build_site()` | Vollständige Website mit Referenz und Artikeln gebaut |
 
-38 Tests sind definiert. Der Paketcheck besteht 161 Einzelprüfungen und
-überspringt nur den ausdrücklich opt-in geschalteten CLI-Integrationstest.
-Dieser wurde in den separaten Backend-Läufen ausgeführt.
+38 Tests sind definiert. Der abschließende lokale Paketcheck mit aktiviertem
+dbt-Integrationstest besteht **165 Einzelprüfungen**, ohne Fehler, Warnungen oder
+übersprungene Tests. Ein zusätzlicher Check ohne externe CLI bestand 161
+Einzelprüfungen und übersprang genau den opt-in geschalteten Integrationstest.
 
 Die dbt-Integration verwendet `dbt-core 1.12.5`, `dbt-duckdb 1.10.1` und
 Python-DuckDB 1.5.5. R-DuckDB ist ebenfalls 1.5.5. Telemetrie ist in allen neuen
