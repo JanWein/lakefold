@@ -43,6 +43,7 @@ A connected lake handle. Close it with dl_disconnect().
 Set up or reconnect to a data lake
 }
 \examples{
+\dontshow{if (requireNamespace("duckdb", quietly = TRUE)) withAutoprint(\{ # examplesIf}
 root <- tempfile("lakefold-example-")
 config <- dl_config(
   dl_catalog_duckdb(file.path(root, "lake.db")),
@@ -53,4 +54,5 @@ lake <- dl_connect(config)
 lake
 dl_disconnect(lake)
 unlink(root, recursive = TRUE)
+\dontshow{\}) # examplesIf}
 }

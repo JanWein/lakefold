@@ -16,7 +16,7 @@
 #'   returns `TRUE`; it is an alias for [dl_disconnect()].
 #' @seealso [dl_write()], [dl_read()]
 #' @export
-#' @examples
+#' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("lakefold-")
 #' lake <- dl_open(root)
 #' dl_write(lake, data.frame(id = 1:2), "orders")
@@ -27,6 +27,7 @@
 #' dl_close(lake)
 #' unlink(root, recursive = TRUE)
 dl_open <- function(path = "lakefold", backend = NULL, read_only = FALSE) {
+  need("duckdb")
   flag(read_only, "read_only")
   path <- absolute_path(path)
   if (!is.null(backend)) {
@@ -102,7 +103,8 @@ dl_close <- function(lake) dl_disconnect(lake)
 #' still require [dl_contract_confirm()].
 #'
 #' Data frames are archived as RDS snapshots. File inputs preserve their original
-#' bytes before parsing. Built-in readers support CSV, TSV and RDS. CSV/TSV use
+#' bytes before parsing. CSV, TSV and RDS have native readers; Excel uses
+#' optional readxl. CSV/TSV use
 #' base R type inference; use `reader` for specific parsing requirements. The
 #' first file may be parsed twice to establish and validate its schema. Readers
 #' must be deterministic and must not modify their input.
@@ -138,7 +140,7 @@ dl_close <- function(lake) dl_disconnect(lake)
 #'   [dl_read()] returns the published data; [dl_quality()] explains a failure.
 #' @seealso [dl_open()], [dl_read()], [dl_ingest()], [dl_pipeline()]
 #' @export
-#' @examples
+#' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("lakefold-")
 #' lake <- dl_open(root)
 #' orders <- data.frame(id = 1:3, amount = c(25, 75, 50))
@@ -329,8 +331,10 @@ simple_reader <- function(path) {
     csv = function(path) utils::read.csv(path, check.names = FALSE),
     tsv = function(path) utils::read.delim(path, check.names = FALSE),
     rds = readRDS,
+    xlsx = excel_reader,
+    xls = excel_reader,
     abort(
-      "Supported file types are CSV, TSV and RDS. Supply reader for another format."
+      "Supported file types are CSV, TSV, RDS and Excel. Supply reader for another format."
     )
   )
 }
@@ -367,6 +371,11 @@ published_schema <- function(lake, name) {
   )
   for (definition in definitions$definition) {
     contract <- jdecode(definition)$steps$validate
+    if (isTRUE(contract$automatic_schema) && length(contract$rules)) {
+      abort(
+        "This asset has explicit quality rules. Use its composed product to keep those checks active."
+      )
+    }
     if (!is.null(contract) && !isTRUE(contract$automatic_schema)) {
       abort(
         "This asset uses an explicit contract. Supply contract to keep its checks active."
@@ -421,7 +430,7 @@ published_schema <- function(lake, name) {
 #' @returns A tibble, or a lazy `tbl_sql` when `lazy = TRUE`.
 #' @seealso [dl_write()], [dl_tbl()], [dl_releases()]
 #' @export
-#' @examples
+#' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("lakefold-")
 #' lake <- dl_open(root)
 #' dl_write(lake, data.frame(id = 1:3), "orders")
@@ -435,4 +444,9 @@ dl_read <- function(lake, name, release = NULL, lazy = FALSE) {
   flag(lazy, "lazy")
   data <- dl_tbl(lake, name, release)
   if (lazy) data else dplyr::collect(data)
+}
+
+excel_reader <- function(path) {
+  need("readxl")
+  readxl::read_excel(path)
 }

@@ -6,18 +6,18 @@
 \usage{
 dl_product(
   id,
-  inputs,
-  build,
-  contract,
+  inputs = NULL,
+  build = NULL,
+  contract = NULL,
   version = "1.0.0",
   owner = contract$owner,
   description = contract$description,
-  code_version,
+  code_version = NULL,
   layer = "products"
 )
 }
 \arguments{
-\item{id, version}{Product identity and version.}
+\item{id}{Product identity.}
 
 \item{inputs}{Named character vector of input asset ids.}
 
@@ -26,19 +26,35 @@ table or a data frame. Inputs are pinned to releases before build runs.}
 
 \item{contract}{Product contract.}
 
+\item{version}{Optional immutable definition version. Composed products
+derive a technical version when omitted; explicit versions require a bump
+after a definition change. Derived products default to \verb{1.0.0}.}
+
 \item{owner, description}{Metadata.}
 
-\item{code_version}{Version of all build code and dependencies.}
+\item{code_version}{Version of code, captured values and dependencies.
+Optional for composed products, which do not cache by default. Required
+for derived products and to enable caching in a composed lake workflow.}
 
 \item{layer}{Output schema.}
 }
 \value{
-A product specification.
+A \code{dl_product_spec} for composition, or a legacy \code{dl_product} when
+\code{inputs} and \code{build} are supplied. Both work with \code{\link[=dl_run]{dl_run()}}.
 }
 \description{
-Define a data product
+Start with \code{dl_product("orders")} and compose it with \code{\link[=dl_add_source]{dl_add_source()}} and
+optional \verb{dl_add_*()} verbs. Nothing executes until \code{\link[=dl_run]{dl_run()}} or
+\code{\link[=dl_publish]{dl_publish()}}. A composed product uses ordinary R tables, requires no lake
+connection, and needs no manual version for everyday execution.
+}
+\details{
+The existing \code{inputs} plus \code{build} form remains supported for derived
+products built from pinned lake releases. It retains its lazy-table and
+explicit-version semantics; see \code{\link[=dl_build]{dl_build()}}.
 }
 \examples{
+dl_product("orders") |> dl_add_source(data.frame(id = 1:2))
 contract <- dl_contract(
   "orders", "1.0.0", "Analytics", "Order amounts", "One order",
   c(order_id = "integer", amount = "numeric"), key = "order_id"

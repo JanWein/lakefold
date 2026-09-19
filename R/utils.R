@@ -74,6 +74,11 @@ canonical <- function(x) {
       format = 2L
     ))
   }
+  if (inherits(x, "formula")) {
+    return(list(
+      formula = paste(deparse(x, width.cutoff = 500L), collapse = "\n")
+    ))
+  }
   if (is.list(x)) {
     return(lapply(x, canonical))
   }
@@ -177,4 +182,11 @@ null_counts <- function(data, columns) {
   )
   result <- dplyr::collect(dplyr::summarise(data, !!!expressions))
   setNames(as.numeric(result[1, ]), columns)
+}
+
+flag <- function(value, name) {
+  if (!is.logical(value) || length(value) != 1L || is.na(value)) {
+    abort(paste(name, "must be TRUE or FALSE."), "dl_invalid_argument")
+  }
+  value
 }

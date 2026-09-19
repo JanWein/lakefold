@@ -14,7 +14,7 @@
 #' @returns A tibble with schema, table, run, age and action. Executed drops are
 #'   enclosed in one catalog transaction and eligibility is checked again.
 #' @export
-#' @examples
+#' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("lakefold-")
 #' lake <- dl_connect(dl_config(dl_catalog_duckdb(file.path(root, "lake.db")),
 #'   dl_storage_local(file.path(root, "data")),

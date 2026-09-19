@@ -74,7 +74,7 @@ registry_init <- function(lake) {
 #' @param table Metadata table name.
 #' @return A tibble.
 #' @export
-#' @examples
+#' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("lakefold-example-")
 #' config <- dl_config(
 #'   dl_catalog_duckdb(file.path(root, "lake.db")),
@@ -114,7 +114,7 @@ dl_registry <- function(
 #' @return The definition, invisibly. Reusing a version with changed content
 #'   errors.
 #' @export
-#' @examples
+#' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("lakefold-example-")
 #' config <- dl_config(
 #'   dl_catalog_duckdb(file.path(root, "lake.db")),
@@ -214,7 +214,7 @@ resolve_release <- function(lake, asset, release = NULL) {
 #' @param release Release id; NULL selects latest.
 #' @return A lazy dbplyr table.
 #' @export
-#' @examples
+#' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("lakefold-example-")
 #' config <- dl_config(
 #'   dl_catalog_duckdb(file.path(root, "lake.db")),

@@ -1,4 +1,29 @@
-# API as of 0.6.0
+# API in 0.7.0
+
+## Start with composition
+
+```r
+dl_product("orders") |>
+  dl_add_source(data.frame(id = 1:2, amount = c(10, 20))) |>
+  dl_add_transform(function(data) transform(data, amount = round(amount, 2))) |>
+  dl_add_quality(~ amount >= 0) |>
+  dl_run() |>
+  dl_collect()
+```
+
+Optional additions are `dl_add_contract()`, `dl_add_target()` and
+`dl_add_catalog()`. `dl_publish()` adds a default local target for durable
+storage. `dl_validate()` checks definitions or evaluates data against contracts;
+`dl_plan()`, `dl_inspect()` and `dl_explain()` describe intent without execution.
+The reference index separates this small grammar from extension interfaces.
+
+`dl_source_database()` describes DBI tables/queries; `dl_sql()` describes an
+optional DuckDB SQL transform. `dl_target_lake()` isolates lake-specific options.
+S3 source, transform, quality, target and catalog interfaces are documented in
+the extension guide. The existing APIs below remain supported.
+
+## Existing lake and specialist operations
+
 
 New to the package? Read [Why lakefold?](WHY_LAKEFOLD.md), then follow the
 [monthly reporting walkthrough](GETTING_STARTED.md) before browsing all functions.

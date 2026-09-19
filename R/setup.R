@@ -76,7 +76,7 @@ dl_storage_s3 <- function(
 #' @param config A configuration from a previously connected lake.
 #' @return A connected lake handle. Close it with dl_disconnect().
 #' @export
-#' @examples
+#' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("lakefold-example-")
 #' config <- dl_config(
 #'   dl_catalog_duckdb(file.path(root, "lake.db")),
@@ -161,6 +161,10 @@ dl_config <- function(
 #' @rdname dl_setup
 #' @export
 dl_connect <- function(config, read_only = config$read_only %||% FALSE) {
+  need("duckdb")
+  if (!inherits(config, "dl_config")) {
+    abort("Use dl_config() to describe this lake.")
+  }
   flag(read_only, "read_only")
   config$read_only <- read_only
   if (
@@ -312,7 +316,7 @@ dl_connect <- function(config, read_only = config$read_only %||% FALSE) {
 #' @param lake Connected lake.
 #' @return Invisibly TRUE.
 #' @export
-#' @examples
+#' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("lakefold-example-")
 #' config <- dl_config(
 #'   dl_catalog_duckdb(file.path(root, "lake.db")),

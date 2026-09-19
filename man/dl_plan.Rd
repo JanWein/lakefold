@@ -7,7 +7,7 @@
 dl_plan(pipeline)
 }
 \arguments{
-\item{pipeline}{A pipeline specification.}
+\item{pipeline}{A pipeline or composed product specification.}
 }
 \value{
 A tibble with position, step, id and target columns. The \code{complete}

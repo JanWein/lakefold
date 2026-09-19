@@ -25,6 +25,7 @@ initial save and an identical retry. Retries preserve original timestamps.
 Freeze metric results and input versions for a report
 }
 \examples{
+\dontshow{if (requireNamespace("duckdb", quietly = TRUE)) withAutoprint(\{ # examplesIf}
 root <- tempfile("lakefold-example-")
 config <- dl_config(
   dl_catalog_duckdb(file.path(root, "lake.db")),
@@ -50,4 +51,5 @@ values <- dl_measure(lake, metric)
 dl_report_release(lake, "report.v1", list(total = values), code_version = "v1")
 dl_disconnect(lake)
 unlink(root, recursive = TRUE)
+\dontshow{\}) # examplesIf}
 }

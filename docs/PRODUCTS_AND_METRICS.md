@@ -1,5 +1,9 @@
 # Products, relational models, metrics and reports
 
+For the new product-first interface, start with the [composition guide](https://janwein.github.io/lakefold/articles/composing-products.html).
+Lake examples require optional DuckDB >= 1.5.5; existing workflows remain supported.
+
+
 This is an advanced reference with illustrative snippets that assume your own
 connected lake, contracts and registered assets. For a complete runnable example,
 start with the [monthly reporting walkthrough](https://janwein.github.io/lakefold/articles/getting-started.html),

@@ -21,7 +21,7 @@
 #' @returns A tibble with status `pending`, `received` or `missing`. Once due,
 #'   the result is also persisted as an operational event.
 #' @export
-#' @examples
+#' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("lakefold-")
 #' lake <- dl_connect(dl_config(dl_catalog_duckdb(file.path(root, "lake.db")),
 #'   dl_storage_local(file.path(root, "data")),

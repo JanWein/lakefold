@@ -420,8 +420,9 @@ publish_candidate <- function(
 #'   [dl_write()] uses this policy so writing older data makes it current again.
 #'   Set `FALSE` to re-evaluate callbacks with external or changing state.
 #' @return A run result with run_id, status, release_id and quality results.
+#' @param ... Execution options forwarded to the selected workflow method.
 #' @export
-#' @examples
+#' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("lakefold-example-")
 #' config <- dl_config(
 #'   dl_catalog_duckdb(file.path(root, "lake.db")),
@@ -445,14 +446,20 @@ publish_candidate <- function(
 #' dl_run(pipeline, lake)
 #' dl_disconnect(lake)
 #' unlink(root, recursive = TRUE)
-dl_run <- function(
+dl_run <- function(pipeline, lake = NULL, ...) UseMethod("dl_run")
+
+#' @rdname dl_run
+#' @export
+dl_run.dl_pipeline <- function(
   pipeline,
   lake = NULL,
   business_date = NA_character_,
   notify = NULL,
   stop_on_failure = TRUE,
-  cache = TRUE
+  cache = TRUE,
+  ...
 ) {
+  rlang::check_dots_empty()
   if (is.character(cache)) {
     cache <- match.arg(cache, "current")
   } else {
@@ -475,7 +482,9 @@ dl_run <- function(
   input_contract <- pipeline$steps$precheck
   pub <- pipeline$steps$publish
   dl_register(lake, src)
-  dl_register(lake, contract)
+  if (!isTRUE(pipeline$infer_contract)) {
+    dl_register(lake, contract)
+  }
   if (!is.null(input_contract)) {
     dl_register(lake, input_contract)
   }
@@ -608,7 +617,22 @@ dl_run <- function(
           }
         }
         candidate <- compose_candidate(lake, transformed, pub, run)
-        quality <- dl_validate(candidate$data, contract)
+        if (isTRUE(pipeline$infer_contract)) {
+          resolver <- attr(pipeline, "dl_resolve_contract")
+          if (!is.function(resolver)) {
+            abort(
+              "Rebuild this product from its project code before executing it."
+            )
+          }
+          contract <- resolver(candidate$data)
+          dl_register(lake, contract)
+        }
+        quality_data <- if (!is.null(pipeline$composition)) {
+          dl_collect(candidate$data)
+        } else {
+          candidate$data
+        }
+        quality <- dl_validate(quality_data, contract)
         persist_quality(lake, run, contract, quality)
         quality <- dplyr::bind_rows(input_quality, quality)
         if (!quality_ok(quality)) {
@@ -706,7 +730,7 @@ print.dl_run_result <- function(x, ...) {
 #' @param older_than_hours Age after which a running job may need investigation.
 #' @return Runs still marked running. Never auto-cancels a possibly live writer.
 #' @export
-#' @examples
+#' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("lakefold-example-")
 #' config <- dl_config(
 #'   dl_catalog_duckdb(file.path(root, "lake.db")),
@@ -729,4 +753,9 @@ dl_interrupted <- function(lake, older_than_hours = 1) {
       as.numeric(difftime(Sys.time(), started, units = "hours")) >
         older_than_hours,
   ]
+}
+
+#' @export
+dl_run.default <- function(pipeline, lake = NULL, ...) {
+  dl_execute(pipeline, lake, ...)
 }

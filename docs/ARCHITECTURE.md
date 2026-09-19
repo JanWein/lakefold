@@ -1,63 +1,129 @@
-# Architecture as of 0.6.0
+# Architecture in 0.7.0
 
-lakefold organizes data workflows around definitions, execution and inspection.
-Users can start with `dl_open()`, `dl_write()` and `dl_read()`, then compose steps
-when their workflow needs them. Ordinary R functions and standard data objects
-connect the modules.
+## Why this architecture
+
+lakefold combines a tidyverse-inspired external experience with structural
+ideas from tidymodels: normalization, reusable specifications, composition,
+validation, planning and interchangeable execution. It does not copy a modeling
+API. Users see ordinary R objects and a few verbs; extension developers see
+explicit interfaces.
+
+The product definition describes **what** to read, prepare, check and publish.
+Adapters determine **how** those operations use R, DBI, DuckDB, DuckLake,
+pointblank, dbt or another existing tool. A product owns no platform services.
+
+![Simple public verbs, structured preparation and interchangeable execution.](../vignettes/figures/composition-architecture.svg)
+
+## Public grammar and normalization
+
+| Task | Public function | Internal representation |
+|---|---|---|
+| Name the output | `dl_product("orders")` | Small `dl_product_spec` list |
+| Supply input | `dl_add_source()` | Ordinary frame/function, file source or adapter |
+| Prepare data | `dl_add_transform()` | Ordinary function; formulas become functions; explicit SQL adapter when needed |
+| Describe expectations | `dl_add_contract()` | Existing `dl_contract`; named types or prototypes are normalized |
+| Add checks | `dl_add_quality()` | Existing rules; formulas/functions become native rules |
+| Choose storage | `dl_add_target()` | Folder/config/connection becomes a lake target; custom target passes through |
+| Deliver metadata | `dl_add_catalog()` | Function or catalog adapter |
+| Check intent | `dl_validate()` | Validated definition; no acquisition |
+| Inspect the plan | `dl_plan()`, `dl_inspect()`, `dl_explain()` | Tibble, descriptive list, plain-language text |
+| Execute | `dl_run()` | Existing S3 execution dispatch |
+| Publish immediately | `dl_publish()` | Product with an explicit or default lake target |
+| Get the table | `dl_collect()` | Ordinary tibble, pinned to its release for lake results |
+
+There is no class for an ordinary R transformation, scheduler or global plugin
+registry. Only components whose configuration has meaning become objects.
+Contracts remain independently usable through `dl_validate(data, contract)`.
+The latter returns evidence rather than replacing a data frame with a wrapper.
 
 ## Execution paths
 
-R pipelines and products preserve original inputs, validate candidates and
-publish immutable releases. dbt projects build SQL models and run tests using
-dbt's own semantics. Both begin with specifications and support `dl_execute()`.
+The native executor reads a frame, applies ordered transformations, normalizes
+or infers a contract, evaluates the quality gate, then calls the target writer.
+With no target it returns data and evidence in memory. A custom writer receives
+only checked data and owns its storage guarantees.
 
-`dl_dbt_status()` and `dl_dbt_lineage()` read dbt artifacts. `dl_dbt_model()` opens
-current relations as dm tables. Users declare primary and foreign keys because
-a SQL dependency graph cannot establish relational constraints.
-`dl_dbt_publish()` copies a currently visible relation into a new candidate and
-publishes it after contract validation. An earlier build's invocation ID alone
-does not establish the current contents of a relation.
+The lake executor compiles the same product to the existing ingestion pipeline.
+It archives original files, or snapshots received frames, materializes raw data,
+applies the shared transformation adapters, composes complete candidate state,
+validates it and commits its release. Automatic output schemas are resolved
+after transformations. The initial schema remains a persistent baseline, and
+existing contracts or added rules cannot silently disappear through a later
+unguarded write.
 
-## Minimal local path
+Composed transforms receive ordinary frames in both execution paths. Existing
+`dl_pipeline()` and derived `dl_product(inputs, build, contract, ...)` calls
+retain their lazy dbplyr semantics. This compatibility boundary avoids changing
+established memory use and historical identities.
 
-`dl_open()` remembers the backend and folder layout. `dl_write()` derives asset
-names, structural schemas and technical versions before using the same ingestion
-and final publication gate. `dl_read()` collects by default or returns a lazy
-table on request. The first successfully published automatic schema is reused;
-failed first deliveries do not establish a permanent baseline.
+`dl_run(dl_dbt_project(...))` delegates to dbt's existing CLI lifecycle. dbt owns
+its inputs, graph, connections and mutable model materializations.
+`dl_dbt_publish()` snapshots a currently visible successful relation through the
+shared lake publication gate. A historical invocation ID does not establish the
+current bytes of a mutable dbt relation.
 
-Custom contracts remain explicit on later writes. Custom readers and rules
-are re-evaluated unless the caller supplies a code version for reuse. The write
-facade only reuses the current release; the job runner retains historical retry
-semantics. Neither path changes old published tables.
+## Component extension interfaces
 
-## Definitions, execution and inspection
+`dl_read_source()`, `dl_execute_transform()`, `dl_run_quality()`,
+`dl_write_target()` and `dl_publish_metadata()` are S3 generics. Each component
+also implements structural `dl_check_component()` preflight; `dl_inspect()` can
+supply a safe description. A storage engine may specialize `dl_execute_target()`
+when the default executor cannot express its transaction/resource semantics.
 
-Definitions are small classed lists: `dl_contract`, `dl_source`, `dl_pipeline`,
-`dl_product` and `dl_metric`. Callbacks are ordinary R functions. Tables remain
-tibbles or dbplyr lazy tables, and relational models remain dm objects.
+Extension methods register through their own package NAMESPACE. A user does
+not need to modify core branching or install a central plugin registry.
+Malformed quality results fail closed. There is no assumption that a custom
+backend supports immutable releases, partition replacement or multiple writers.
+The extension guide supplies a complete adapter and its guarantees.
 
-A pipeline stores connection configuration and resolves it at execution time.
-The registry lives in the separate `lake._dl` schema; lakefold does not modify
-DuckLake's internal metadata tables.
+## Dependencies and ownership
+
+The core imports DBI, dbplyr, dplyr, tibble, rlang, digest and jsonlite. DuckDB,
+pointblank, readxl, processx, dm, Shiny, YAML and S3 clients are optional.
+Core table validation and native products do not require DuckDB. Lake storage
+and `dl_sql()` check for it at the relevant integration boundary.
+
+A DBI source accepts an open connection or factory. Only factory-owned
+connections are closed by the source. A lake target closes only connections it
+opens. Inspectable descriptors omit live connections and closure environments;
+use versioned R project code for executable definitions and dependency locks.
+
+## Lifecycle and metadata
+
+Definitions have a lightweight defined/validated state. A run records the
+validated and planned transition, start and finish, then completed, published,
+cached, blocked or error. Preflight errors raise immediately without acquisition.
+Run results contain an ID, status, timestamps, source/output descriptions,
+quality, schema, row count, lineage and locally inspectable exceptions.
+
+Native evidence is in memory. Lake ingestion/release evidence is in the existing
+registry. Preflight and source-factory failures before ingestion starts remain
+local. Catalog delivery happens after data publication; failure adds a warning
+and cannot reverse a committed release. Catalog upserts should use stable
+product/release identity for idempotence.
+
+Composed products do not cache by default. Explicit caching requires a
+`code_version` covering captured values, imported functions and dependencies.
+Explicit product and contract versions remain immutable once registered.
+
+## Package boundaries
 
 | Module | Responsibility |
 |---|---|
-| `simple.R` | Local defaults, structural schema baselines and open/write/read entry points |
-| `workflow.R` | Object-first execution, plans, transformations and compact print methods |
-| `setup.R` | Local/S3 storage and DuckDB/PostgreSQL catalog configuration |
-| `sources.R` | Unchanged landing, SHA-256 and optional S3 originals |
-| `contracts.R`, `contract-tools.R` | Structure, keys, R rules, pointblank gates and contract review |
-| `pipeline.R`, `input-gate.R`, `ingest-data.R` | Input checks, candidates, retries, publication and data-frame ingestion |
-| `products.R` | Products and dm models based on pinned releases |
-| `metrics.R` | Approved metrics and report manifests |
-| `dbt.R`, `dbt-init.R`, `dbt-publish.R` | dbt configuration, CLI execution, artifacts and explicit snapshot publication |
-| `registry.R` | Versioned definitions, releases and additive metadata migration |
-| `diagnostics.R`, `quality-reports.R` | Shared inspection and quality report exports |
-| `compare.R`, `recovery.R` | Database-side release differences and explicit abandoned-run recovery |
-| `delivery-monitor.R`, `maintenance.R` | Expected deliveries and cleanup of unpublished failed-run tables |
-| `catalog.R` | Freshness information and a read-only Shiny app |
-| `adapters.R` | Explicit YAML exports and capability declarations |
+| `composition.R` | Product additions, normalization, preflight and inspection |
+| `components.R` | Source/transform interfaces; DBI, file and SQL adapters |
+| `execution.R` | Native execution, result evidence, target writer and catalog interfaces |
+| `target-lake.R` | Compile composed products into governed lake execution |
+| `quality-engine.R` | Quality dispatch and validated engine results |
+| `contracts.R`, `contract-tools.R` | Existing contracts, schema/key checks and contract review |
+| `pipeline.R`, `sources.R`, `registry.R` | Existing landing, candidates, atomic publication and durable evidence |
+| `simple.R`, `ingest.R`, `ingest-data.R` | Existing immediate lake interfaces and local defaults |
+| `products.R`, `metrics.R` | Pinned derived products, relational models, metrics and report manifests |
+| `dbt*.R` | Existing dbt CLI, artifacts and snapshot publication |
+| Inspection/operations modules | Quality reports, catalog UI, history, monitoring, recovery and cleanup |
+
+These interfaces permit future adapter packages without splitting this package
+prematurely. The review and migration guide explain the preserved boundaries.
 
 ## Publication transaction
 

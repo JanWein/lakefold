@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="420" viewBox="0 0 820 420" role="img" aria-labelledby="title desc">
+<title id="title">Simple product API, interchangeable execution</title><desc id="desc">Users name a product, add ordinary inputs, then run or publish. Internally normalization and validation prepare a plan. Native R, a governed lake or a custom adapter executes it and returns data plus evidence.</desc>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#36546b"/></marker></defs>
+<rect width="820" height="420" fill="#f6f8fa" rx="12"/>
+<g font-family="sans-serif" fill="#173247">
+<text x="30" y="36" font-size="21" font-weight="bold">One small grammar. Several ways to execute.</text>
+<rect x="30" y="58" width="300" height="118" rx="9" fill="#e4f3ee" stroke="#43806b"/>
+<text x="49" y="88" font-size="17" font-weight="bold">What the user writes</text>
+<text x="49" y="119" font-size="15">Name a product. Add your data.</text>
+<text x="49" y="147" font-size="15">Run, collect or publish.</text>
+<rect x="414" y="58" width="375" height="118" rx="9" fill="#e5eef8" stroke="#4e7498"/>
+<text x="433" y="88" font-size="17" font-weight="bold">What the framework prepares</text>
+<text x="433" y="119" font-size="15">Normalize components. Validate intent.</text>
+<text x="433" y="147" font-size="15">Plan execution through adapters.</text>
+<path d="M333 119H405" stroke="#36546b" stroke-width="2" marker-end="url(#arrow)"/>
+<path d="M601 178V210H172 M601 210H647" fill="none" stroke="#36546b" stroke-width="2"/><path d="M172 210V231" stroke="#36546b" stroke-width="2" marker-end="url(#arrow)"/><path d="M412 210V231" stroke="#36546b" stroke-width="2" marker-end="url(#arrow)"/><path d="M647 210V231" stroke="#36546b" stroke-width="2" marker-end="url(#arrow)"/>
+<g fill="#fff" stroke="#8796a2"><rect x="65" y="237" width="215" height="91" rx="7"/><rect x="306" y="237" width="215" height="91" rx="7"/><rect x="546" y="237" width="215" height="91" rx="7"/></g>
+<text x="87" y="269" font-size="17" font-weight="bold">Native R</text><text x="87" y="298" font-size="14">Tables and run evidence</text>
+<text x="328" y="269" font-size="17" font-weight="bold">Governed lake</text><text x="328" y="298" font-size="14">Archives and release history</text>
+<text x="568" y="269" font-size="17" font-weight="bold">Custom adapter</text><text x="568" y="298" font-size="14">Use an existing tool</text>
+<text x="66" y="378" font-size="16">Source, transform and quality interfaces stay consistent across destinations.</text>
+</g></svg>

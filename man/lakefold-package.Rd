@@ -8,7 +8,8 @@
 \description{
 Keep incoming files, check proposed tables and publish data that reports can
 read consistently. Corrections create new releases while earlier versions
-remain available. Start locally with \code{\link[=dl_open]{dl_open()}}, \code{\link[=dl_write]{dl_write()}} and \code{\link[=dl_read]{dl_read()}}.
+remain available. Start with \code{\link[=dl_product]{dl_product()}}, \code{\link[=dl_add_source]{dl_add_source()}} and \code{\link[=dl_run]{dl_run()}}.
+Native products need no database. Add \code{\link[=dl_publish]{dl_publish()}} for durable lake storage.
 Add business checks, reusable tables and recorded metrics when needed.
 }
 \section{Why use lakefold?}{
@@ -33,6 +34,8 @@ them. See \code{vignette("design-review")} for composition and extension boundar
 \section{Start here}{
 
 \itemize{
+\item \code{vignette("composing-products")}: simple workflows and the mental model.
+\item \code{vignette("extending-lakefold")}: implement S3 component adapters.
 \item \code{vignette("why-lakefold")}: purpose, benefits and concepts in plain language.
 \item \code{vignette("getting-started")}: deliveries, corrections, checks and reports, step by step.
 \item \code{vignette("dbt-workflows")}: dbt setup, builds, diagnostics and dm models.
@@ -43,9 +46,10 @@ them. See \code{vignette("design-review")} for composition and extension boundar
 }
 }
 
-\section{Two execution paths}{
+\section{Execution paths}{
 
-\code{\link[=dl_ingest]{dl_ingest()}} and \code{\link[=dl_execute]{dl_execute()}} publish immutable lakefold releases after
+\code{\link[=dl_run]{dl_run()}} executes composed products in memory or through their target.
+\code{\link[=dl_ingest]{dl_ingest()}} and lake targets publish immutable lakefold releases after
 contract validation. \code{\link[=dl_dbt_build]{dl_dbt_build()}} runs dbt models and tests, which have
 dbt's own materialization semantics. A successful dbt build does not create
 a lakefold release automatically. \code{\link[=dl_model]{dl_model()}} opens governed releases;
@@ -57,7 +61,8 @@ provide common inspection functions across both execution paths.
 
 \section{Resource ownership}{
 
-Specifications do not contain live database connections. Close connections
+Core configuration is connection-free. DBI source and lake target adapters
+may retain caller-owned connections; factories defer opening. Close connections
 with \code{\link[=dl_close]{dl_close()}} or \code{\link[=dl_disconnect]{dl_disconnect()}}. Close local catalog connections before invoking dbt
 in another process. Lazy tables require their originating connection to
 remain open. The lakefold registry requires a single writer.

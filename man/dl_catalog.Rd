@@ -27,6 +27,7 @@ A Shiny app object (when launch = FALSE).
 Start a read-only data catalog
 }
 \examples{
+\dontshow{if (requireNamespace("duckdb", quietly = TRUE)) withAutoprint(\{ # examplesIf}
 root <- tempfile("lakefold-example-")
 config <- dl_config(
   dl_catalog_duckdb(file.path(root, "lake.db")),
@@ -38,4 +39,5 @@ app <- dl_catalog(lake, launch = FALSE)
 class(app)
 dl_disconnect(lake)
 unlink(root, recursive = TRUE)
+\dontshow{\}) # examplesIf}
 }

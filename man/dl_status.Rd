@@ -20,6 +20,7 @@ individual nodes passed. No raw stdout or stderr is included.
 Inspect execution status across R and dbt workflows
 }
 \examples{
+\dontshow{if (requireNamespace("duckdb", quietly = TRUE)) withAutoprint(\{ # examplesIf}
 root <- tempfile("lakefold-")
 lake <- dl_connect(dl_config(dl_catalog_duckdb(file.path(root, "lake.db")),
   dl_storage_local(file.path(root, "data")),
@@ -27,4 +28,5 @@ lake <- dl_connect(dl_config(dl_catalog_duckdb(file.path(root, "lake.db")),
 dl_status(lake)
 dl_disconnect(lake)
 unlink(root, recursive = TRUE)
+\dontshow{\}) # examplesIf}
 }

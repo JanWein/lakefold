@@ -49,3 +49,11 @@ Run both `DATALOOM_TEST_BACKEND=duckdb` and `ducklake`. Keep optional external
 services out of ordinary examples; explain explicit integration requirements.
 The generated docs use runnable offline examples, and CLI-only chunks are
 clearly labelled. Full checks build vignettes instead of suppressing them.
+
+The core-only CI job installs hard dependencies and runs `scripts/check-core.R`
+without DuckDB. New infrastructure must remain optional and fail clearly before
+acquisition when required but unavailable. Add S3 substitution tests for new
+component interfaces; a custom adapter must not need private core functions.
+Keep `inst/examples/composing_products.R` and `custom_target.R` aligned with
+their executable vignettes. Inspect metadata output for unintended input rows
+and runtime credentials.

@@ -2,20 +2,26 @@
 % Please edit documentation in R/contracts.R
 \name{dl_validate}
 \alias{dl_validate}
-\title{Validate a candidate against a contract}
+\alias{dl_validate.default}
+\title{Validate data or check a workflow definition}
 \usage{
-dl_validate(
+dl_validate(data, contract = NULL, ...)
+
+\method{dl_validate}{default}(
   data,
   contract,
   stage = "candidate",
   keep_agents = FALSE,
-  keep_errors = FALSE
+  keep_errors = FALSE,
+  ...
 )
 }
 \arguments{
-\item{data}{A data frame or lazy table.}
+\item{data}{A data frame, lazy table, composed product or pipeline.}
 
 \item{contract}{Contract definition.}
+
+\item{...}{Arguments forwarded to a validation method.}
 
 \item{stage}{Label stored with each check, such as \code{"ingest"} or
 \code{"candidate"}.}
@@ -28,11 +34,13 @@ attribute. They can contain private data and are never persisted in the
 registry. Inspect with \code{\link[=dl_quality_errors]{dl_quality_errors()}}. Defaults to \code{FALSE}.}
 }
 \value{
-A tibble with one row per check. Only passed and warning permit
-publication.
+For data, a tibble with one row per check; only passed and warning
+permit publication. For a workflow, the validated definition.
 }
 \description{
-Validate a candidate against a contract
+With a table and contract, returns quality evidence. With a composed product
+or pipeline alone, checks its configuration and returns the definition.
+Preflight does not evaluate source callbacks or prove data quality.
 }
 \examples{
 contract <- dl_contract(

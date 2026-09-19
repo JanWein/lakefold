@@ -30,6 +30,7 @@ Dropping a DuckLake table does not immediately reclaim physical object-store
 files. This function does not expire DuckLake snapshots or run file cleanup.
 }
 \examples{
+\dontshow{if (requireNamespace("duckdb", quietly = TRUE)) withAutoprint(\{ # examplesIf}
 root <- tempfile("lakefold-")
 lake <- dl_connect(dl_config(dl_catalog_duckdb(file.path(root, "lake.db")),
   dl_storage_local(file.path(root, "data")),
@@ -37,4 +38,5 @@ lake <- dl_connect(dl_config(dl_catalog_duckdb(file.path(root, "lake.db")),
 dl_cleanup(lake)
 dl_disconnect(lake)
 unlink(root, recursive = TRUE)
+\dontshow{\}) # examplesIf}
 }

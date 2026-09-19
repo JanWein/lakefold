@@ -1,4 +1,20 @@
-# Feature coverage in 0.6.0
+# Feature coverage in 0.7.0
+
+## Composable framework added in 0.7.0
+
+- Native in-memory products with no required DuckDB installation.
+- Product-first verbs with table, path, function, formula and prototype inputs.
+- DBI table/query sources, factory ownership and optional DuckDB SQL transforms.
+- Structural preflight, concise printing, plans and plain-language explanation.
+- Interchangeable S3 source, transform, quality, target and catalog adapters.
+- Governed lake compilation retaining original archives and publication gates.
+- Structured run metadata and explicit separation of catalog delivery failures.
+- An executed extension example and tests substituting independently registered
+  components without core edits.
+
+See the composing-products and extending-lakefold guides. Custom targets do not
+inherit lake history or transaction guarantees. The simple composition path
+uses R memory; existing lazy workflows remain available.
 
 ## Component responsibilities
 

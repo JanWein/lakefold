@@ -1,5 +1,9 @@
 # Why lakefold? From monthly files to reliable reports
 
+For the new product-first interface, start with the [composition guide](https://janwein.github.io/lakefold/articles/composing-products.html).
+Lake examples require optional DuckDB >= 1.5.5; existing workflows remain supported.
+
+
 ## Start with the reporting problem
 
 Every month, teams send you spreadsheets containing their numbers. You read

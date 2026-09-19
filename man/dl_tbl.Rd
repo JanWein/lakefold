@@ -20,6 +20,7 @@ A lazy dbplyr table.
 Query a published immutable data release
 }
 \examples{
+\dontshow{if (requireNamespace("duckdb", quietly = TRUE)) withAutoprint(\{ # examplesIf}
 root <- tempfile("lakefold-example-")
 config <- dl_config(
   dl_catalog_duckdb(file.path(root, "lake.db")),
@@ -39,4 +40,5 @@ release <- dl_ingest(lake, source, contract, "orders", code_version = "v1")
 dl_tbl(lake, "orders", release$release_id) |> dplyr::collect()
 dl_disconnect(lake)
 unlink(root, recursive = TRUE)
+\dontshow{\}) # examplesIf}
 }
