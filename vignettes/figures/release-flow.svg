@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="940" height="620" viewBox="0 0 940 620" role="img" aria-labelledby="title desc">
+<title id="title">From an incoming delivery to a reportable release</title>
+<desc id="desc">Archive the delivery, then check a candidate table. An allowed candidate becomes a new release. A blocked candidate publishes nothing and leaves any previous release available. Reports choose the latest successful release or pin a historical release.</desc>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#536779"/></marker></defs>
+<rect width="940" height="620" rx="18" fill="#f4f7fa"/>
+<g fill="none" stroke="#536779" stroke-width="2.5" marker-end="url(#arrow)">
+<path d="M470 100 V135"/><path d="M470 205 V240"/>
+<path d="M470 310 V336 H240 V374"/><path d="M470 336 H700 V374"/>
+<path d="M240 462 V490 H385 V526"/><path d="M700 462 V490 H555 V526"/>
+</g>
+<g font-family="Arial, Helvetica, sans-serif" text-anchor="middle" fill="#19324a">
+<rect x="270" y="25" width="400" height="75" rx="12" fill="#ffffff" stroke="#a6b8c8" stroke-width="2"/>
+<text x="470" y="57" font-size="22" font-weight="700">Receive a delivery</text><text x="470" y="83" font-size="18">Excel, CSV or data already in R</text>
+<rect x="270" y="135" width="400" height="70" rx="12" fill="#ffffff" stroke="#a6b8c8" stroke-width="2"/>
+<text x="470" y="164" font-size="22" font-weight="700">Archive what arrived</text><text x="470" y="190" font-size="18">Keep the input used by this run</text>
+<rect x="270" y="240" width="400" height="70" rx="12" fill="#e5f2f6" stroke="#21758c" stroke-width="2"/>
+<text x="470" y="269" font-size="22" font-weight="700">Check a candidate table</text><text x="470" y="295" font-size="18">Schema + any business rules you chose</text>
+<text x="240" y="328" font-size="17" font-weight="700">Gate allows publication</text><text x="700" y="328" font-size="17" font-weight="700">Gate blocks publication</text>
+<rect x="50" y="374" width="380" height="88" rx="12" fill="#edf7f1" stroke="#387a53" stroke-width="2"/>
+<text x="240" y="408" font-size="22" font-weight="700">Create a new release</text><text x="240" y="438" font-size="18">Earlier releases remain available</text>
+<rect x="510" y="374" width="380" height="88" rx="12" fill="#fff1ed" stroke="#a8563c" stroke-width="2"/>
+<text x="700" y="408" font-size="22" font-weight="700">Publish nothing new</text><text x="700" y="438" font-size="18">Keep any previous successful release</text>
+<rect x="175" y="526" width="590" height="70" rx="12" fill="#19324a"/>
+<text x="470" y="555" font-size="22" font-weight="700" fill="#ffffff">Read the latest successful release</text><text x="470" y="581" font-size="18" fill="#ffffff">or pin a historical release for a report</text>
+</g></svg>

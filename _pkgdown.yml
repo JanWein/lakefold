@@ -2,7 +2,7 @@ url: https://janwein.github.io/lakefold/
 destination: site
 home:
   title: lakefold
-  description: Compose complex data workflows from simple, reusable R building blocks.
+  description: Turn recurring files into checked, versioned data for reliable reports.
 template:
   bootstrap: 5
 reference:
@@ -23,6 +23,9 @@ reference:
   - title: Metadata and catalog
     contents: [dl_register, dl_registry, dl_status, dl_releases, dl_lineage, dl_freshness, dl_check_delivery, dl_cleanup, dl_catalog_export, dl_catalog]
 articles:
-  - title: Guides
-    navbar: ~
-    contents: [getting-started, dbt-workflows, quality-gates, workflow-design, quality-history, products-metrics, design-review]
+  - title: Start here
+    navbar: Start here
+    contents: [why-lakefold, getting-started]
+  - title: Go further
+    navbar: Guides
+    contents: [quality-history, quality-gates, workflow-design, products-metrics, dbt-workflows, design-review]
