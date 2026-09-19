@@ -1,0 +1,177 @@
+---
+title: "Extend lakefold with ordinary S3 methods"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Extend lakefold with ordinary S3 methods}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+library(lakefold)
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+Start with a function. A source callback or transformation often needs no class.
+Use a specification when you need reusable configuration, inspection, validation
+or several interchangeable implementations. You do not need a plugin registry
+or access to a private lakefold function.
+
+## The extension contract
+
+| Interface | Receives | Returns | Responsibility |
+|---|---|---|---|
+| `dl_read_source(source, ...)` | Source specification | data.frame/tibble | Acquire data; close only owned resources |
+| `dl_execute_transform(transform, data, ...)` | Transformation and data frame | data.frame/tibble | Transform using the chosen engine |
+| `dl_run_quality(rule, data, ...)` | Rule and ordinary or lazy table | Standard quality tibble | Evaluate checks; preserve failures |
+| `dl_write_target(target, data, context, ...)` | Checked frame and run context | Output descriptor list | Write successfully or raise an error |
+| `dl_execute_target(target, product, ...)` | Validated product | `dl_run_result` | Optional specialized lifecycle/transaction execution |
+| `dl_publish_metadata(catalog, metadata, ...)` | Catalog and descriptive metadata | Ignored | Deliver metadata after successful execution |
+| `dl_check_component(x, ...)` | Component specification | `x`, invisibly | Check configuration without execution |
+| `dl_inspect(x, ...)` | Component | Safe descriptive list with `type` | Describe configuration, omit connections and rows |
+
+Most storage extensions implement only a writer and preflight. The default
+executor already handles sources, transformations, contracts, quality, errors
+and run evidence. A specialized executor is justified when the backend needs
+different transaction or resource semantics, as the lake compiler does.
+
+Register methods in your extension package with roxygen2 `@export` directives
+and import the relevant generics, for example `@importFrom lakefold
+dl_write_target`. The methods appear as `S3method(...)` entries in NAMESPACE.
+All component methods accept `...` so the interface can evolve. Reject options
+that your implementation does not support.
+
+## A complete external file target
+
+This example creates a new directory containing `data.rds`. It never reuses an existing destination. It
+provides checked publication, but it does not implement lakefold's release
+history, registry, partition replacement or transaction semantics.
+
+```{r target}
+rds_target <- function(path) {
+  structure(list(path = path), class = "example_rds_target")
+}
+
+dl_check_component.example_rds_target <- function(x, ...) {
+  if (!is.character(x$path) || length(x$path) != 1L ||
+      is.na(x$path) || !nzchar(x$path)) {
+    stop("The RDS target needs one non-empty path.")
+  }
+  if (!dir.exists(dirname(x$path))) stop("Create the destination directory first.")
+  if (file.exists(x$path)) stop("Choose a new directory; this adapter never replaces data.")
+  invisible(x)
+}
+
+dl_inspect.example_rds_target <- function(x, ...) {
+  list(type = "new RDS directory", path = x$path)
+}
+
+dl_write_target.example_rds_target <- function(target, data, context, ...) {
+  # Recheck because availability can change after preflight.
+  dl_check_component(target)
+  if (!dir.create(target$path, showWarnings = FALSE)) {
+    stop("The destination could not be created exclusively.")
+  }
+  complete <- FALSE
+  on.exit(if (!complete) unlink(target$path, recursive = TRUE))
+  output <- file.path(target$path, "data.rds")
+  saveRDS(data, output)
+  complete <- TRUE
+  list(path = output, product = context$product, rows = nrow(data))
+}
+```
+
+Creating a new directory establishes exclusive ownership of this output path.
+This example does not promise atomic visibility of partial writes to other
+readers. Use an adapter with staging and a storage-native commit protocol when
+that guarantee matters.
+
+The following registration is only needed because this article defines methods
+interactively. An installed extension package uses its NAMESPACE instead.
+
+```{r register}
+registerS3method("dl_check_component", "example_rds_target",
+  dl_check_component.example_rds_target, envir = asNamespace("lakefold"))
+registerS3method("dl_inspect", "example_rds_target",
+  dl_inspect.example_rds_target, envir = asNamespace("lakefold"))
+registerS3method("dl_write_target", "example_rds_target",
+  dl_write_target.example_rds_target, envir = asNamespace("lakefold"))
+```
+
+```{r execute}
+path <- tempfile("orders-output-")
+product <- dl_product("orders") |>
+  dl_add_source(data.frame(id = 1:2, amount = c(10, 20))) |>
+  dl_add_quality(~ amount >= 0) |>
+  dl_add_target(rds_target(path))
+
+result <- dl_run(product)
+stopifnot(result$status == "published")
+stopifnot(identical(readRDS(result$outputs$path), as.data.frame(dl_collect(result))))
+result$outputs
+unlink(path, recursive = TRUE)
+```
+
+Replace `rds_target(path)` with a lake target and the higher-level product stays
+the same. A PostgreSQL, S3 or external API writer belongs behind the same
+interface. Use its existing client, authentication and transaction APIs.
+
+## Quality extensions
+
+Create a rule inheriting from `dl_rule`, add your own class, then implement
+`dl_run_quality.your_class()`. A convenient way to produce the standard evidence
+is to delegate counts to a native rule:
+
+```{r custom-quality}
+# In a real adapter, obtain these counts from your external engine.
+dl_run_quality.example_quality <- function(rule, data, ...) {
+  native <- dl_rule(rule$name, function(data) {
+    dl_quality_counts(sum(data$amount < 0 | is.na(data$amount)), nrow(data))
+  }, severity = rule$severity, max_failure = rule$max_failure)
+  evidence <- dl_run_quality(native, data)
+  evidence$engine <- "example"
+  evidence
+}
+```
+
+The required columns are documented by `dl_run_quality()` and visible from any
+native call: `rule`, `status`, `severity`, `n_failed`, `n_total`, `threshold`,
+`message`, `engine`, `stage`, `segment`, `details`. Evaluated checks require
+valid counts. Empty evidence, unknown states, invalid counts and adapter errors
+block publication. An extension must never convert an engine failure into a
+pass. Keep row values and raw credential-bearing errors out of these columns.
+
+pointblank already implements advanced assertions and thresholds. Reuse its
+existing adapter instead of translating all of its assertions into new classes.
+Likewise, dbt owns its project graph and external build lifecycle.
+
+## Metadata and orchestration
+
+A catalog function receives a descriptive metadata list after successful data
+execution. Implement an S3 catalog adapter only when configuration and preflight
+justify one. This is also the integration point for an external catalog such as
+OpenMetadata: use a client compatible with the server's schema and API version.
+There is no bundled, production-certified OpenMetadata client.
+
+Catalog delivery and data publication are separate operations. A catalog error
+is returned as a warning while the data remain published. Design your catalog
+upsert to be idempotent using product and release identity; retries must not
+create duplicate catalog entities.
+
+Scheduling is an external concern. A CI job, scheduler or Posit Connect task can
+call `dl_run(product)`. Result status, timestamps and quality evidence provide a
+consistent way to observe that execution. Remote multi-system transactions and
+multi-writer locking are not invented by the extension interface.
+
+## Verification checklist for an adapter
+
+Test configuration without acquisition, both successful and failed reads,
+resource ownership, invalid output types, missing dependencies, writer failures,
+and metadata behavior. Prove that a failed quality gate never invokes your
+writer. Run the same product with a native and your custom implementation and
+compare data and quality evidence. State the adapter's atomicity, persistence,
+retry and concurrency guarantees explicitly.
+
+The package's `test-extension.R` demonstrates separately registered S3 methods;
+`test-target-lake.R` proves substitution between native and governed storage
+while retaining original inputs, release history and publication gates.

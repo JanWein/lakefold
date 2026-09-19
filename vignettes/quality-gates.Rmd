@@ -10,10 +10,15 @@ vignette: >
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>", warning = FALSE, message = FALSE)
 library(lakefold)
+knitr::opts_chunk$set(eval = requireNamespace("duckdb", quietly = TRUE))
 if (!requireNamespace("pointblank", quietly = TRUE)) {
   knitr::opts_chunk$set(eval = FALSE)
 }
 ```
+
+This storage guide uses optional DuckDB >= 1.5.5. For a database-free start,
+see [composing products](composing-products.html).
+
 
 ## Three quality responsibilities
 

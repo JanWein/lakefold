@@ -11,6 +11,10 @@ vignette: >
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>", message = FALSE)
 ```
 
+This storage guide uses optional DuckDB >= 1.5.5. For a database-free start,
+see [composing products](composing-products.html).
+
+
 ## One small workflow, several useful questions
 
 You already have an R table and want to answer three questions: **what is
@@ -24,6 +28,7 @@ Choose those meanings for your own domain.
 
 ```{r open-and-write}
 library(lakefold)
+knitr::opts_chunk$set(eval = requireNamespace("duckdb", quietly = TRUE))
 root <- tempfile("lakefold-everyday-")
 lake <- dl_open(root)
 orders <- data.frame(id = c(1L, 2L), amount = c(10, 20))

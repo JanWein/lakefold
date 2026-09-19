@@ -11,6 +11,10 @@ vignette: >
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>", message = FALSE)
 ```
 
+This storage guide uses optional DuckDB >= 1.5.5. For a database-free start,
+see [composing products](composing-products.html).
+
+
 ## What you are building
 
 You receive a monthly spreadsheet with reserve amounts from two fictional
@@ -53,6 +57,7 @@ services are optional.
 
 ```{r open-lake}
 library(lakefold)
+knitr::opts_chunk$set(eval = requireNamespace("duckdb", quietly = TRUE))
 root <- tempfile("lakefold-walkthrough-")
 lake <- dl_open(root)
 ```
