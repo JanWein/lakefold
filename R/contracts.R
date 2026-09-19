@@ -14,6 +14,10 @@
 #' @param max_age_hours Maximum release age.
 #' @param allow_empty Whether an empty candidate may be published.
 #' @param allow_extra Whether additional columns are permitted.
+#' @param operator Optional technical operator, distinct from business owner
+#'   and producer.
+#' @param column_metadata Optional named lists for declared columns, such as
+#'   `list(amount = list(description = "Order value", unit = "EUR"))`.
 #' @return A serializable contract specification.
 #' @export
 #' @examples
@@ -35,12 +39,19 @@ dl_contract <- function(
   producer = owner,
   max_age_hours = 48,
   allow_empty = FALSE,
-  allow_extra = FALSE
+  allow_extra = FALSE,
+  operator = NULL,
+  column_metadata = list()
 ) {
   asset_id(id)
   scalar(version, "version")
   scalar(owner, "owner")
   scalar(grain, "grain")
+  flag(allow_empty, "allow_empty")
+  flag(allow_extra, "allow_extra")
+  if (!is.null(operator)) {
+    scalar(operator, "operator")
+  }
   if (
     is.null(names(columns)) || anyDuplicated(names(columns)) || !length(columns)
   ) {
@@ -72,7 +83,16 @@ dl_contract <- function(
   if (anyDuplicated(vapply(rules, `[[`, character(1), "name"))) {
     abort("Rule names must be unique.")
   }
-  structure(
+  if (
+    length(column_metadata) &&
+      (is.null(names(column_metadata)) ||
+        anyDuplicated(names(column_metadata)) ||
+        !all(names(column_metadata) %in% names(columns)) ||
+        !all(vapply(column_metadata, is.list, logical(1))))
+  ) {
+    abort("column_metadata must be named lists for declared columns.")
+  }
+  contract <- structure(
     list(
       id = id,
       version = version,
@@ -91,6 +111,13 @@ dl_contract <- function(
     ),
     class = "dl_contract"
   )
+  if (!is.null(operator)) {
+    contract$operator <- operator
+  }
+  if (length(column_metadata)) {
+    contract$column_metadata <- column_metadata
+  }
+  contract
 }
 
 #' Define a quality rule
@@ -101,6 +128,11 @@ dl_contract <- function(
 #' @param max_failure Fraction of permitted failed test units.
 #' @param description Rule description.
 #' @param build Function creating a pointblank agent from a lazy table.
+#' @param policy `"rule"` preserves the explicit `severity` / `max_failure`
+#'   gate. `"agent"` uses pointblank's per-step action levels: warnings permit
+#'   publication, stop/error and critical states block. Native pointblank
+#'   threshold rounding applies. An unconfigured, inactive or errored agent
+#'   step always blocks. Old notify-only levels do not authorize publication.
 #' @param n_failed,n_total Failed and total test units.
 #' @return A rule specification or counts object.
 #' @export
@@ -165,10 +197,15 @@ dl_pointblank <- function(
   name,
   build,
   severity = c("error", "warning"),
-  max_failure = 0
+  max_failure = 0,
+  policy = c("rule", "agent")
 ) {
   rule <- dl_rule(name, build, severity, max_failure)
   rule$engine <- "pointblank"
+  policy <- match.arg(policy)
+  if (policy != "rule") {
+    rule$policy <- policy
+  }
   rule
 }
 
@@ -179,7 +216,11 @@ quality_row <- function(
   n_failed = NA_real_,
   n_total = NA_real_,
   threshold = 0,
-  message = ""
+  message = "",
+  engine = "contract",
+  stage = "candidate",
+  segment = "",
+  details = ""
 ) {
   tibble::tibble(
     rule = rule,
@@ -188,7 +229,11 @@ quality_row <- function(
     n_failed = as.numeric(n_failed),
     n_total = as.numeric(n_total),
     threshold = threshold,
-    message = message
+    message = message,
+    engine = engine,
+    stage = stage,
+    segment = segment,
+    details = details
   )
 }
 from_counts <- function(
@@ -218,23 +263,29 @@ from_counts <- function(
   }
   quality_row(name, status, severity, failed, total, threshold)
 }
-pointblank_results <- function(rule, data) {
+pointblank_results <- function(rule, data, keep_agent = FALSE) {
   need("pointblank")
   agent <- rule$check(data)
   if (!inherits(agent, "ptblank_agent")) {
     abort("pointblank builder must return an agent.")
   }
-  agent <- pointblank::interrogate(agent, extract_failed = FALSE)
+  agent <- pointblank::interrogate(
+    agent,
+    extract_failed = FALSE,
+    extract_tbl_checked = FALSE,
+    progress = FALSE
+  )
   report <- pointblank::get_agent_report(agent, display_table = FALSE)
   if (!nrow(report)) {
     return(quality_row(
       rule$name,
       "not_checked",
       rule$severity,
-      message = "Empty pointblank plan."
+      message = "Empty pointblank plan.",
+      engine = "pointblank"
     ))
   }
-  dplyr::bind_rows(lapply(seq_len(nrow(report)), function(i) {
+  results <- dplyr::bind_rows(lapply(seq_len(nrow(report)), function(i) {
     row <- report[i, ]
     name <- paste(rule$name, row$i, sep = ":")
     if (!isTRUE(row$active[[1]])) {
@@ -253,19 +304,76 @@ pointblank_results <- function(rule, data) {
         message = "pointblank evaluation did not complete cleanly."
       ))
     }
-    from_counts(
+    counts <- from_counts(
       name,
       as.numeric(row$units - row$n_pass),
       as.numeric(row$units),
       rule$severity,
       rule$max_failure
     )
+    if (identical(rule$policy, "agent")) {
+      warn <- row$W[[1]]
+      stop <- if ("E" %in% names(row)) row$E[[1]] else row$S[[1]]
+      critical <- if ("C" %in% names(row)) row$C[[1]] else NA
+      counts$threshold <- NA_real_
+      if (all(is.na(c(warn, stop, critical)))) {
+        counts$status <- "error"
+        counts$message <- "Agent policy requires a warning or blocking action level."
+      } else if (!counts$status %in% c("error", "not_checked")) {
+        counts$status <- if (isTRUE(stop) || isTRUE(critical)) {
+          "failed"
+        } else if (isTRUE(warn)) {
+          "warning"
+        } else {
+          "passed"
+        }
+        counts$severity <- if (counts$status == "warning") {
+          "warning"
+        } else {
+          "error"
+        }
+      }
+    }
+    counts
   }))
+  steps <- agent$validation_set
+  if (nrow(steps) != nrow(results)) {
+    abort("Unsupported pointblank report layout.")
+  }
+  for (i in seq_len(nrow(results))) {
+    if (
+      all(c("seg_col", "seg_val") %in% names(steps)) &&
+        length(steps$seg_col[[i]]) &&
+        !all(is.na(steps$seg_col[[i]]))
+    ) {
+      results$segment[[i]] <- jencode(list(
+        columns = steps$seg_col[[i]],
+        values = steps$seg_val[[i]]
+      ))
+    }
+    actions <- steps$actions[[i]]
+    levels <- actions[setdiff(names(actions), "fns")]
+    results$details[[i]] <- jencode(list(
+      assertion = report$type[[i]],
+      columns = report$columns[[i]],
+      policy = rule$policy %||% "rule",
+      action_levels = levels
+    ))
+  }
+  results$engine <- "pointblank"
+  if (keep_agent) {
+    attr(results, "pointblank_agent") <- agent
+  }
+  results
 }
 
 #' Validate a candidate against a contract
 #' @param data A data frame or lazy table.
 #' @param contract Contract definition.
+#' @param stage Label stored with each check, such as `"ingest"` or
+#'   `"candidate"`.
+#' @param keep_agents Retain interrogated pointblank agents as an in-memory
+#'   attribute for [dl_pointblank_report()]. Defaults to `FALSE`.
 #' @return A tibble with one row per check. Only passed and warning permit
 #'   publication.
 #' @export
@@ -275,11 +383,20 @@ pointblank_results <- function(rule, data) {
 #'   c(order_id = "integer", amount = "numeric"), key = "order_id"
 #' )
 #' dl_validate(data.frame(order_id = 1:2, amount = c(25, 75)), contract)
-dl_validate <- function(data, contract) {
+dl_validate <- function(
+  data,
+  contract,
+  stage = "candidate",
+  keep_agents = FALSE
+) {
   if (!inherits(contract, "dl_contract")) {
     abort("contract must be a dl_contract.")
   }
+  assert_contract_ready(contract)
+  scalar(stage, "stage")
+  flag(keep_agents, "keep_agents")
   result <- list()
+  agents <- list()
   add <- function(x) result[[length(result) + 1L]] <<- x
   protect <- function(name, fn) {
     tryCatch(fn(), error = function(e) {
@@ -308,7 +425,9 @@ dl_validate <- function(data, contract) {
     )
   }))
   if (!identical(result[[1]]$status[[1]], "passed")) {
-    return(dplyr::bind_rows(result))
+    out <- dplyr::bind_rows(result)
+    out$stage <- stage
+    return(out)
   }
   add(protect("types", function() {
     proto <- if (inherits(data, "tbl_sql")) {
@@ -384,7 +503,12 @@ dl_validate <- function(data, contract) {
     add(tryCatch(
       {
         if (rule$engine == "pointblank") {
-          pointblank_results(rule, data)
+          rows <- pointblank_results(rule, data, keep_agents)
+          if (keep_agents) {
+            agents[[rule$name]] <- attr(rows, "pointblank_agent")
+          }
+          attr(rows, "pointblank_agent") <- NULL
+          rows
         } else {
           value <- rule$check(data)
           if (inherits(value, "dl_quality_counts")) {
@@ -425,7 +549,23 @@ dl_validate <- function(data, contract) {
       }
     ))
   }
-  dplyr::bind_rows(result)
+  out <- dplyr::bind_rows(result)
+  out$stage <- stage
+  out$engine[
+    out$engine == "contract" &
+      !out$rule %in%
+        c(
+          "schema",
+          "types",
+          "nonempty",
+          "unique_key",
+          paste0("not_null:", union(contract$required, contract$key))
+        )
+  ] <- "r"
+  if (keep_agents) {
+    attr(out, "pointblank_agents") <- agents
+  }
+  out
 }
 
 quality_ok <- function(results) {

@@ -1,4 +1,4 @@
-# Architektur ab 0.3.0
+# Architektur ab 0.4.0
 
 lakefold hat zwei bewusst getrennte Ausführungswege. R-Pipelines und Produkte
 landen Originale, validieren Kandidaten und veröffentlichen immutable Releases.
@@ -8,7 +8,9 @@ Beide beginnen mit einer Spezifikation und können `dl_execute()` verwenden.
 `dl_dbt_status()` und `dl_dbt_lineage()` lesen veröffentlichte dbt-Artefaktformate.
 `dl_dbt_model()` verbindet daraus aktuelle Tabellen mit dm. PK/FK werden vom
 Anwender angegeben, da ein SQL-DAG keine relationalen Schlüssel beweist.
-Eine automatische dbt-zu-Release-Promotion gibt es noch nicht.
+`dl_dbt_publish()` erstellt aus einer aktuell sichtbaren Relation einen neuen
+Kandidaten und veröffentlicht ihn erst nach Contract-Prüfung. Es wird kein
+Gleichstand zwischen einem alten dbt-Build und der aktuellen Relation unterstellt.
 
 # Architektur und bewusste Entscheidungen
 
@@ -62,9 +64,9 @@ SQL-Schreibzugriffe mit denselben Credentials.
 | error | blockiert, auch bei nicht-blockierender fachlicher Regel |
 | not_checked | blockiert |
 
-Die explizite Fehlerquote einer Regel bestimmt ihre Toleranz. `pointblank`-
-Actions steuern nicht die Freigabe; der Adapter liest die tatsächlichen
-Prüfergebnisse. Inaktive Schritte und leere Prüfpläne zählen nicht als bestanden.
+Für `policy = "rule"` bestimmen Fehlerquote und Severity die Toleranz.
+Mit `policy = "agent"` bestimmen die ausgewerteten nativen pointblank-Action-Levels
+die Freigabe. Ergebnisse behalten Segment, Phase und Schwellenmetadaten. Inaktive Schritte und leere Prüfpläne zählen nicht als bestanden.
 Keine automatischen Zeilenverwerfungen und kein allgemeiner `force`-Schalter.
 
 ## Versionen

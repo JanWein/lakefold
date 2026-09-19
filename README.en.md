@@ -8,6 +8,7 @@ remotes::install_github("JanWein/lakefold", build_vignettes = TRUE)
 library(lakefold)
 vignette("getting-started")
 vignette("dbt-workflows")
+vignette("quality-gates")
 ```
 
 Define specifications without executing them, inspect them, then call
@@ -21,9 +22,13 @@ dbt-duckdb; v2 catalogs require an explicitly configured and verified project.
 Close local R catalog connections before running dbt in a separate process.
 
 Development release: a single registry writer is required. A dbt build is not
-an atomic governed release. Automatic schema migrations, remote profile
-provisioning, mixed R/dbt DAG scheduling and coordinated multi-writer execution
-are not implemented. See the [design review](https://github.com/JanWein/lakefold/blob/main/docs/DESIGN_REVIEW.md),
+an atomic governed release. Use `dl_dbt_publish()` to snapshot and validate one
+relation as a governed release. Version 0.4.0 adds native pointblank thresholds,
+segment evidence, pre-Raw gates, data-frame ingestion, HTML/JSON reports,
+contract drafts/diffs, shared diagnostics, delivery monitoring and additive
+registry migration. Cleanup previews and removes only expired unpublished
+failed-run tables. Remote profile provisioning, mixed R/dbt DAG scheduling and
+coordinated multi-writer execution are not implemented. See the [design review](https://github.com/JanWein/lakefold/blob/main/docs/DESIGN_REVIEW.md),
 [validation record](https://github.com/JanWein/lakefold/blob/main/docs/VALIDATION.md) and [migration guide](https://github.com/JanWein/lakefold/blob/main/docs/MIGRATION.md).
 
 Full function help ships in the installed package; the pkgdown site is built by

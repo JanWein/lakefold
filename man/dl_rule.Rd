@@ -16,7 +16,13 @@ dl_rule(
 
 dl_quality_counts(n_failed, n_total)
 
-dl_pointblank(name, build, severity = c("error", "warning"), max_failure = 0)
+dl_pointblank(
+  name,
+  build,
+  severity = c("error", "warning"),
+  max_failure = 0,
+  policy = c("rule", "agent")
+)
 }
 \arguments{
 \item{name}{Rule name.}
@@ -33,6 +39,12 @@ dl_quality_counts(). No implicit collection of full data is performed.}
 \item{n_failed, n_total}{Failed and total test units.}
 
 \item{build}{Function creating a pointblank agent from a lazy table.}
+
+\item{policy}{\code{"rule"} preserves the explicit \code{severity} / \code{max_failure}
+gate. \code{"agent"} uses pointblank's per-step action levels: warnings permit
+publication, stop/error and critical states block. Native pointblank
+threshold rounding applies. An unconfigured, inactive or errored agent
+step always blocks. Old notify-only levels do not authorize publication.}
 }
 \value{
 A rule specification or counts object.

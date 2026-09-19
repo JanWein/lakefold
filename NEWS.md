@@ -1,3 +1,27 @@
+# lakefold 0.4.0
+
+* The registry now migrates quality metadata additively to schema version 2,
+  preserving existing releases and rejecting unsupported future schemas.
+* `dl_check_delivery()` monitors expected business dates even without an ingest
+  attempt, with retryable notification failures and incident deduplication.
+* `dl_cleanup()` previews or removes expired unpublished failed-run tables while
+  retaining all releases, landing files and quality evidence.
+* `dl_contract()` accepts technical operators and column descriptions/units.
+* `dl_contract_from()`, `dl_contract_confirm()` and `dl_contract_diff()` support
+  explicit review of inferred types and semantic contract changes.
+* `dl_dbt_publish()` copies a current dbt relation into a freshly validated,
+  immutable release. Changed live relations never reuse cached build evidence.
+* `dl_expect_quality()` uses the publication policy in testthat expectations.
+* `dl_ingest_data()` accepts existing R data frames and archives an RDS snapshot.
+* `dl_pointblank(policy = "agent")` honors native per-step action levels and
+  records segment evidence. The default rule policy remains compatible.
+* `dl_pointblank_report()` exports native reports from explicitly retained agents.
+* `dl_quality_report()` exports escaped, standalone HTML or JSON check metadata.
+* `dl_status()`, `dl_quality()`, `dl_releases()` and `dl_lineage()` expose common
+  diagnostics, exact release evidence, cache provenance and recursive lineage.
+* `dl_step_precheck()` and ingestion's `input_contract` check before Raw writes,
+  preserving the final gate on the complete publication candidate.
+
 # lakefold 0.3.0
 
 * The package is now called **lakefold** (formerly dataloom). Install and attach

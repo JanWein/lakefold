@@ -12,6 +12,7 @@ dl_ingest(
   version = "1.0.0",
   code_version,
   layer = "validated",
+  input_contract = NULL,
   ...
 )
 }
@@ -31,6 +32,10 @@ dependencies. Change both versions when behavior changes.}
 
 \item{layer}{Character scalar giving the publication schema, \code{"validated"}
 by default. Raw extraction always uses the configured \code{"raw"} schema.}
+
+\item{input_contract}{Optional separate contract for an input gate before
+writing Raw. Requires a reader returning a data frame. The final candidate
+is still validated against \code{contract}.}
 
 \item{...}{Arguments passed to \code{\link[=dl_run]{dl_run()}}, such as \code{business_date} or
 \code{stop_on_failure}. Do not pass another \code{lake} argument.}

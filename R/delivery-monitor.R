@@ -1,0 +1,146 @@
+#' Check an expected business-date delivery, even when no ingest job ran
+#'
+#' Compares the latest published stand with an explicit due time and business
+#' date. A newly loaded old reporting period does not satisfy the expectation.
+#' This function must be called by an existing scheduler; it creates none.
+#' Missing deliveries generate deduplicated metadata events. No message is sent
+#' unless the caller supplies a notification transport.
+#' @param lake Connected lake.
+#' @param asset Expected governed asset ID.
+#' @param contract Contract identifying the producer and expected freshness.
+#' @param business_date Expected date, as `Date` or ISO `YYYY-MM-DD` string.
+#' @param due_at,at Due time and evaluation time, both POSIXct scalars.
+#' @param notify Optional function receiving an event without source rows.
+#' @returns A tibble with status `pending`, `received` or `missing`. Once due,
+#'   the result is also persisted as an operational event.
+#' @export
+#' @examples
+#' root <- tempfile("lakefold-")
+#' lake <- dl_connect(dl_config(dl_catalog_duckdb(file.path(root, "lake.db")),
+#'   dl_storage_local(file.path(root, "data")),
+#'   landing = file.path(root, "landing"), backend = "duckdb"))
+#' contract <- dl_contract("orders", "1", "Analytics", "Orders", "One order",
+#'   c(id = "integer"), key = "id")
+#' dl_check_delivery(lake, "orders", contract, as.Date("2026-08-31"),
+#'   due_at = as.POSIXct("2026-09-01 09:00:00", tz = "UTC"),
+#'   at = as.POSIXct("2026-09-01 10:00:00", tz = "UTC"))
+#' dl_disconnect(lake)
+#' unlink(root, recursive = TRUE)
+dl_check_delivery <- function(
+  lake,
+  asset,
+  contract,
+  business_date,
+  due_at,
+  at = Sys.time(),
+  notify = NULL
+) {
+  assert_lake(lake)
+  asset_id(asset)
+  if (!inherits(contract, "dl_contract")) {
+    abort("contract must be a dl_contract.")
+  }
+  assert_contract_ready(contract)
+  date <- as.character(business_date)
+  if (
+    length(date) != 1L ||
+      is.na(date) ||
+      !grepl("^\\d{4}-\\d{2}-\\d{2}$", date) ||
+      is.na(as.Date(date)) ||
+      as.character(as.Date(date)) != date
+  ) {
+    abort("business_date must be one valid ISO date.")
+  }
+  valid_time <- function(x) {
+    inherits(x, "POSIXct") && length(x) == 1L && is.finite(as.numeric(x))
+  }
+  if (!valid_time(at) || !valid_time(due_at)) {
+    abort("at and due_at must be POSIXct scalars.")
+  }
+  releases <- dl_releases(lake, asset)
+  received <- nrow(releases) > 0 && identical(releases$business_date[[1]], date)
+  status <- if (received) {
+    "received"
+  } else if (at < due_at) {
+    "pending"
+  } else {
+    "missing"
+  }
+  event_id <- NA_character_
+  if (status != "pending") {
+    dl_register(lake, contract)
+    incident <- fingerprint(list(
+      asset = asset,
+      date = date,
+      due_at = format(due_at, tz = "UTC", usetz = TRUE)
+    ))
+    prior <- query(
+      lake,
+      paste(
+        "SELECT * FROM",
+        meta(lake, "events"),
+        "WHERE run_id = ? ORDER BY created_at DESC, event_id DESC"
+      ),
+      list(incident)
+    )
+    type <- if (received) "delivery_received" else "delivery_overdue"
+    delivered <- nrow(prior) &&
+      identical(prior$type[[1]], type) &&
+      (received || prior$status[[1]] == "delivered")
+    event <- list(
+      event_id = uid(),
+      run_id = incident,
+      asset = asset,
+      type = type,
+      recipient = contract$producer,
+      created_at = now(),
+      status = if (delivered) {
+        "suppressed"
+      } else if (received) {
+        "recorded"
+      } else {
+        "pending"
+      },
+      message = paste("Expected business date", date, "is", status)
+    )
+    # Keep the last delivered incident active across suppressed monitoring calls.
+    if (
+      nrow(prior) &&
+        prior$status[[1]] == "suppressed" &&
+        prior$type[[1]] == type
+    ) {
+      event$status <- "suppressed"
+    }
+    insert_meta(lake, "events", event)
+    if (
+      status == "missing" && event$status != "suppressed" && !is.null(notify)
+    ) {
+      event$status <- tryCatch(
+        {
+          notify(event)
+          "delivered"
+        },
+        error = function(e) "delivery_failed"
+      )
+      exec(
+        lake,
+        paste(
+          "UPDATE",
+          meta(lake, "events"),
+          "SET status = ? WHERE event_id = ?"
+        ),
+        list(event$status, event$event_id)
+      )
+    }
+    event_id <- event$event_id
+  }
+  tibble::tibble(
+    asset = asset,
+    business_date = date,
+    due_at = due_at,
+    checked_at = at,
+    status = status,
+    release_id = if (received) releases$release_id[[1]] else NA_character_,
+    event_id = event_id
+  )
+}

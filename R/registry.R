@@ -1,4 +1,20 @@
 registry_init <- function(lake) {
+  registry_table <- meta(lake, "schema_version")
+  exec(
+    lake,
+    paste0(
+      "CREATE TABLE IF NOT EXISTS ",
+      registry_table,
+      " (version INTEGER, applied_at VARCHAR)"
+    )
+  )
+  versions <- query(lake, paste("SELECT version FROM", registry_table))$version
+  if (anyNA(versions) || any(versions > 2L)) {
+    abort(
+      "Registry schema is newer than this lakefold version supports.",
+      "dl_registry_version"
+    )
+  }
   schemas <- list(
     assets = "id VARCHAR, version VARCHAR, kind VARCHAR, owner VARCHAR, description VARCHAR, definition VARCHAR, fingerprint VARCHAR, registered_at VARCHAR",
     runs = "run_id VARCHAR, pipeline VARCHAR, asset VARCHAR, status VARCHAR, started_at VARCHAR, finished_at VARCHAR, input_hash VARCHAR, definition_hash VARCHAR, code_version VARCHAR, message VARCHAR, release_id VARCHAR",
@@ -21,6 +37,35 @@ registry_init <- function(lake) {
       )
     )
   }
+  DBI::dbWithTransaction(lake$con, {
+    columns <- DBI::dbListFields(lake$con, table_id("_dl", "quality_results"))
+    additions <- c(
+      engine = "'legacy'",
+      stage = "'candidate'",
+      segment = "''",
+      details = "''"
+    )
+    for (column in setdiff(names(additions), columns)) {
+      exec(
+        lake,
+        paste(
+          "ALTER TABLE",
+          meta(lake, "quality_results"),
+          "ADD COLUMN",
+          qident(lake, column),
+          "VARCHAR DEFAULT",
+          additions[[column]]
+        )
+      )
+    }
+    if (!2L %in% versions) {
+      insert_meta(
+        lake,
+        "schema_version",
+        list(version = 2L, applied_at = now())
+      )
+    }
+  })
 }
 
 #' Read framework metadata
@@ -49,7 +94,8 @@ dl_registry <- function(
     "releases",
     "lineage_edges",
     "events",
-    "reports"
+    "reports",
+    "schema_version"
   )
 ) {
   assert_lake(lake)
@@ -81,6 +127,9 @@ dl_registry <- function(
 #' unlink(root, recursive = TRUE)
 dl_register <- function(lake, object) {
   assert_lake(lake)
+  if (inherits(object, "dl_contract")) {
+    assert_contract_ready(object)
+  }
   if (is.null(object$id) || is.null(object$version) || is.null(object$kind)) {
     abort("Object is not a registerable definition.")
   }

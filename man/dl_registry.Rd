@@ -7,7 +7,7 @@
 dl_registry(
   lake,
   table = c("assets", "runs", "inputs", "quality_results", "releases", "lineage_edges",
-    "events", "reports")
+    "events", "reports", "schema_version")
 )
 }
 \arguments{

@@ -16,6 +16,7 @@ and consume lazy relations through dplyr and dm.
 \item \code{vignette("dbt-workflows")}: dbt setup, builds, diagnostics and dm models.
 \item \code{vignette("workflow-design")}: specifications and the execution lifecycle.
 \item \code{vignette("quality-history")}: quality gates and reproducible releases.
+\item \code{vignette("quality-gates")}: pointblank, input gates and quality reports.
 \item \code{vignette("products-metrics")}: products, metrics and report manifests.
 }
 }
@@ -27,6 +28,9 @@ contract validation. \code{\link[=dl_dbt_build]{dl_dbt_build()}} runs dbt models
 dbt's own materialization semantics. A successful dbt build does not create
 a lakefold release automatically. \code{\link[=dl_model]{dl_model()}} opens governed releases;
 \code{\link[=dl_dbt_model]{dl_dbt_model()}} opens current dbt relations.
+\code{\link[=dl_dbt_publish]{dl_dbt_publish()}} snapshots one current dbt relation, validates its contract
+and publishes it as a governed release. \code{\link[=dl_status]{dl_status()}} and \code{\link[=dl_quality]{dl_quality()}}
+provide common inspection functions across both execution paths.
 }
 
 \section{Resource ownership}{

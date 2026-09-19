@@ -1,4 +1,4 @@
-# Betrieb ab 0.3.0
+# Betrieb ab 0.4.0
 
 ## dbt-Aufrufe
 
@@ -86,3 +86,23 @@ Beschreibungen und Kontaktdaten enthalten; nur bewusst freigegebene Snapshots
 an Katalog-Nutzer verteilen. Das öffentliche Paket-Repository enthält keine
 produktiven Snapshots. Historische Releases nicht manuell löschen, solange
 Berichte auf sie verweisen. Automatische Retention ist noch nicht implementiert.
+
+## Lieferüberwachung und Aufbewahrung
+
+`dl_check_delivery()` wird zeitgesteuert aus dem vorhandenen Scheduler aufgerufen.
+Es prüft einen ausdrücklich erwarteten fachlichen Stichtag gegen `due_at` und
+funktioniert auch ohne vorherigen Importversuch. Ein kürzlich veröffentlichter
+alter Stichtag erfüllt die neue Erwartung nicht. Benachrichtigungen werden erst
+nach erfolgreicher Zustellung dedupliziert, Transportfehler bleiben retryfähig.
+Der Katalog zeigt den Lieferstatus zusätzlich zu Datenalter und letztem Versuch.
+
+`dl_cleanup(lake, older_than_days = 30)` liefert nur eine Vorschau.
+Mit `dry_run = FALSE` werden passende Raw-/Kandidatentabellen abgeschlossener
+Fehlversuche in einer Transaktion gelöscht. Laufende Jobs, alle veröffentlichten
+Release-Tabellen, Landing-Dateien, Qualitätsnachweise und Reports bleiben erhalten.
+Das ist keine generelle Historien-Retention und kein DuckLake-Vacuum. Physische
+DuckLake-Dateibereinigung bleibt eine separate Betriebsaufgabe.
+
+Daten- und native pointblank-Berichte können Segmentnamen und Geschäftsregeln
+enthalten. Die kompakten Reports enthalten keine vollständigen Quelldatensätze.
+Lege die Reports am vorgesehenen Ablageort des Betriebsprojekts ab.

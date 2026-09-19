@@ -76,4 +76,28 @@ test_that("real dbt builds and tests the starter project", {
     primary_keys = list(revenue = "customer_id")
   )
   expect_equal(sum(dplyr::collect(model$revenue)$revenue), 150)
+  contract <- dl_contract_from(
+    model$revenue,
+    "revenue",
+    "Analytics",
+    "Customer revenue",
+    "One customer",
+    key = "customer_id"
+  ) |>
+    dl_contract_confirm()
+  release <- dl_dbt_publish(
+    lake,
+    result,
+    "model.lakefold_demo.customer_revenue",
+    contract,
+    "shop.revenue",
+    code_version = "v1"
+  )
+  expect_equal(release$status, "published")
+  expect_equal(
+    sum(
+      dplyr::collect(dl_tbl(lake, "shop.revenue", release$release_id))$revenue
+    ),
+    150
+  )
 })

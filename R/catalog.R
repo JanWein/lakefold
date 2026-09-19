@@ -25,8 +25,10 @@
 #' unlink(root, recursive = TRUE)
 dl_freshness <- function(lake, at = Sys.time()) {
   catalog_summary(
-    lapply(c("assets", "releases", "runs"), function(n) dl_registry(lake, n)) |>
-      stats::setNames(c("assets", "releases", "runs")),
+    lapply(c("assets", "releases", "runs", "events"), function(n) {
+      dl_registry(lake, n)
+    }) |>
+      stats::setNames(c("assets", "releases", "runs", "events")),
     at
   )
 }
@@ -34,7 +36,20 @@ catalog_summary <- function(snapshot, at = Sys.time()) {
   releases <- snapshot$releases
   runs <- snapshot$runs
   assets <- snapshot$assets
-  ids <- union(releases$asset, runs$asset)
+  events <- snapshot$events
+  deliveries <- if (NROW(events)) {
+    events[
+      events$type %in%
+        c("delivery_overdue", "delivery_received"),
+    ]
+  } else {
+    tibble::tibble(
+      asset = character(),
+      type = character(),
+      created_at = character()
+    )
+  }
+  ids <- union(union(releases$asset, runs$asset), deliveries$asset)
   if (!length(ids)) {
     return(tibble::tibble(
       asset = character(),
@@ -44,10 +59,28 @@ catalog_summary <- function(snapshot, at = Sys.time()) {
       freshness = character(),
       latest_attempt = character(),
       age_hours = double(),
-      max_age_hours = double()
+      max_age_hours = double(),
+      delivery_status = character()
     ))
   }
   dplyr::bind_rows(lapply(ids, function(id) {
+    expected <- if (nrow(deliveries)) {
+      deliveries[deliveries$asset == id, ]
+    } else {
+      deliveries
+    }
+    expected <- if (nrow(expected)) {
+      expected[order(expected$created_at, decreasing = TRUE), ]
+    } else {
+      expected
+    }
+    delivery_status <- if (!nrow(expected)) {
+      "not_monitored"
+    } else if (expected$type[[1]] == "delivery_received") {
+      "received"
+    } else {
+      "missing"
+    }
     rr <- releases[releases$asset == id, ]
     rr <- rr[order(rr$published_at, decreasing = TRUE), ]
     attempts <- runs[runs$asset == id, ]
@@ -62,7 +95,8 @@ catalog_summary <- function(snapshot, at = Sys.time()) {
         freshness = "missing",
         latest_attempt = latest,
         age_hours = NA_real_,
-        max_age_hours = NA_real_
+        max_age_hours = NA_real_,
+        delivery_status = delivery_status
       ))
     }
     r <- rr[1, ]
@@ -100,7 +134,8 @@ catalog_summary <- function(snapshot, at = Sys.time()) {
       },
       latest_attempt = latest,
       age_hours = age,
-      max_age_hours = max_age
+      max_age_hours = max_age,
+      delivery_status = delivery_status
     )
   }))
 }
@@ -219,7 +254,7 @@ dl_catalog <- function(
     }
   }
   ui <- bslib::page_sidebar(
-    title = "dataloom | Data Catalog",
+    title = "lakefold | Data Catalog",
     theme = bslib::bs_theme(
       version = 5,
       bootswatch = "flatly",

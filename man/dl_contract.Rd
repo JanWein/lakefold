@@ -17,7 +17,9 @@ dl_contract(
   producer = owner,
   max_age_hours = 48,
   allow_empty = FALSE,
-  allow_extra = FALSE
+  allow_extra = FALSE,
+  operator = NULL,
+  column_metadata = list()
 )
 }
 \arguments{
@@ -48,6 +50,12 @@ logical, Date, POSIXct.}
 \item{allow_empty}{Whether an empty candidate may be published.}
 
 \item{allow_extra}{Whether additional columns are permitted.}
+
+\item{operator}{Optional technical operator, distinct from business owner
+and producer.}
+
+\item{column_metadata}{Optional named lists for declared columns, such as
+\code{list(amount = list(description = "Order value", unit = "EUR"))}.}
 }
 \value{
 A serializable contract specification.
