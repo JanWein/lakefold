@@ -1,0 +1,28 @@
+---
+title: "Data product execution"
+format: html
+execute:
+  error: false
+  echo: false
+---
+
+```{r}
+library(lakefold)
+# definitions.R defines pipeline, business_date and optional notify(event).
+source("definitions.R")
+lake <- dl_connect(pipeline$config)
+result <- tryCatch({
+  dl_run(pipeline, lake, business_date = business_date,
+         notify = get0("notify", ifnotfound = NULL), stop_on_failure = FALSE)
+}, finally = {
+  dl_catalog_export(lake, "catalog.json")
+  dl_disconnect(lake)
+})
+if (!result$status %in% c("published", "cached")) {
+  stop("Data job failed: ", result$status, "; run: ", result$run_id)
+}
+print(result)
+```
+
+The persistent registry records failures even if this report does not render.
+On Connect the visible HTML may still be the previous successful render.
