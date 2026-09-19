@@ -8,7 +8,8 @@ object-first API}
 dl_execute(object, lake = NULL, ...)
 }
 \arguments{
-\item{object}{Pipeline, product, metric or dbt project specification.}
+\item{object}{Pipeline, composed or derived product, metric or dbt project
+specification. Composed products use \code{\link[=dl_run]{dl_run()}} as the shorter equivalent.}
 
 \item{lake}{Connected lake or dl_config. NULL uses a pipeline's stored
 config.}
@@ -27,6 +28,7 @@ require an explicit lake or dl_config. A connection opened here is closed on
 exit; an existing connection remains owned by its caller.
 }
 \examples{
+\dontshow{if (requireNamespace("duckdb", quietly = TRUE)) withAutoprint(\{ # examplesIf}
 root <- tempfile("lakefold-example-")
 config <- dl_config(
   dl_catalog_duckdb(file.path(root, "lake.db")),
@@ -50,4 +52,5 @@ pipeline <- dl_pipeline("orders.import", config, code_version = "v1") |>
 dl_execute(pipeline, lake)
 dl_disconnect(lake)
 unlink(root, recursive = TRUE)
+\dontshow{\}) # examplesIf}
 }

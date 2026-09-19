@@ -45,9 +45,11 @@ Database changes are transactional; staging removal happens afterwards and
 is reported separately, so an incomplete filesystem cleanup can be retried.
 }
 \examples{
+\dontshow{if (requireNamespace("duckdb", quietly = TRUE)) withAutoprint(\{ # examplesIf}
 root <- tempfile("lakefold-")
 lake <- dl_open(root)
 dl_recover(lake)
 dl_close(lake)
 unlink(root, recursive = TRUE)
+\dontshow{\}) # examplesIf}
 }

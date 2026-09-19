@@ -33,6 +33,7 @@ custom configuration still open through \code{\link[=dl_connect]{dl_connect()}}.
 Use \code{\link[=dl_config]{dl_config()}} and \code{\link[=dl_connect]{dl_connect()}} for custom layers or remote storage.
 }
 \examples{
+\dontshow{if (requireNamespace("duckdb", quietly = TRUE)) withAutoprint(\{ # examplesIf}
 root <- tempfile("lakefold-")
 lake <- dl_open(root)
 dl_write(lake, data.frame(id = 1:2), "orders")
@@ -42,6 +43,7 @@ lake <- dl_open(root) # reopens the same data
 dl_read(lake, "orders")
 dl_close(lake)
 unlink(root, recursive = TRUE)
+\dontshow{\}) # examplesIf}
 }
 \seealso{
 \code{\link[=dl_write]{dl_write()}}, \code{\link[=dl_read]{dl_read()}}

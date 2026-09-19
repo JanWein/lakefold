@@ -38,6 +38,7 @@ Run result.
 Build, validate and publish a product
 }
 \examples{
+\dontshow{if (requireNamespace("duckdb", quietly = TRUE)) withAutoprint(\{ # examplesIf}
 root <- tempfile("lakefold-example-")
 config <- dl_config(
   dl_catalog_duckdb(file.path(root, "lake.db")),
@@ -60,4 +61,5 @@ product <- dl_product("orders.copy", c(orders = "orders"),
 dl_build(lake, product)
 dl_disconnect(lake)
 unlink(root, recursive = TRUE)
+\dontshow{\}) # examplesIf}
 }

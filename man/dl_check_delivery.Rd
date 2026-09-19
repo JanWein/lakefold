@@ -50,6 +50,7 @@ Missing deliveries generate deduplicated metadata events. No message is sent
 unless the caller supplies a notification transport.
 }
 \examples{
+\dontshow{if (requireNamespace("duckdb", quietly = TRUE)) withAutoprint(\{ # examplesIf}
 root <- tempfile("lakefold-")
 lake <- dl_connect(dl_config(dl_catalog_duckdb(file.path(root, "lake.db")),
   dl_storage_local(file.path(root, "data")),
@@ -61,4 +62,5 @@ dl_check_delivery(lake, "orders", contract, as.Date("2026-08-31"),
   at = as.POSIXct("2026-09-01 10:00:00", tz = "UTC"))
 dl_disconnect(lake)
 unlink(root, recursive = TRUE)
+\dontshow{\}) # examplesIf}
 }

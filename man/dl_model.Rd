@@ -34,6 +34,7 @@ A dm object containing lazy tables. No automatic flattening is done.
 Create and validate a relational dm model from pinned releases
 }
 \examples{
+\dontshow{if (requireNamespace("duckdb", quietly = TRUE)) withAutoprint(\{ # examplesIf}
 root <- tempfile("lakefold-example-")
 config <- dl_config(
   dl_catalog_duckdb(file.path(root, "lake.db")),
@@ -55,4 +56,5 @@ model <- dl_model(lake, c(orders = "orders"),
 model
 dl_disconnect(lake)
 unlink(root, recursive = TRUE)
+\dontshow{\}) # examplesIf}
 }

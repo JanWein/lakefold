@@ -35,6 +35,7 @@ an appropriate profile yourself and use \code{\link[=dl_dbt_project]{dl_dbt_proj
 uses the dbt-duckdb profile format; it does not install dbt or adapters.
 }
 \examples{
+\dontshow{if (requireNamespace("duckdb", quietly = TRUE)) withAutoprint(\{ # examplesIf}
 root <- tempfile("lakefold-example-")
 config <- dl_config(
   catalog = dl_catalog_duckdb(file.path(root, "lake.duckdb")),
@@ -44,6 +45,7 @@ config <- dl_config(
 project <- dl_dbt_init(file.path(root, "dbt"), config)
 project
 unlink(root, recursive = TRUE)
+\dontshow{\}) # examplesIf}
 }
 \seealso{
 \code{\link[=dl_dbt_build]{dl_dbt_build()}}, \code{\link[=dl_ingest]{dl_ingest()}}

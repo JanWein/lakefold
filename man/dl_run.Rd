@@ -2,15 +2,19 @@
 % Please edit documentation in R/pipeline.R
 \name{dl_run}
 \alias{dl_run}
+\alias{dl_run.dl_pipeline}
 \title{Run an ingestion pipeline}
 \usage{
-dl_run(
+dl_run(pipeline, lake = NULL, ...)
+
+\method{dl_run}{dl_pipeline}(
   pipeline,
   lake = NULL,
   business_date = NA_character_,
   notify = NULL,
   stop_on_failure = TRUE,
-  cache = TRUE
+  cache = TRUE,
+  ...
 )
 }
 \arguments{
@@ -18,6 +22,8 @@ dl_run(
 
 \item{lake}{Optional existing connection; otherwise opened from the
 specification.}
+
+\item{...}{Execution options forwarded to the selected workflow method.}
 
 \item{business_date}{Business date of this delivery, separate from arrival
 time.}
@@ -40,6 +46,7 @@ A run result with run_id, status, release_id and quality results.
 Run an ingestion pipeline
 }
 \examples{
+\dontshow{if (requireNamespace("duckdb", quietly = TRUE)) withAutoprint(\{ # examplesIf}
 root <- tempfile("lakefold-example-")
 config <- dl_config(
   dl_catalog_duckdb(file.path(root, "lake.db")),
@@ -63,4 +70,5 @@ pipeline <- dl_pipeline("orders.import", config, code_version = "v1") |>
 dl_run(pipeline, lake)
 dl_disconnect(lake)
 unlink(root, recursive = TRUE)
+\dontshow{\}) # examplesIf}
 }

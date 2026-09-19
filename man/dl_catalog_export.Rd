@@ -19,6 +19,7 @@ exported.
 Export a read-only metadata snapshot
 }
 \examples{
+\dontshow{if (requireNamespace("duckdb", quietly = TRUE)) withAutoprint(\{ # examplesIf}
 root <- tempfile("lakefold-example-")
 config <- dl_config(
   dl_catalog_duckdb(file.path(root, "lake.db")),
@@ -29,4 +30,5 @@ lake <- dl_connect(config)
 dl_catalog_export(lake, file.path(root, "catalog.json"))
 dl_disconnect(lake)
 unlink(root, recursive = TRUE)
+\dontshow{\}) # examplesIf}
 }

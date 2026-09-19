@@ -27,8 +27,10 @@ dl_pointblank(
 \arguments{
 \item{name}{Rule name.}
 
-\item{check}{Function taking a lazy table and returning a scalar logical or
-dl_quality_counts(). No implicit collection of full data is performed.}
+\item{check}{Function taking a table and returning a scalar logical or
+dl_quality_counts(), or a one-sided row predicate such as \code{~ amount >= 0}.
+Missing formula results count as failures. Lazy formulas run in the
+database; arbitrary functions remain responsible for their own collection.}
 
 \item{severity}{error blocks publication; warning permits publication.}
 

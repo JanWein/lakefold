@@ -56,6 +56,7 @@ same immutable landing and contract gate as explicit pipeline steps. Use
 \code{\link[=dl_pipeline]{dl_pipeline()}} when transformations or partition replacement are needed.
 }
 \examples{
+\dontshow{if (requireNamespace("duckdb", quietly = TRUE)) withAutoprint(\{ # examplesIf}
 root <- tempfile("lakefold-example-")
 config <- dl_config(
   dl_catalog_duckdb(file.path(root, "lake.db")),
@@ -75,6 +76,7 @@ release <- dl_ingest(lake, source, contract, "orders", code_version = "v1")
 release
 dl_disconnect(lake)
 unlink(root, recursive = TRUE)
+\dontshow{\}) # examplesIf}
 }
 \seealso{
 \code{\link[=dl_pipeline]{dl_pipeline()}}, \code{\link[=dl_tbl]{dl_tbl()}}, \code{\link[=dl_execute]{dl_execute()}}

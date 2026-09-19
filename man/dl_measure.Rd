@@ -43,6 +43,7 @@ so database row order does not change report identity.
 Calculate a metric on a pinned published release
 }
 \examples{
+\dontshow{if (requireNamespace("duckdb", quietly = TRUE)) withAutoprint(\{ # examplesIf}
 root <- tempfile("lakefold-example-")
 config <- dl_config(
   dl_catalog_duckdb(file.path(root, "lake.db")),
@@ -67,4 +68,5 @@ metric <- dl_metric(
 dl_measure(lake, metric)
 dl_disconnect(lake)
 unlink(root, recursive = TRUE)
+\dontshow{\}) # examplesIf}
 }

@@ -25,6 +25,7 @@ database before collecting large data; keep the connection open while using
 a lazy table. Use \code{release} to read an exact historical version.
 }
 \examples{
+\dontshow{if (requireNamespace("duckdb", quietly = TRUE)) withAutoprint(\{ # examplesIf}
 root <- tempfile("lakefold-")
 lake <- dl_open(root)
 dl_write(lake, data.frame(id = 1:3), "orders")
@@ -34,6 +35,7 @@ dl_read(lake, "orders", lazy = TRUE) |>
   dplyr::collect()
 dl_close(lake)
 unlink(root, recursive = TRUE)
+\dontshow{\}) # examplesIf}
 }
 \seealso{
 \code{\link[=dl_write]{dl_write()}}, \code{\link[=dl_tbl]{dl_tbl()}}, \code{\link[=dl_releases]{dl_releases()}}

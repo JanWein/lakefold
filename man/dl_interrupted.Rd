@@ -18,6 +18,7 @@ Runs still marked running. Never auto-cancels a possibly live writer.
 Identify interrupted runs without changing metadata
 }
 \examples{
+\dontshow{if (requireNamespace("duckdb", quietly = TRUE)) withAutoprint(\{ # examplesIf}
 root <- tempfile("lakefold-example-")
 config <- dl_config(
   dl_catalog_duckdb(file.path(root, "lake.db")),
@@ -28,4 +29,5 @@ lake <- dl_connect(config)
 dl_interrupted(lake)
 dl_disconnect(lake)
 unlink(root, recursive = TRUE)
+\dontshow{\}) # examplesIf}
 }

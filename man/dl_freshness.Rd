@@ -18,6 +18,7 @@ Tibble of published assets with latest attempt and freshness.
 Assess delivery freshness independently of the last processing attempt
 }
 \examples{
+\dontshow{if (requireNamespace("duckdb", quietly = TRUE)) withAutoprint(\{ # examplesIf}
 root <- tempfile("lakefold-example-")
 config <- dl_config(
   dl_catalog_duckdb(file.path(root, "lake.db")),
@@ -37,4 +38,5 @@ release <- dl_ingest(lake, source, contract, "orders", code_version = "v1")
 dl_freshness(lake)
 dl_disconnect(lake)
 unlink(root, recursive = TRUE)
+\dontshow{\}) # examplesIf}
 }

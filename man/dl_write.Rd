@@ -68,7 +68,8 @@ accidentally dropping its rules. Draft contracts
 still require \code{\link[=dl_contract_confirm]{dl_contract_confirm()}}.
 
 Data frames are archived as RDS snapshots. File inputs preserve their original
-bytes before parsing. Built-in readers support CSV, TSV and RDS. CSV/TSV use
+bytes before parsing. CSV, TSV and RDS have native readers; Excel uses
+optional readxl. CSV/TSV use
 base R type inference; use \code{reader} for specific parsing requirements. The
 first file may be parsed twice to establish and validate its schema. Readers
 must be deterministic and must not modify their input.
@@ -81,6 +82,7 @@ cannot be fingerprinted reliably. Supply \code{code_version} to enable reuse and
 update it whenever code, dependencies or captured values change.
 }
 \examples{
+\dontshow{if (requireNamespace("duckdb", quietly = TRUE)) withAutoprint(\{ # examplesIf}
 root <- tempfile("lakefold-")
 lake <- dl_open(root)
 orders <- data.frame(id = 1:3, amount = c(25, 75, 50))
@@ -91,6 +93,7 @@ contract <- dl_contract("orders.checked",
 dl_write(lake, orders, contract = contract)
 dl_close(lake)
 unlink(root, recursive = TRUE)
+\dontshow{\}) # examplesIf}
 }
 \seealso{
 \code{\link[=dl_open]{dl_open()}}, \code{\link[=dl_read]{dl_read()}}, \code{\link[=dl_ingest]{dl_ingest()}}, \code{\link[=dl_pipeline]{dl_pipeline()}}

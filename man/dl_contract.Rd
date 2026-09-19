@@ -5,7 +5,7 @@
 \title{Define a data contract}
 \usage{
 dl_contract(
-  id,
+  id = "contract",
   version = "1.0.0",
   owner = "",
   description = "",
@@ -23,7 +23,8 @@ dl_contract(
 )
 }
 \arguments{
-\item{id}{Unique asset identifier.}
+\item{id}{Optional contract identifier. An unnamed contract is scoped to
+the product when added with \code{\link[=dl_add_contract]{dl_add_contract()}}.}
 
 \item{version}{Immutable definition version.}
 
@@ -35,7 +36,8 @@ dl_contract(
 
 \item{columns}{Named character vector of R types: character, integer,
 numeric,
-logical, Date, POSIXct.}
+logical, Date, POSIXct. A named list of zero-length prototypes such as
+\code{list(id = integer(), amount = double())} is also accepted.}
 
 \item{required}{Non-null columns.}
 
