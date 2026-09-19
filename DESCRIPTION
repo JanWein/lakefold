@@ -1,6 +1,6 @@
 Package: lakefold
 Title: Composable R Workflows for Governed Data Products
-Version: 0.4.0
+Version: 0.5.0
 Authors@R: person("Jan-Hendrik", "Weinert", role = c("aut", "cre"), email = "65009403+JanWein@users.noreply.github.com")
 Description: Combines reusable specifications and explicit execution steps for
     ingesting data, validating immutable candidates, publishing versioned data

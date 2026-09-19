@@ -4,12 +4,22 @@
 \alias{dl_contract_from}
 \title{Draft a contract from a table's column types}
 \usage{
-dl_contract_from(data, id, owner, description, grain, version = "1.0.0", ...)
+dl_contract_from(
+  data,
+  id,
+  owner = "",
+  description = "",
+  grain = "",
+  version = "1.0.0",
+  ...
+)
 }
 \arguments{
 \item{data}{A data frame or lazy database table.}
 
-\item{id, owner, description, grain}{Explicit business metadata.}
+\item{id}{Contract identifier.}
+
+\item{owner, description, grain}{Optional business metadata.}
 
 \item{version}{Contract definition version.}
 

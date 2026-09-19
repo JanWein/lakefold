@@ -4,7 +4,8 @@
 #' units and business rules are never inferred from sample values. The draft
 #' cannot be used for a quality gate or registered until explicitly confirmed.
 #' @param data A data frame or lazy database table.
-#' @param id,owner,description,grain Explicit business metadata.
+#' @param id Contract identifier.
+#' @param owner,description,grain Optional business metadata.
 #' @param version Contract definition version.
 #' @param ... Additional arguments to [dl_contract()], such as `key`,
 #'   `required`, `rules`, `operator` or `column_metadata`.
@@ -19,12 +20,37 @@
 dl_contract_from <- function(
   data,
   id,
-  owner,
-  description,
-  grain,
+  owner = "",
+  description = "",
+  grain = "",
   version = "1.0.0",
   ...
 ) {
+  columns <- infer_column_types(data)
+  args <- list(...)
+  if (!"required" %in% names(args)) {
+    args$required <- character()
+  }
+  contract <- do.call(
+    dl_contract,
+    c(
+      list(
+        id = id,
+        version = version,
+        owner = owner,
+        description = description,
+        grain = grain,
+        columns = columns
+      ),
+      args
+    )
+  )
+  contract$draft <- TRUE
+  class(contract) <- c("dl_contract_draft", "dl_contract")
+  contract
+}
+
+infer_column_types <- function(data) {
   if (!is.data.frame(data) && !inherits(data, "tbl_sql")) {
     abort("data must be a data frame or lazy database table.")
   }
@@ -33,7 +59,7 @@ dl_contract_from <- function(
   } else {
     data[0, , drop = FALSE]
   }
-  columns <- vapply(
+  vapply(
     proto,
     function(x) {
       if (inherits(x, "Date")) {
@@ -61,33 +87,12 @@ dl_contract_from <- function(
     },
     character(1)
   )
-  args <- list(...)
-  if (!"required" %in% names(args)) {
-    args$required <- character()
-  }
-  contract <- do.call(
-    dl_contract,
-    c(
-      list(
-        id = id,
-        version = version,
-        owner = owner,
-        description = description,
-        grain = grain,
-        columns = columns
-      ),
-      args
-    )
-  )
-  contract$draft <- TRUE
-  class(contract) <- c("dl_contract_draft", "dl_contract")
-  contract
 }
 
 #' Confirm a reviewed contract draft
 #'
-#' Confirms that the caller has reviewed the inferred types and supplied the
-#' business meaning, nullability, keys and rules. This is a local specification
+#' Confirms that the caller has reviewed the inferred types and chosen the
+#' nullability, keys, rules and optional metadata. This is a local specification
 #' transition, not an approval workflow or a proof that any data passed.
 #' @param contract A draft from [dl_contract_from()].
 #' @returns A `dl_contract` ready for registration and validation.

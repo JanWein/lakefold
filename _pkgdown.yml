@@ -8,6 +8,8 @@ template:
 reference:
   - title: Package overview
     contents: lakefold-package
+  - title: Start here
+    contents: [dl_open, dl_write, dl_read]
   - title: Configure and connect
     contents: [dl_config, dl_catalog_duckdb, dl_setup, dl_disconnect, dl_capabilities]
   - title: Ingest and publish

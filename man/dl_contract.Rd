@@ -6,10 +6,10 @@
 \usage{
 dl_contract(
   id,
-  version,
-  owner,
-  description,
-  grain,
+  version = "1.0.0",
+  owner = "",
+  description = "",
+  grain = "",
   columns,
   required = names(columns),
   key = character(),
@@ -27,11 +27,11 @@ dl_contract(
 
 \item{version}{Immutable definition version.}
 
-\item{owner}{Business owner.}
+\item{owner}{Optional business owner.}
 
-\item{description}{Business description.}
+\item{description}{Optional business description.}
 
-\item{grain}{Meaning of one row.}
+\item{grain}{Optional meaning of one row.}
 
 \item{columns}{Named character vector of R types: character, integer,
 numeric,
@@ -45,7 +45,8 @@ logical, Date, POSIXct.}
 
 \item{producer}{Contact for failed deliveries.}
 
-\item{max_age_hours}{Maximum release age.}
+\item{max_age_hours}{Maximum release age, or \code{NULL} to leave freshness
+unmonitored.}
 
 \item{allow_empty}{Whether an empty candidate may be published.}
 

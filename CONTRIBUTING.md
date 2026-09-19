@@ -25,7 +25,9 @@ and repository materials in English. Keep the README as the canonical overview.
 When guide content is shared between `docs/` and `vignettes/`, update both.
 
 Design for a short path through common tasks and explicit composition for more
-complex workflows. Keep sources, contracts, steps, products, metrics and releases
+complex workflows. Require only the inputs needed for the selected operation;
+keep metadata and advanced integrations optional and document the defaults.
+Keep sources, contracts, steps, products, metrics and releases
 consistent in their inputs, outputs and lifecycle.
 
 Core principles: explicit release identity, failed checks block publication,

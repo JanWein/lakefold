@@ -1,8 +1,8 @@
 #' lakefold: composable R workflows for governed data products
 #'
 #' Compose complex data workflows from reusable specifications and explicit
-#' steps. Start with concise ingestion calls, add validation and transformations,
-#' publish versioned products and calculate reproducible metrics. Reuse ordinary
+#' steps. Start with [dl_open()], [dl_write()] and [dl_read()], then add validation,
+#' transformations, publish versioned products and calculate reproducible metrics. Reuse ordinary
 #' R functions, delegate SQL builds to dbt and consume lazy relations with
 #' dplyr and dm.
 #'
@@ -32,7 +32,7 @@
 #'
 #' @section Resource ownership:
 #' Specifications do not contain live database connections. Close connections
-#' with [dl_disconnect()]. Close local catalog connections before invoking dbt
+#' with [dl_close()] or [dl_disconnect()]. Close local catalog connections before invoking dbt
 #' in another process. Lazy tables require their originating connection to
 #' remain open. The lakefold registry requires a single writer.
 #'

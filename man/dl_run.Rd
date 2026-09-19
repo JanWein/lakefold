@@ -9,7 +9,8 @@ dl_run(
   lake = NULL,
   business_date = NA_character_,
   notify = NULL,
-  stop_on_failure = TRUE
+  stop_on_failure = TRUE,
+  cache = TRUE
 )
 }
 \arguments{
@@ -26,6 +27,11 @@ transport.}
 
 \item{stop_on_failure}{Stop after persisting failure metadata (recommended
 for jobs).}
+
+\item{cache}{\code{TRUE} reuses any matching historical release, preserving
+idempotent job retries. \code{"current"} only reuses the current release;
+\code{\link[=dl_write]{dl_write()}} uses this policy so writing older data makes it current again.
+Set \code{FALSE} to re-evaluate callbacks with external or changing state.}
 }
 \value{
 A run result with run_id, status, release_id and quality results.

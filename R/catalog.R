@@ -107,7 +107,7 @@ catalog_summary <- function(snapshot, at = Sys.time()) {
         assets$version == parts[2],
     ]
     max_age <- if (nrow(contract)) {
-      jdecode(contract$definition[[1]])$max_age_hours
+      jdecode(contract$definition[[1]])$max_age_hours %||% NA_real_
     } else {
       NA_real_
     }

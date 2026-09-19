@@ -1,4 +1,4 @@
-# Feature coverage in 0.4.0
+# Feature coverage in 0.5.0
 
 ## Component responsibilities
 
@@ -11,6 +11,19 @@ evidence and immutable releases.
 The framework is designed for simple entry points and explicit composition as
 workflows become more complex. Integrations retain their own responsibilities
 and can be adopted as needed.
+
+## Simple defaults added in 0.5.0
+
+`dl_open()`, `dl_write()` and `dl_read()` provide a minimal local workflow.
+Folder layout, local backend, structural schema and definition versions are
+handled automatically. CSV, TSV and RDS readers are built in. `dl_close()`
+closes the connection, and `dl_open()` remembers the backend when reopening.
+
+Contracts, keys, metadata, custom readers, input checks, pointblank, dbt, dm,
+metrics and remote configuration are optional. Business requirements are never
+inferred from sample values. A custom contract requires only an ID and columns.
+Explicit contracts cannot be omitted on subsequent writes; custom callbacks
+are re-evaluated unless the caller supplies a code version for reuse.
 
 ## Existing capabilities and additions
 

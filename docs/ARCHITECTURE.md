@@ -1,7 +1,7 @@
-# Architecture as of 0.4.0
+# Architecture as of 0.5.0
 
 lakefold organizes data workflows around definitions, execution and inspection.
-Users can start with a concise ingestion call and compose more explicit steps
+Users can start with `dl_open()`, `dl_write()` and `dl_read()`, then compose steps
 when their workflow needs them. Ordinary R functions and standard data objects
 connect the modules.
 
@@ -18,6 +18,19 @@ a SQL dependency graph cannot establish relational constraints.
 publishes it after contract validation. An earlier build's invocation ID alone
 does not establish the current contents of a relation.
 
+## Minimal local path
+
+`dl_open()` remembers the backend and folder layout. `dl_write()` derives asset
+names, structural schemas and technical versions before using the same ingestion
+and final publication gate. `dl_read()` collects by default or returns a lazy
+table on request. The first successfully published automatic schema is reused;
+failed first deliveries do not establish a permanent baseline.
+
+Custom contracts remain explicit on later writes. Custom readers and rules
+are re-evaluated unless the caller supplies a code version for reuse. The write
+facade only reuses the current release; the job runner retains historical retry
+semantics. Neither path changes old published tables.
+
 ## Definitions, execution and inspection
 
 Definitions are small classed lists: `dl_contract`, `dl_source`, `dl_pipeline`,
@@ -30,6 +43,7 @@ DuckLake's internal metadata tables.
 
 | Module | Responsibility |
 |---|---|
+| `simple.R` | Local defaults, structural schema baselines and open/write/read entry points |
 | `workflow.R` | Object-first execution, plans, transformations and compact print methods |
 | `setup.R` | Local/S3 storage and DuckDB/PostgreSQL catalog configuration |
 | `sources.R` | Unchanged landing, SHA-256 and optional S3 originals |
