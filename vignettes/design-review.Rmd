@@ -9,7 +9,7 @@ vignette: >
 
 # Design review: simple composition for complex data workflows
 
-Review of lakefold 0.5.0, 19 September 2026.
+Review of lakefold 0.6.0, 19 September 2026.
 
 ## Purpose and design goal
 
@@ -94,6 +94,28 @@ must share an invocation ID, and failures are checked through both process and
 node outcomes. Primary and foreign keys are declared explicitly for dm; a SQL
 dependency graph cannot establish them.
 
+## Review findings addressed in 0.6.0
+
+| Finding | Implemented correction |
+|---|---|
+| Abbreviated formulas could share an identity | Full expression fingerprints; legacy metric versions cannot be silently reinterpreted |
+| Data pronouns could bypass missing-value checks | Static column extraction, explicit inputs for unresolved expressions and batched null checks |
+| Correcting August hid a retained September delivery | Check the current partitioned release's actual date values |
+| Framework IDs changed the global random stream | RNG-independent identifiers with uniqueness regression coverage |
+| Simple month imports required a pipeline | Optional `partition_by` on `dl_write()` and `dl_ingest()` |
+| Automatic integer inference blocked later decimals | Compatible automatic numeric schemas; explicit integer contracts stay strict |
+| Real source column names were rejected | Quoted column names across contracts, metrics, partitions and comparisons |
+| Analyses always wrote metadata | Database-enforced read-only connections and optional measurement recording |
+| Recalculating a report broke an identical retry | Compare semantic content, retain original timestamps and expose report readback |
+| Original quality exceptions were discarded | Optional local conditions without persisting their raw text |
+| Interrupted staging could block the next import | Explicit recovery with live-process protection, preview and retained evidence |
+| Change analysis needed ad hoc code | Keyed release comparisons, bounded row previews and numeric summaries |
+| APIs needed separate ingestion boilerplate | A zero-argument source function can feed `dl_write()` directly |
+
+These changes improve ordinary usage and correctness. They do not turn a
+single-table publication into an atomic multi-table transaction. Advanced
+capabilities below need their own design and evidence.
+
 ## Remaining priorities
 
 | Priority | Capability | Next concrete step |
@@ -103,7 +125,7 @@ dependency graph cannot establish them.
 | High | Improve changes to definitions | Provide documented update/remove helpers alongside contract comparisons |
 | High when multiple writers are required | Coordinate concurrent publication | Introduce locking or uniqueness guarantees and conflict tests |
 | Medium | Compose multiple products in execution order | Define an optional scheduler adapter using release fingerprints and cycle checks |
-| Medium | Generalize first-class sources | Specify snapshots, repeatability, fingerprints and runtime credentials for database/API sources |
+| Medium | Stream large external sources | Extend the existing snapshot callback with database-side fingerprints and streaming semantics |
 | Medium | Publish related tables together | Define a multi-table transaction boundary and relational quality gate |
 | Medium | Add incremental ingestion | Specify keys, deletions and correction semantics before append/upsert support |
 | Medium | Manage the full retention lifecycle | Track references from reports and releases, then define preview and restore behavior |
@@ -126,8 +148,9 @@ review workflow. API immutability does not protect tables from direct SQL writes
 On the explicit API, `code_version` must cover changed closure values and
 dependencies as well as function bodies. `dl_write()` re-evaluates custom
 callbacks by default; supplying a code version opts into cache reuse. Calling `collect()` can bring large datasets into R memory.
-Even metric calculation registers definitions and lineage, so it participates
-in writer coordination.
+Metric calculation can run without writes using a read-only connection or
+`record = FALSE`. Ordinary recorded calculations deduplicate identical lineage
+edges. Read-only access does not add distributed writer coordination.
 
 ## Design evolution
 
@@ -138,6 +161,7 @@ in writer coordination.
 | 0.3.0 | dbt project specifications, isolated invocations, diagnostics and native lazy dm models |
 | 0.4.0 | Input gates, richer pointblank evidence, shared diagnostics, contract tooling, explicit dbt publication and operational helpers |
 | 0.5.0 | Minimal open/write/read workflow, optional metadata and automatic structural schemas and versions |
+| 0.6.0 | Integrity corrections, simple partition imports, release comparison, read-only analysis, report readback, source callbacks and explicit recovery |
 
 These changes extend the framework's own data workflow concepts. Future work
 should be judged by whether it makes real workflows easier to compose, inspect,
