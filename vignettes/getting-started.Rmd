@@ -32,8 +32,8 @@ are needed. If the purpose or terminology is unfamiliar, read
 | Steps 6 to 8 | Optional prepared products, reusable metrics and report records |
 
 Read the steps in order and reuse the same R session. Later steps build on the
-earlier objects. Steps 6 to 8 are independent additions, so a metric can be
-used without first building a product.
+earlier objects. Step 6 is optional even if you continue to metrics in Step 7.
+Step 8 builds on the metric from Step 7.
 
 ## Before you start
 
