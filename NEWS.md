@@ -1,3 +1,28 @@
+# lakefold 0.7.0
+
+- The core works without DuckDB. Install optional `duckdb` >= 1.5.5 for lake
+  storage and the SQL transform adapter. Existing database workflows remain
+  supported and keep their publication and versioning semantics.
+- `dl_add_source()`, `dl_add_transform()`, `dl_add_contract()`, `dl_add_quality()`,
+  `dl_add_target()` and `dl_add_catalog()` compose products with ordinary inputs.
+- `dl_collect()` returns an ordinary tibble from native or pinned lake results.
+- `dl_contract()` accepts named prototype lists and an optional identity;
+  anonymous contracts inherit their product's identity.
+- `dl_inspect()` and `dl_explain()` describe composition without execution.
+- `dl_product("name")` creates a lightweight product with sensible defaults;
+  the existing derived-product constructor remains supported.
+- `dl_publish()` publishes a composed product or data frame to a local lake,
+  configured storage or a custom target.
+- `dl_rule()` accepts row-wise quality formulas. Missing results fail checks.
+- `dl_run()` dispatches across composed products and existing workflow objects.
+  Composed runs return schema, row counts, timestamps and execution evidence.
+- `dl_source_database()` accepts DBI tables, parameterized queries and deferred
+  connection factories. `dl_sql()` provides an optional DuckDB SQL transform.
+- `dl_validate()` checks product and pipeline definitions before execution.
+- Source, transform, quality, target and catalog S3 interfaces allow extensions
+  without core changes. Malformed quality evidence blocks publication.
+- Excel paths have an optional readxl default reader.
+
 # lakefold 0.6.0
 
 ## Correctness
