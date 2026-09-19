@@ -113,6 +113,8 @@ dl_metric <- function(
 #'   lake and `FALSE` on a read-only lake. Unrecorded results still carry their
 #'   complete metric definition and pinned release in the manifest.
 #' @return Tibble with a dl_manifest attribute for report reproducibility.
+#'   Grouped results are ordered by the requested dimensions using C collation
+#'   so database row order does not change report identity.
 #' @export
 #' @examples
 #' root <- tempfile("lakefold-example-")
@@ -272,6 +274,9 @@ dl_measure <- function(
     abort("Metric returned a missing or non-finite numeric result.")
   }
   result <- tibble::as_tibble(result)
+  if (length(by)) {
+    result <- dplyr::arrange(result, !!!rlang::syms(by), .locale = "C")
+  }
   manifest <- list(
     metric = metric$id,
     metric_version = metric$version,
