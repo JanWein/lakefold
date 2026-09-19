@@ -5,11 +5,11 @@ Prüfdatum: 19. September 2026. Lokal Ubuntu 24.04 und R 4.3.3.
 | Prüfung | Ergebnis |
 |---|---|
 | Vollständiger `R CMD check --no-manual` | 0 Errors, 0 Warnings, 0 Notes |
-| Einzelprüfungen im abschließenden Paketcheck | 262 bestanden, 0 fehlgeschlagen, 0 Warnungen, 0 übersprungen |
+| Einzelprüfungen im abschließenden Paketcheck | 263 bestanden, 0 fehlgeschlagen, 0 Warnungen, 0 übersprungen |
 | Separater vollständiger DuckLake-Lauf | Bestanden, einschließlich realem dbt und Snapshot-Veröffentlichung |
 | Beispiele und Vignetten | Alle Paketbeispiele geprüft; sieben Vignetten gebaut und deren R-Code ausgeführt |
 | API und Referenz | 62 exportierte Funktionen, 52 Hilfethemen, vollständiger pkgdown-Index |
-| Tests | 55 Testfälle; neue Regressionen für Qualitätsgates, Migration, Berichte und dbt-Veröffentlichung |
+| Tests | 56 Testfälle; neue Regressionen für Qualitätsgates, Migration, Berichte und dbt-Veröffentlichung |
 
 Die GitHub-Workflows prüfen jeden veröffentlichten Stand zusätzlich mit R 4.5.1
 auf DuckDB und DuckLake und bauen/deployen die Website. Ihr Ergebnis ist unter
@@ -21,6 +21,8 @@ Die folgenden lokalen Ergebnisse sind kein vorweggenommener CI-Status.
 * Native pointblank-Schwellen warnen oder blockieren je Segment. Kleine Segmente
   werden nicht durch eine globale Fehlerquote verdeckt.
 * Fehlende Action Levels, inaktive Schritte und Auswertungsfehler blockieren.
+* Gleichzeitig vorhandene pointblank-Abbruchspalten `S`, `E` und `C` werden
+  gemeinsam ausgewertet. Acht Berichtsvarianten sichern diese Regel ab.
 * Ein fehlgeschlagenes Eingangsgate erhält Landing und alten Release, schreibt
   aber keine neue Raw-Tabelle. Das abschließende Kandidatengate bleibt aktiv.
 * Data-Frame-Zulieferungen erhalten Datumstypen und wiederverwenden identische
