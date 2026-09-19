@@ -3,6 +3,8 @@
 #' Creates or reopens a self-contained local folder. DuckDB is the default and
 #' needs no extension download or external service. The backend is remembered
 #' in `lakefold.json`; reopening a folder never silently switches backends.
+#' A new lake needs an empty or nonexistent folder. Existing lakes made with
+#' custom configuration still open through [dl_connect()].
 #' Use [dl_config()] and [dl_connect()] for custom layers or remote storage.
 #' @param path Local folder, created if needed. Defaults to `"lakefold"` in
 #'   the working directory.
@@ -52,11 +54,9 @@ dl_open <- function(path = "lakefold", backend = NULL) {
     }
     backend <- saved$backend
   } else {
-    if (
-      any(file.exists(file.path(path, c("metadata.duckdb", "data", "landing"))))
-    ) {
+    if (length(list.files(path, all.files = TRUE, no.. = TRUE))) {
       abort(
-        "This folder already contains lake files without lakefold.json. Use its original dl_config() or choose an empty folder."
+        "This folder is not empty and has no lakefold.json. Use its original dl_config() or choose an empty folder."
       )
     }
     backend <- backend %||% "duckdb"
@@ -89,8 +89,9 @@ dl_close <- function(lake) dl_disconnect(lake)
 #' blocked. No keys, business rules, owners or freshness deadlines are guessed.
 #'
 #' Supply `contract` whenever you need business checks or an intentional schema
-#' change. Once an asset uses an explicit contract, subsequent writes must
-#' supply it too. This prevents accidentally dropping its rules. Draft contracts
+#' change. Once an execution attempt uses an explicit contract, subsequent writes
+#' must supply one too, even if that attempt was blocked. This prevents
+#' accidentally dropping its rules. Draft contracts
 #' still require [dl_contract_confirm()].
 #'
 #' Data frames are archived as RDS snapshots. File inputs preserve their original
@@ -297,6 +298,26 @@ automatic_schema <- function(name, columns) {
 }
 
 published_schema <- function(lake, name) {
+  definitions <- query(
+    lake,
+    paste(
+      "SELECT DISTINCT a.definition FROM",
+      meta(lake, "assets"),
+      "a JOIN",
+      meta(lake, "runs"),
+      "r ON a.fingerprint = r.definition_hash",
+      "AND a.id = r.pipeline WHERE a.kind = 'pipeline' AND r.asset = ?"
+    ),
+    list(name)
+  )
+  for (definition in definitions$definition) {
+    contract <- jdecode(definition)$steps$validate
+    if (!is.null(contract) && !isTRUE(contract$automatic_schema)) {
+      abort(
+        "This asset uses an explicit contract. Supply contract to keep its checks active."
+      )
+    }
+  }
   release <- tryCatch(resolve_release(lake, name), dl_no_release = function(e) {
     NULL
   })
