@@ -39,7 +39,10 @@ uid <- function() {
   paste0(
     "r",
     substr(
-      digest::digest(list(now(), Sys.getpid(), runif(1)), algo = "sha256"),
+      digest::digest(
+        list(now(), Sys.getpid(), stats::runif(1)),
+        algo = "sha256"
+      ),
       1,
       24
     )
