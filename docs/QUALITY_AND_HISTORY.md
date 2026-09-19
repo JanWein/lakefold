@@ -1,85 +1,85 @@
-# Qualität, Fehler und historische Datenstände
+# Quality, failures and historical data
 
-## Die vier Zeit- und Versionsbegriffe
+## Four time and version concepts
 
-| Begriff | Beantwortet |
+| Concept | Question answered |
 |---|---|
-| Fachlicher Stichtag (`business_date`) | Für welchen Zeitpunkt gilt die Lieferung? |
-| Eingang (`received_at`) | Wann wurde das Original gesichert? |
-| Veröffentlichung (`published_at`) | Wann wurde der geprüfte Datenstand freigegeben? |
-| Definitionsversion und `code_version` | Welche fachlichen Regeln und welcher Code wurden verwendet? |
+| Business date (`business_date`) | Which date does the delivery describe? |
+| Receipt (`received_at`) | When was the original archived? |
+| Publication (`published_at`) | When was the validated data state released? |
+| Definition version and `code_version` | Which business rules and code were used? |
 
-`business_date` ersetzt keine Datumsspalte in den Fachdaten. Stock-Metrics wählen
-ihren Stichtag über `time_column` und `at`. Eine neue Lieferung für denselben
-Stichtag ist eine Korrektur mit eigenem Release, keine Überschreibung der Historie.
+`business_date` does not replace a date column in the data. Stock metrics select
+their date through `time_column` and `at`. A new delivery for the same date is a
+correction with its own release; it does not overwrite history.
 
-## Qualitätsstatus
+## Quality states
 
-| Status | Bedeutung | Darf veröffentlicht werden? |
+| Status | Meaning | Publication allowed? |
 |---|---|---|
-| `passed` | Prüfung abgeschlossen, innerhalb der Toleranz | Ja |
-| `warning` | Nicht-blockierende fachliche Regel verletzt | Ja, mit Warnungsstatus |
-| `failed` | Blockierende Regel verletzt | Nein |
-| `error` | Prüfung technisch gescheitert | Nein |
-| `not_checked` | Keine auswertbare Prüfung, etwa inaktiver Schritt | Nein |
+| `passed` | Check completed within tolerance | Yes |
+| `warning` | A non-blocking business rule was breached | Yes, with warning quality |
+| `failed` | A blocking rule was breached | No |
+| `error` | The check could not complete successfully | No |
+| `not_checked` | No evaluable check, such as an inactive step | No |
 
-Nullwerte werden unabhängig von einer Regel geprüft. `na.rm = TRUE` in einer
-Regel hebt den Contract nicht auf. Toleranzen beziehen sich auf Testeinheiten,
-nicht zwangsläufig auf Zeilen. `dl_quality_counts(2, 100)` bedeutet zwei
-fehlgeschlagene von 100 Einheiten. `max_failure = 0.02` lässt das noch zu.
+Null checks are independent of individual rules. A rule's `na.rm = TRUE` does
+not override the contract. Tolerances apply to test units, which need not be
+rows. `dl_quality_counts(2, 100)` means two failures among 100 units;
+`max_failure = 0.02` still permits this result.
 
-`dl_pointblank(policy = "agent")` übernimmt die nativen Action Levels je
-Prüfschritt und Segment. Warnungen erlauben die Freigabe, Stop/Error/Critical
-blockieren. `policy = "rule"` behält die bisherige Fehlerquoten-Regel bei.
-Inaktive, fehlerhafte oder leere Prüfpläne gelten in beiden Fällen nicht als Erfolg. Es gibt keinen allgemeinen Schalter zum Erzwingen der Publikation.
+`dl_pointblank(policy = "agent")` uses native action levels for each step and
+segment. Warning allows publication; Stop/Error/Critical block it.
+`policy = "rule"` retains the rule-level failure-ratio policy. Inactive steps,
+evaluation errors and empty plans do not count as success under either policy.
+There is no general force-publication switch.
 
-## Fehler diagnostizieren
+## Diagnose failures
 
 ```r
 out <- dl_execute(pipeline, lake, stop_on_failure = FALSE)
 out$status
 out$quality
-out$error   # bei technischen Fehlern, nur lokal untersuchen
+out$error   # inspect technical errors locally
 
 dl_status(out)
 dl_quality(lake, run_id = out$run_id)
 dl_quality_report(dl_quality(out), "quality.html")
 ```
 
-Ein Job sollte den Standard `stop_on_failure = TRUE` beibehalten. Dann wird nach
-der Speicherung der Diagnose ein Fehler ausgelöst, damit der Scheduler den Lauf
-als fehlgeschlagen erkennt. Bei abgefangenen Conditions ist das Run-Ergebnis
-unter `condition$result` verfügbar. Exception-Texte können private Inhalte
-enthalten und werden deshalb nicht unverändert in Registry oder Meldungen kopiert.
+Scheduled jobs should retain the default `stop_on_failure = TRUE`. Diagnostics
+are persisted before an error is raised so that the scheduler can detect the
+failed run. A caught condition exposes the run result as `condition$result`.
+Raw exception text can contain private data and is not copied verbatim into the
+registry or notification messages.
 
-## Historie und Cache
+## History and cache
 
 ```r
 old <- dl_tbl(lake, "finance.reserves", release = first_run$release_id)
 current <- dl_tbl(lake, "finance.reserves")
 ```
 
-Die API verändert alte Releases nicht. Ein identischer Wiederholungslauf verweist
-als `cached` auf den vorhandenen Release. Wird eine ältere Lieferung nach einer
-neueren wiederholt, bleibt der neuere Release aktuell. Ein Cache-Treffer ist
-keine fachliche Rücksetzung.
+The API does not modify old releases. An identical repeat returns `cached` and
+references an existing release. Repeating an older delivery after a newer one
+leaves the newer release current. A cache hit does not roll the data back.
 
-## Replace oder Partitionsersatz?
+## Full or partition replacement
 
-* `mode = "replace"`: Die Lieferung ist der vollständige neue Bestand.
-* `mode = "replace_partition"`: Alle in der Lieferung enthaltenen Partitionen
-  ersetzen diese Partitionen vollständig. Andere Partitionen bleiben erhalten.
+* `mode = "replace"`: the delivery contains the complete new data state.
+* `mode = "replace_partition"`: each supplied partition fully replaces that
+  partition; other partitions are retained.
 
-Ein Partitionsersatz ist kein Zeilen-Upsert. Ein unvollständiger Monatsbestand
-würde die übrigen Zeilen dieses Monats entfernen. Nullwerte in Partitionsschlüsseln
-und leere Partitionslieferungen sind nicht erlaubt. Die Implementierung
-materialisiert den vollständigen neuen Bestand und ist noch nicht speicheroptimal.
+Partition replacement is not a row-level upsert. An incomplete monthly delivery
+would remove other rows for that month. Null partition keys and empty partition
+deliveries are rejected. The implementation materializes the complete new state,
+so it is not yet optimized for incremental storage.
 
-## Benachrichtigungen
+## Notifications
 
-Ein Callback `notify = function(event) ...` bindet bestehenden Mail-/Tickettransport
-an. Ohne Callback stehen Ereignisse auf `pending`; es wird nichts versendet.
-Transportfehler erzeugen `delivery_failed`. Derselbe bereits zugestellte Vorfall
-wird unterdrückt, ein Wiederauftreten nach erfolgreicher Erholung erneut gemeldet.
-Für externe Idempotenz die `event_id` verwenden. Prozessabbruch zwischen externer
-Zustellung und Registry-Update kann weiterhin doppelte Nachrichten verursachen.
+A `notify = function(event) ...` callback connects existing email or ticket
+transport. Without a callback, events remain `pending` and nothing is sent.
+Transport errors produce `delivery_failed`. An incident already delivered is
+suppressed; recurrence after recovery is reported again. Use `event_id` for
+external idempotency. A process crash between external delivery and the registry
+update can still cause duplicate notifications.

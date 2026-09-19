@@ -1,49 +1,57 @@
-# Von dataloom zu lakefold
+# Migrating to lakefold
 
-Das R-Paket und GitHub-Projekt heißen ab Version 0.3.0 `lakefold`.
+The R package and GitHub project have been named `lakefold` since version 0.3.0.
 
 ```r
 remotes::install_github("JanWein/lakefold", build_vignettes = TRUE)
 library(lakefold)
 ```
 
-Ersetze `library(dataloom)`, `dataloom::` und Paketnamen in `renv.lock`, CI und
-Deployments durch `lakefold`. Entferne das alte Paket bei Bedarf ausdrücklich;
-beide Pakete sollten nicht gleichzeitig angehängt werden, weil die exportierten
-Funktionen dieselben Namen tragen.
+Replace `library(dataloom)`, `dataloom::` and the package name in `renv.lock`, CI
+and deployments with `lakefold`. Explicitly remove the old package if needed.
+Avoid attaching both packages in one session because their exports share names.
 
-Die `dl_*`-Funktionsnamen und S3-Klassen bleiben erhalten.
-Vorhandene Kataloge können mit derselben expliziten Konfiguration geöffnet werden.
-Der bestehende YAML-Formatbezeichner `dataloom-contract` bleibt als Format-ID
-bestehen. Ebenso bleiben der bisherige S3-Standardpräfix und die bestehenden
-`DATALOOM_*`-Variablen kompatibel. Der Name des R-Pakets verschiebt keine Daten.
+The `dl_*` function names and S3 classes remain available. Existing catalogs can
+be opened with the same explicit configuration. The YAML format identifier
+`dataloom-contract`, the existing default S3 prefix and existing `DATALOOM_*`
+environment variables remain compatible. Renaming the R package does not move
+data.
 
-Prüfe gespeicherte R-Funktionen oder RDS-Spezifikationen auf Referenzen auf den
-alten Paket-Namespace und definiere sie bei Bedarf neu. Bei geänderter fachlicher
-Logik bleiben Versionssprünge und neue `code_version` verpflichtend. Version 0.4.0 ergänzt einen additiven, versionierten Registry-Migrationspfad.
+Check saved R functions and RDS specifications for references to the old
+namespace and recreate them where necessary. Changes to business logic still
+require definition versions and a new `code_version`. Version 0.4.0 adds a
+versioned, additive registry migration path.
 
-Neue dbt-Projekte sind zusätzliche Spezifikationen, keine registrierten
-`dl_product`-Definitionen. `dl_execute(project)` delegiert an `dl_dbt_build()`.
-Die dbt-Ausgaben werden nicht automatisch als unveränderliche Releases registriert.
+A dbt project is an additional specification, separate from registered
+`dl_product` definitions. `dl_execute(project)` delegates to `dl_dbt_build()`.
+The resulting dbt relations are not automatically registered as immutable
+lakefold releases.
 
-## Von 0.3.0 zu 0.4.0
+## From 0.3.0 to 0.4.0
 
-Beim Verbinden legt lakefold die eigene Tabelle `_dl.schema_version` an und
-migriert die Qualitätsmetadaten transaktional auf Schema 2. Hinzu kommen
-`engine`, `stage`, `segment` und `details`. Alte Nachweise erhalten `legacy`
-als Engine und `candidate` als Phase. Vorhandene Releases und Definitionen
-werden nicht umgeschrieben. Wiederholtes Verbinden wiederholt die Migration nicht.
-Eine neuere, unbekannte Schemaversion wird abgewiesen.
+On connection, lakefold creates `_dl.schema_version` and transactionally migrates
+quality metadata to schema 2. New fields are `engine`, `stage`, `segment` and
+`details`. Existing evidence receives engine `legacy` and stage `candidate`.
+Existing releases and definitions are preserved. Subsequent connections do not
+repeat an already applied migration. Unknown newer schema versions are rejected.
 
-Verwende nach der Migration mindestens lakefold 0.4.0. Ein automatischer Downgrade
-oder Migrationen fachlicher Nutzdatenschemas sind nicht enthalten.
+Use lakefold 0.4.0 or later after migration. Automatic downgrades and migrations
+of business data schemas are not implemented.
 
-Bestehende pointblank-Regeln behalten `policy = "rule"`. Für `policy = "agent"`
-ist eine neue Contract-/Pipeline-Version nötig. Dort liefern die nativen
-Action Levels den Gate-Entscheid. Neue Eingangsverträge und geänderte
-Transformationslogik erfordern ebenfalls neue Definitionen und `code_version`.
+Existing pointblank rules retain `policy = "rule"`. Switching to
+`policy = "agent"` requires new contract and pipeline versions. Native action
+levels then determine the gate outcome. New input contracts and changed
+transformation logic also require updated definitions and `code_version`.
 
-`dl_dbt_publish()` ist eine explizite zusätzliche Veröffentlichung. Ein dbt-Build
-allein schreibt weiterhin keinen lakefold-Release. Pointblank-Agenten bleiben
-nur bei `keep_agents = TRUE` im Arbeitsspeicher und werden nie in die Registry
-serialisiert. Metadatenexporte enthalten jetzt auch Segmentlabels.
+`dl_dbt_publish()` is an explicit additional publication step. A dbt build alone
+still creates no lakefold release. pointblank agents are retained in memory only
+with `keep_agents = TRUE` and are never serialized into the registry. Metadata
+exports now include segment labels.
+
+## English documentation and examples
+
+English is the canonical language for the README, guides, vignettes, function
+help and example templates. `README.en.md` remains a link to the main README.
+Example column names and descriptions are English. This documentation update
+does not rename user assets, change existing contracts or migrate data. Adapt
+copied templates to your actual source schema before running them.

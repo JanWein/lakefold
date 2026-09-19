@@ -1,108 +1,105 @@
-# Betrieb ab 0.4.0
+# Operating lakefold 0.4.0
 
-## dbt-Aufrufe
+## dbt execution
 
-Ein schreibender Prozess pro lokalem Katalog. R-Verbindungen vor dem dbt-Aufruf
-schließen, danach erneut öffnen. Alle Aufgaben desselben Katalogs im Scheduler
-serialisieren. Die Paket-Registry implementiert keine verteilten Locks.
+Use one writing process per local catalog. Close R connections before invoking
+dbt and reopen them afterward. Serialize tasks for the same catalog in the
+scheduler. The registry does not implement distributed locks.
 
-dbt-Logs und Artefakte liegen pro Lauf unter `.lakefold/runs/<id>`. Sie enthalten
-unter anderem SQL, Pfade und Datenbankdiagnosen und gehören nicht in öffentliche
-Repositories. Die Umgebung des aufrufenden Prozesses wird vererbt; Credentials
-werden über das dbt-Profil und Umgebungsvariablen verwaltet. Anonyme dbt-Telemetrie
-wird für den Kindprozess ausdrücklich deaktiviert.
+dbt logs and artifacts are stored per invocation under `.lakefold/runs/<id>`.
+They can contain SQL, paths and database diagnostics. Keep them in the operating
+project's controlled storage. The child process inherits its parent's
+environment; credentials come from the dbt profile and environment variables.
+Anonymous dbt telemetry is explicitly disabled for the child process.
 
-Bei Fehlschlag `result$success`, `dl_dbt_status(result)`, `result$stderr` und
-`result$artifact_error` auswerten. `timeout` beendet einen hängenden Kindprozess;
-es gibt keinen automatischen Retry. Ein dbt-Fehler rollt bereits gebaute Modelle
-nicht pauschal zurück. Nach erfolgreichen ausgewählten Builds nur passende
-Manifest-Nodes in `dl_dbt_model(tables = ...)` öffnen.
+On failure, inspect `result$success`, `dl_dbt_status(result)`, `result$stderr` and
+`result$artifact_error`. `timeout` terminates a stalled child process. There is
+no automatic retry, and a failed dbt invocation does not roll back every model
+already built. After a successful selected build, open the corresponding
+manifest nodes through `dl_dbt_model(tables = ...)`.
 
-Artefaktaufbewahrung, Secrets, Backup und Restore bleiben Aufgaben des Betreibers.
-Für S3/PostgreSQL und dbt v2 eine separat geprüfte Konfiguration einsetzen; der
-Starter automatisiert lokale dbt-duckdb-Profile. R- und Python-DuckDB-Versionen
-aufeinander abstimmen. Ungeprüfte Produktionsreife wird nicht behauptet.
+Operators manage artifact retention, secrets, backup and restore. S3/PostgreSQL
+and dbt v2 require separately verified configuration. The starter generates local
+dbt-duckdb profiles. Keep the R and Python DuckDB versions aligned.
 
-# Betrieb
+## Configuration
 
-## Konfiguration
+[setup_s3.R](../inst/examples/setup_s3.R) uses these environment variables:
 
-[setup_s3.R](../inst/examples/setup_s3.R) verwendet folgende Umgebungsvariablen:
-
-| Variable | Inhalt |
+| Variable | Contents |
 |---|---|
-| `DATALOOM_S3_BUCKET` | Vorhandener S3-Bucket, erforderlich |
-| `DATALOOM_S3_ENDPOINT` | Endpoint mit `https://`, ohne Pfad, erforderlich |
-| `DATALOOM_S3_PREFIX` | Prefix, Standard `lakefold/dev` |
-| `AWS_DEFAULT_REGION` | Region, Standard `eu-central-1` |
-| `AWS_ACCESS_KEY_ID` | Zugriffsschlüssel zur Laufzeit |
-| `AWS_SECRET_ACCESS_KEY` | Geheimnis zur Laufzeit |
-| `AWS_SESSION_TOKEN` | Optionaler Sitzungstoken |
-| `DUCKLAKE_PG_CONNECTION` | libpq-Verbindungszeichenfolge bei PostgreSQL-Katalog |
+| `DATALOOM_S3_BUCKET` | Existing S3 bucket, required |
+| `DATALOOM_S3_ENDPOINT` | Endpoint including `https://` and no path, required |
+| `DATALOOM_S3_PREFIX` | Prefix, default `dataloom/dev` for compatibility |
+| `AWS_DEFAULT_REGION` | Region, default `eu-central-1` |
+| `AWS_ACCESS_KEY_ID` | Access key supplied at runtime |
+| `AWS_SECRET_ACCESS_KEY` | Secret supplied at runtime |
+| `AWS_SESSION_TOKEN` | Optional session token |
+| `DUCKLAKE_PG_CONNECTION` | libpq connection string for a PostgreSQL catalog |
 
-Diese `DATALOOM_S3_*`-Variablen gehören zum Beispielskript, nicht zu einer
-impliziten Konfigurationssuche des Pakets. Die Konstruktoren erhalten ihre Werte
-explizit. Originaldateien benötigen `paws.storage`; Parquet verwendet DuckDB httpfs.
-Der S3-Dienst muss bedingtes PutObject unterstützen, damit Originale nicht
-überschrieben werden. Im Zielsystem mit einer Testdatei prüfen.
+The `DATALOOM_S3_*` variables belong to the example script. Package constructors
+receive configuration explicitly. Archiving originals on S3 requires
+`paws.storage`; Parquet storage uses DuckDB httpfs. The S3 service must support
+conditional PutObject to avoid overwriting originals. Verify this with a test
+file in the target environment.
 
 ## PostgreSQL
 
-Eine vorhandene Datenbank bereitstellen, TLS und Zugangsdaten im Betrieb
-konfigurieren und `dl_catalog_postgres("DUCKLAKE_PG_CONNECTION")` verwenden.
-Das erstellt keine PostgreSQL-Instanz und migriert keinen lokalen Katalog.
-Datenbank-Metadaten und S3-Objekte zusammen sichern und die Wiederherstellung
-praktisch erproben. Backups allein des Metadatenkatalogs enthalten keine Datenfiles.
+Provision a database, configure TLS and runtime credentials, then use
+`dl_catalog_postgres("DUCKLAKE_PG_CONNECTION")`. This constructor neither
+provisions PostgreSQL nor migrates a local catalog. Back up database metadata
+and S3 objects together, and exercise restoration. A metadata-only backup does
+not contain the data files.
 
-## Jobs und Posit Connect
+## Jobs and Posit Connect
 
-Die Vorlagen in `inst/templates/` trennen Definition, R-Job, Quarto-Bericht und
-Shiny-App. Dateien mit stabilen absoluten Pfaden verwenden. Umgebungsvariablen
-in der Laufzeit konfigurieren. Einen Git-Commit als `DATALOOM_CODE_VERSION`
-übergeben und Paketabhängigkeiten im Einsatzprojekt sperren.
+The templates in `inst/templates/` separate definitions, an R job, a Quarto
+report and a Shiny app. Use stable absolute file paths, configure environment
+variables in the runtime and pass a Git commit as `DATALOOM_CODE_VERSION`.
+Lock package dependencies in the operating project.
 
-Es darf nur einen Writer für den gemeinsamen Lake geben. In einem dedizierten
-GitHub-Betriebsrepository für alle entsprechenden Jobs dieselbe `concurrency.group`
-mit `cancel-in-progress: false` verwenden. Die Gruppe koordiniert nur innerhalb
-dieses Repositorys. Connect und GitHub Actions dürfen nicht gleichzeitig denselben
-Lake beschreiben. Die Paket-CI benötigt keine produktiven Credentials und schreibt
-nur isolierte Testdaten. GitHub-Concurrency ist keine dauerhafte Job-Warteschlange;
-für jede erwartete Lieferung muss der Scheduler einen nachvollziehbaren Lauf sichern.
+Use one writer for the shared lake. In a dedicated GitHub operating repository,
+use the same `concurrency.group` and `cancel-in-progress: false` for all jobs
+writing that lake. This only coordinates jobs within that repository. Connect
+and GitHub Actions must not write the same lake concurrently. Package CI uses
+isolated synthetic data and requires no production credentials. GitHub
+concurrency is not a durable job queue; the scheduler must retain a traceable
+run for each expected delivery.
 
-## Fehler und Wiederanlauf
+## Failures and recovery
 
-Registry und Jobstatus überwachen. `dl_interrupted()` zeigt hinterlassene
-`running`-Einträge. Ein erneuter identischer Lauf findet bereits committete Releases.
-`dl_freshness()` prüft das Datenalter; für aktive Meldungen ist ein externer
-Scheduler erforderlich. Transportfehler einer Benachrichtigung nicht verschlucken.
-Bei Quarto kann nach einem Renderfehler weiterhin das letzte erfolgreiche HTML
-angezeigt werden; die Registry ist für den aktuellen Lauf maßgeblich.
+Monitor registry and job status. `dl_interrupted()` lists runs left in `running`
+state. An identical retry can find already committed releases.
+`dl_freshness()` checks data age; active monitoring requires an external
+scheduler. Surface notification transport failures. After a Quarto render fails,
+Connect may still display the last successful HTML. The registry records the
+current run's outcome.
 
-## Zugriff und Aufbewahrung
+## Access and historical data
 
-Contracts und Qualitätsgates ersetzen keine Speicherberechtigungen. Direkter
-SQL-Zugriff kann Framework-Regeln umgehen. Snapshots können Quelldateipfade,
-Beschreibungen und Kontaktdaten enthalten; nur bewusst freigegebene Snapshots
-an Katalog-Nutzer verteilen. Das öffentliche Paket-Repository enthält keine
-produktiven Snapshots. Historische Releases nicht manuell löschen, solange
-Berichte auf sie verweisen. Automatische Retention ist noch nicht implementiert.
+Contracts and quality gates do not enforce storage permissions. Direct SQL
+clients can bypass framework rules. Catalog snapshots may include source paths,
+descriptions and contacts. Share only snapshots approved for the intended
+catalog audience. The public package repository contains no production
+snapshots. Retain historical releases referenced by reports. General automatic
+retention is not implemented.
 
-## Lieferüberwachung und Aufbewahrung
+## Delivery monitoring and cleanup
 
-`dl_check_delivery()` wird zeitgesteuert aus dem vorhandenen Scheduler aufgerufen.
-Es prüft einen ausdrücklich erwarteten fachlichen Stichtag gegen `due_at` und
-funktioniert auch ohne vorherigen Importversuch. Ein kürzlich veröffentlichter
-alter Stichtag erfüllt die neue Erwartung nicht. Benachrichtigungen werden erst
-nach erfolgreicher Zustellung dedupliziert, Transportfehler bleiben retryfähig.
-Der Katalog zeigt den Lieferstatus zusätzlich zu Datenalter und letztem Versuch.
+Call `dl_check_delivery()` from the existing scheduler. It checks an explicitly
+expected business date and `due_at`, even without a preceding import attempt.
+It compares the expected date with the latest published release; a recently
+published older business date does not meet a new expectation. Notifications
+are deduplicated after successful delivery, and transport failures remain
+retryable. The catalog displays delivery status alongside data age and the
+latest attempt.
 
-`dl_cleanup(lake, older_than_days = 30)` liefert nur eine Vorschau.
-Mit `dry_run = FALSE` werden passende Raw-/Kandidatentabellen abgeschlossener
-Fehlversuche in einer Transaktion gelöscht. Laufende Jobs, alle veröffentlichten
-Release-Tabellen, Landing-Dateien, Qualitätsnachweise und Reports bleiben erhalten.
-Das ist keine generelle Historien-Retention und kein DuckLake-Vacuum. Physische
-DuckLake-Dateibereinigung bleibt eine separate Betriebsaufgabe.
+`dl_cleanup(lake, older_than_days = 30)` returns a preview. With
+`dry_run = FALSE`, eligible Raw/candidate tables from completed failed runs are
+dropped in one transaction. Running jobs, published release tables, landing
+files, quality evidence and reports are retained. Physical DuckLake file cleanup
+and snapshot expiry remain separate operating tasks.
 
-Daten- und native pointblank-Berichte können Segmentnamen und Geschäftsregeln
-enthalten. Die kompakten Reports enthalten keine vollständigen Quelldatensätze.
-Lege die Reports am vorgesehenen Ablageort des Betriebsprojekts ab.
+Quality reports and native pointblank reports can contain segment names and
+business rules. Compact reports omit complete source rows. Save reports to the
+operating project's intended location.

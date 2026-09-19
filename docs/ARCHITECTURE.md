@@ -1,119 +1,117 @@
-# Architektur ab 0.4.0
+# Architecture as of 0.4.0
 
-lakefold hat zwei bewusst getrennte Ausführungswege. R-Pipelines und Produkte
-landen Originale, validieren Kandidaten und veröffentlichen immutable Releases.
-dbt-Projekte bauen SQL-Modelle und führen Tests unter dbts eigenen Semantiken aus.
-Beide beginnen mit einer Spezifikation und können `dl_execute()` verwenden.
+lakefold organizes data workflows around definitions, execution and inspection.
+Users can start with a concise ingestion call and compose more explicit steps
+when their workflow needs them. Ordinary R functions and standard data objects
+connect the modules.
 
-`dl_dbt_status()` und `dl_dbt_lineage()` lesen veröffentlichte dbt-Artefaktformate.
-`dl_dbt_model()` verbindet daraus aktuelle Tabellen mit dm. PK/FK werden vom
-Anwender angegeben, da ein SQL-DAG keine relationalen Schlüssel beweist.
-`dl_dbt_publish()` erstellt aus einer aktuell sichtbaren Relation einen neuen
-Kandidaten und veröffentlicht ihn erst nach Contract-Prüfung. Es wird kein
-Gleichstand zwischen einem alten dbt-Build und der aktuellen Relation unterstellt.
+## Execution paths
 
-# Architektur und bewusste Entscheidungen
+R pipelines and products preserve original inputs, validate candidates and
+publish immutable releases. dbt projects build SQL models and run tests using
+dbt's own semantics. Both begin with specifications and support `dl_execute()`.
 
-## Definition, Ausführung, Beobachtung
+`dl_dbt_status()` and `dl_dbt_lineage()` read dbt artifacts. `dl_dbt_model()` opens
+current relations as dm tables. Users declare primary and foreign keys because
+a SQL dependency graph cannot establish relational constraints.
+`dl_dbt_publish()` copies a currently visible relation into a new candidate and
+publishes it after contract validation. An earlier build's invocation ID alone
+does not establish the current contents of a relation.
 
-Definitionen sind kleine Listen mit Klassen: `dl_contract`, `dl_source`,
-`dl_pipeline`, `dl_product`, `dl_metric`. Funktionen sind normale R-Funktionen.
-Tabellen bleiben Tibbles oder `dbplyr`-Lazy-Tables. Modelle bleiben `dm`-Objekte.
+## Definitions, execution and inspection
 
-Die Pipeline speichert die Verbindungskonfiguration und löst sie zur Laufzeit
-auf. Eine Registry liegt im eigenen Schema `lake._dl`; interne
-DuckLake-Metadatentabellen werden nicht verändert.
+Definitions are small classed lists: `dl_contract`, `dl_source`, `dl_pipeline`,
+`dl_product` and `dl_metric`. Callbacks are ordinary R functions. Tables remain
+tibbles or dbplyr lazy tables, and relational models remain dm objects.
 
-| Modul | Aufgabe |
+A pipeline stores connection configuration and resolves it at execution time.
+The registry lives in the separate `lake._dl` schema; lakefold does not modify
+DuckLake's internal metadata tables.
+
+| Module | Responsibility |
 |---|---|
-| workflow.R | Objektbasierte Ausführung, Pläne, Transformationen und kompakte Print-Methoden |
-| setup.R | Lokales oder S3-Setup, DuckDB- oder PostgreSQL-Katalog |
-| sources.R | Unverändertes Landing, SHA-256, optionale S3-Originale |
-| contracts.R | Struktur, Schlüssel, R-Regeln und pointblank-Gate |
-| pipeline.R | Kandidat, Wiederholung, Veröffentlichung, Ereignisse |
-| products.R | Auf feste Releases aufbauende Produkte und dm-Modelle |
-| metrics.R | Freigegebene Kennzahlen und Report-Manifeste |
-| registry.R | Versionierte Definitionen, Releases und Metadatenzugriff |
-| catalog.R | Aktualität und lesende Shiny-App |
-| adapters.R | Explizite YAML-Exporte und Capability-Angaben |
+| `workflow.R` | Object-first execution, plans, transformations and compact print methods |
+| `setup.R` | Local/S3 storage and DuckDB/PostgreSQL catalog configuration |
+| `sources.R` | Unchanged landing, SHA-256 and optional S3 originals |
+| `contracts.R`, `contract-tools.R` | Structure, keys, R rules, pointblank gates and contract review |
+| `pipeline.R`, `input-gate.R`, `ingest-data.R` | Input checks, candidates, retries, publication and data-frame ingestion |
+| `products.R` | Products and dm models based on pinned releases |
+| `metrics.R` | Approved metrics and report manifests |
+| `dbt.R`, `dbt-init.R`, `dbt-publish.R` | dbt configuration, CLI execution, artifacts and explicit snapshot publication |
+| `registry.R` | Versioned definitions, releases and additive metadata migration |
+| `diagnostics.R`, `quality-reports.R` | Shared inspection and quality report exports |
+| `delivery-monitor.R`, `maintenance.R` | Expected deliveries and cleanup of unpublished failed-run tables |
+| `catalog.R` | Freshness information and a read-only Shiny app |
+| `adapters.R` | Explicit YAML exports and capability declarations |
 
-## Transaktionsgrenze
+## Publication transaction
 
-Der unveränderliche Kandidat wird vor der Veröffentlichung gespeichert und
-geprüft. Nur freigegebene Kandidaten erhalten einen Eintrag in `releases`.
-Dieser Marker, die zugehörige Lineage und `runs.status = published` stehen in
-derselben Transaktion im selben Lake. Ein Abbruch vor Commit macht keinen
-neuen Release sichtbar. Ein Abbruch danach hinterlässt einen auffindbaren
-Release für einen Wiederanlauf.
+An immutable candidate is materialized and checked before publication. Only
+approved candidates receive a `releases` entry. That marker, the corresponding
+lineage and `runs.status = published` are written in one transaction in the same
+lake. Failure before commit leaves no newly visible release. Failure after
+commit leaves a discoverable release that a retry can reuse.
 
-`dl_tbl()` löst ausschließlich Releases auf. Raw-Daten und abgelehnte Kandidaten
-sind über direkten SQL-Zugriff weiterhin erreichbar. Das Qualitätsgate ist eine
-Prozessregel, keine Zugriffsschutzschicht.
+`dl_tbl()` resolves published releases. Direct SQL can still access Raw data and
+rejected candidates. The quality gate enforces the framework's publication
+process; storage access permissions remain a separate responsibility.
 
-Unveränderlichkeit bedeutet hier: Die Framework-API überschreibt veröffentlichte
-Tabellen nicht. Sie schützt nicht gegen Administratoren oder beliebige direkte
-SQL-Schreibzugriffe mit denselben Credentials.
+Immutability means that the framework API does not overwrite published tables.
+Administrators and direct SQL clients with write credentials can still alter
+those tables.
 
-## Qualitätssemantik
+## Quality semantics
 
-| Ergebnis | Veröffentlichung |
+| Result | Publication |
 |---|---|
-| passed | erlaubt |
-| warning | erlaubt, Qualitätsstatus des Release bleibt warning |
-| failed | blockiert |
-| error | blockiert, auch bei nicht-blockierender fachlicher Regel |
-| not_checked | blockiert |
+| `passed` | Allowed |
+| `warning` | Allowed; the release retains warning quality |
+| `failed` | Blocked |
+| `error` | Blocked, including errors in otherwise non-blocking business rules |
+| `not_checked` | Blocked |
 
-Für `policy = "rule"` bestimmen Fehlerquote und Severity die Toleranz.
-Mit `policy = "agent"` bestimmen die ausgewerteten nativen pointblank-Action-Levels
-die Freigabe. Ergebnisse behalten Segment, Phase und Schwellenmetadaten. Inaktive Schritte und leere Prüfpläne zählen nicht als bestanden.
-Keine automatischen Zeilenverwerfungen und kein allgemeiner `force`-Schalter.
+For `policy = "rule"`, failure ratio and severity determine tolerance.
+For `policy = "agent"`, evaluated native pointblank action levels determine the
+gate outcome. Results retain segment, stage and threshold metadata. Inactive
+steps and empty plans do not count as passes. There is no automatic row removal
+or general force-publication switch.
 
-## Versionen
+## Version identities
 
-* Definition: Asset-ID, Versionsnummer und Fingerprint.
-* Original: SHA-256 der tatsächlich gesicherten Bytes.
-* Lauf: eigene ID und Start-/Endzeit.
-* Release: eigene ID, Kandidatentabelle, Contract-Version und Vorgänger.
-* Produkt: festgehaltene Eingabe-Releases.
-* Metric: Definitionsversion, Input-Release, Parameter und Ergebnis-Hash.
-* Report: feste Kombination aus Metric-Manifests und Ergebniswerten.
+* Definition: asset ID, version and fingerprint.
+* Original: SHA-256 of the archived bytes.
+* Run: its own ID and start/end times.
+* Release: its own ID, candidate table, contract version and predecessor.
+* Product: recorded input release IDs.
+* Metric: definition version, input release, parameters and result hash.
+* Report: a fixed combination of metric manifests and result values.
 
-Ein Produkt wird nicht heimlich neu gebaut, wenn seine Quelle einen neueren
-Release erhält. Den nächsten `dl_build()` steuert der vorhandene Scheduler.
+A source receiving a newer release does not automatically rebuild its products.
+The operating project's scheduler controls the next `dl_build()` call.
 
-## Betriebsmodell 0.2
+## Operating model
 
-Genau ein Writer. Das lokale Backend ist pro Prozess gedacht. PostgreSQL
-ermöglicht eine spätere gemeinsame Umgebung, doch die Registry braucht vor
-parallelen Veröffentlichungen eine serverseitige Sperr-/Eindeutigkeitsstrategie.
-Die Prüfung des zuletzt gelesenen Parent-Release erkennt bereits abgeschlossene
-Änderungen, ersetzt aber keine verteilte Sperre bei gleichzeitig laufenden
-Transaktionen.
+Registry operations require exactly one coordinated writer. The local backend
+is intended for a single writing process. A shared PostgreSQL deployment still
+needs a locking/uniqueness strategy before concurrent publication is supported.
+Checking a previously read parent release detects changes already committed by
+another run; it does not provide a distributed lock between active transactions.
 
-Die App kann auf einem exportierten Snapshot laufen und hält dann keine
-Schreibverbindung offen. Snapshot-Zeit und Datenalter werden getrennt angezeigt.
-Metadatenexporte enthalten keine Reportwerte, aber fachliche Beschreibungen,
-Kontaktangaben, Quelldateinamen und Herkunftspfade. Sie sind intern zu behandeln.
+The catalog app can use an exported snapshot without holding a write connection.
+Snapshot time and data age are shown separately. Metadata exports omit report
+values but can include business descriptions, contacts, source filenames and
+paths. Distribute them according to the operating project's access rules.
 
-## Nächste sinnvolle Ausbauschritte
+## Extension priorities
 
-1. PostgreSQL/S3-Integrationstest in der tatsächlichen Umgebung und gesperrte
-   Writer-Ausführung im Betriebsprojekt.
-2. Externen Notification-Adapter anbinden und Zustellungsfehler überwachen.
-3. Inkrementelle Speicherung von Partitionskorrekturen statt vollständiger Kopie.
-4. Aufbewahrung und Wiederherstellung einschließlich Reportnachweisen definieren.
-5. Relationale Produkte mit mehreren Tabellen gemeinsam veröffentlichen.
-6. Geprüften Adapter zur konkret eingesetzten commons-/data-dict-Version ergänzen.
+1. Verify PostgreSQL/S3 integration in the target environment and serialize
+   writer execution in the operating project.
+2. Connect an existing notification transport and monitor delivery failures.
+3. Store partition corrections incrementally instead of copying the full state.
+4. Define retention and restoration rules that include report evidence.
+5. Publish related tables within an explicitly defined shared transaction.
+6. Verify adapters against the specific external metadata schema versions used.
 
-Die ersten vier Schritte betreffen Belastbarkeit und Betrieb. Sie sollten vor
-einer Erweiterung um neue Speicher-Backends priorisiert werden.
-
-## Ergänzungen in 0.2.0
-
-`dl_config()` trennt die Konfiguration von I/O. `dl_execute()` vereinheitlicht die
-Aufrufkonvention und delegiert an die bestehenden Ausführungsfunktionen.
-Transformationen werden nach der Raw-Materialisierung auf dem Kandidateneingang
-angewendet. Die Publikationstransaktion und das Registry-Schema bleiben gleich.
-Die Spezifikationen sind S3-Listen; das neue Generic ist kein vollständiger
-Engine-/Step-Erweiterungsvertrag. Siehe [Design-Review](DESIGN_REVIEW.md).
+The [design review](DESIGN_REVIEW.md) explains how these extensions fit the
+framework's composition principles. Adding more storage backends should follow
+clear use cases and a stable core interface.

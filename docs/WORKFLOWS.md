@@ -1,6 +1,6 @@
-# Definition, Inspektion und Ausführung
+# Define, inspect and execute workflows
 
-## Verbindung erst zur Ausführung
+## Connect at execution time
 
 ```r
 library(lakefold)
@@ -12,37 +12,38 @@ config <- dl_config(
 config
 ```
 
-Bis hier werden keine Ordner angelegt, Erweiterungen geladen oder Verbindungen
-geöffnet. Pfade werden gegen das aktuelle Arbeitsverzeichnis aufgelöst. Eine
-Definition kann mit `saveRDS()` gespeichert werden; referenzierte Dateien,
-Packages und Closure-Umgebungen müssen in der ausführenden Umgebung verfügbar
-sein. Das ist kein plattformunabhängiges Austauschformat.
+These calls create no directories, load no extensions and open no connections.
+Paths are resolved against the working directory. You can save a definition
+with `saveRDS()`, but referenced files, packages and closure environments must
+exist in the execution environment. The serialized object is not a portable,
+language-independent exchange format.
 
-`dl_setup(...)` bleibt der bequeme Aufruf für Konfiguration plus Verbindung.
-`dl_connect(config)` öffnet eine vorhandene Konfiguration erneut.
+`dl_setup(...)` combines configuration and connection for convenience.
+`dl_connect(config)` opens an existing configuration.
 
-## Objekt zuerst
+## Use a common execution entry point
 
-| Definition | Einheitliche API | Bestehende API |
+| Definition | Common API | Specific API |
 |---|---|---|
 | Pipeline | `pipeline |> dl_execute(lake)` | `dl_run(pipeline, lake)` |
-| Produkt | `product |> dl_execute(lake)` | `dl_build(lake, product)` |
+| Product | `product |> dl_execute(lake)` | `dl_build(lake, product)` |
 | Metric | `metric |> dl_execute(lake, at = date)` | `dl_measure(lake, metric, at = date)` |
+| dbt project | `project |> dl_execute()` | `dl_dbt_build(project)` |
 
-Eine Pipeline kennt ihre Konfiguration: `pipeline |> dl_execute()` genügt.
-Produkte und Metrics benötigen eine Verbindung oder `dl_config`. Übergebene
-Verbindungen bleiben offen. Von `dl_execute()` geöffnete Verbindungen werden
-auch bei Fehlern geschlossen. Für mehrere zusammengehörige Aufrufe ist eine
-explizite Verbindung meist effizienter.
+A pipeline carries its configuration, so `pipeline |> dl_execute()` is enough.
+Products and metrics need a connection or `dl_config`. Supplied connections
+remain open. Connections opened by `dl_execute()` are closed even on error.
+For related operations, an explicit connection is usually more efficient.
+dbt uses a separate process; close local catalog connections before invoking it.
 
 ```r
 lake <- dl_connect(config)
-# In einer Funktion: on.exit(dl_disconnect(lake), add = TRUE)
-# ... Ausführungen ...
+# Inside a function: on.exit(dl_disconnect(lake), add = TRUE)
+# ... execute operations ...
 dl_disconnect(lake)
 ```
 
-## Transformationen
+## Compose transformations
 
 ```r
 pipeline <- dl_pipeline("finance.import", config, code_version = "git-sha") |>
@@ -62,36 +63,44 @@ pipeline <- dl_pipeline("finance.import", config, code_version = "git-sha") |>
 dl_plan(pipeline)
 ```
 
-`source` und `contract` sind zuvor definierte Objekte; ein vollständiges Beispiel
-steht im [Schnellstart](GETTING_STARTED.md). Schritte dürfen beliebige R-Funktionen
-nutzen. Ihre Rückgabe muss ein Data Frame oder eine Lazy Table sein. Bei Lazy
-Tables bleibt SQL-fähige Verarbeitung in DuckDB. R-spezifische Funktionen müssen
-explizit `collect()` verwenden und benötigen entsprechenden Arbeitsspeicher.
+`source` and `contract` are previously defined objects; see the complete
+[getting-started example](GETTING_STARTED.md). Steps may use ordinary R
+functions and must return a data frame or lazy table. SQL-compatible lazy
+operations remain in DuckDB. R-only functions must explicitly `collect()` and
+have enough memory for the resulting data.
 
-Der Reader verarbeitet ausschließlich die gesicherte Originaldatei. Die
-Transformationen verändern den Raw-Stand nicht; sie bilden den Kandidateneingang.
-Bei Partitionsersatz wird daraus zusammen mit den unveränderten alten Partitionen
-der vollständige Kandidat gebildet. Der Contract prüft den gesamten Kandidaten.
+The reader processes the archived original. Transformations leave Raw unchanged
+and produce the candidate input. For partition replacement, this input is
+combined with unchanged historical partitions into the full candidate. The
+contract checks that complete candidate. Add `dl_step_precheck()` immediately
+after extraction when the incoming data also needs validation before Raw writes.
 
-`dl_plan()` ist eine Inspektion der deklarierten Struktur. Es prüft weder echte
-Quelldaten noch SQL-Übersetzbarkeit, Zugriffsrechte oder Speicherverfügbarkeit.
-`attr(dl_plan(pipeline), "complete")` bezeichnet lediglich einen vollständigen,
-strukturell gültigen Ablauf. Die Lineage bleibt auf Dataset-/Release-Ebene;
-Transformationsnamen erzeugen keine automatische Spalten-Lineage.
+`dl_plan()` inspects the declared structure. It does not check actual data, SQL
+translation, permissions or storage availability. Its `complete` attribute
+means the declared sequence is structurally complete. Lineage records datasets
+and releases; transformation names do not generate automatic column lineage.
 
-## Versionen richtig ändern
+## Inspect outcomes
 
-Eine ID und Version bezeichnen eine unveränderliche Definition. Wenn sich eine
-Quelle oder ein Contract inhaltlich ändert, dessen Version erhöhen. Da die
-Pipeline diese Definitionen enthält, auch ihre Version erhöhen. Verhalten von
-Transforms, Closures oder Abhängigkeiten über eine neue `code_version` erfassen.
+Use `dl_status()` and `dl_quality()` for R run results and dbt results.
+`dl_releases()` lists publication history, and `dl_lineage()` exposes recorded
+dependencies. Metric results carry a manifest with the definition, parameters,
+input release and result hash. These outputs keep the workflow inspectable as
+additional components are introduced.
+
+## Version definitions deliberately
+
+An ID and version identify an immutable registered definition. Increase the
+version when a source or contract changes. Since the pipeline embeds these
+objects, increase its version too. Use a new `code_version` for changed
+transformations, captured closure values or dependencies.
 
 ```r
-# Während der Entwicklung vor der ersten Registrierung:
+# During development, before the first registration:
 pipeline$version <- "1.1.0"
 pipeline$code_version <- "new-git-sha"
 ```
 
-Noch fehlen komfortable Update-Funktionen. Deshalb Definitionen bevorzugt in
-einem R-Skript neu konstruieren und versionieren. Mutable Listen sind hier ein
-praktischer Anfang, aber noch kein stabiler Vertrag für beliebige Fremd-Plugins.
+Convenient update/remove helpers remain future work. Prefer reconstructing and
+versioning definitions in an R script. Mutable specification lists are not a
+stable extension contract for arbitrary third-party plugins.

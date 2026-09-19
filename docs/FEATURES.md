@@ -1,60 +1,62 @@
-# Funktionsabgleich 0.4.0
+# Feature coverage in 0.4.0
 
-## Die Aufgabenverteilung
+## Component responsibilities
 
-DuckDB/DuckLake speichern und verarbeiten Tabellen. dbt übernimmt SQL-DAG,
-Materialisierung und Modelltests. pointblank übernimmt optionale fachliche
-Eingangsgates und detaillierte Prüfungen. dm beschreibt explizite Beziehungen
-in R. lakefold verbindet diese Komponenten mit Definitionen, Laufnachweisen und
-unveränderlichen Releases. Keine Komponente wird als universeller Ersatz für
-die anderen beworben.
+DuckDB/DuckLake store and process tables. dbt manages SQL dependencies,
+materializations and model tests. pointblank provides optional business-rule
+input gates and detailed checks. dm describes explicit relationships in R.
+lakefold connects these components through reusable specifications, execution
+evidence and immutable releases.
 
-## Vorher vorhanden und jetzt ergänzt
+The framework is designed for simple entry points and explicit composition as
+workflows become more complex. Integrations retain their own responsibilities
+and can be adopted as needed.
 
-| Fähigkeit | Bereits in 0.3.0 | Ergänzung in 0.4.0 |
+## Existing capabilities and additions
+
+| Capability | Available in 0.3.0 | Added in 0.4.0 |
 |---|---|---|
-| Pointblank-Integration | Basisadapter mit einer Regelquote und Severity | Native Warn-/Abbruchschwellen, per-step Overrides und Segmentnachweise |
-| Ingestion | Lokale Dateien, unverändertes Landing, Raw und Kandidat | Separate Prüfung vor Raw sowie direkte R-Data-Frame-Zulieferung |
-| Contracts | Schema, Pflichtfelder, Schlüssel, R-Regeln, Owner | Typentwurf mit Bestätigung, Diff, Operator und Spaltenmetadaten |
-| Diagnose | Rohe Registry-Tabellen und dbt-spezifische Accessors | Gemeinsame Status-/Qualitätssicht, Releasehistorie, rekursive Herkunft |
-| Berichte | Quarto-/Connect-Vorlagen | Qualitäts-HTML/JSON, native pointblank-Berichte, testthat-Erwartung |
-| dbt und Releases | Getrennte Lebenszyklen | Explizite, erneut geprüfte Snapshot-Veröffentlichung einer Relation |
-| Ausbleibende Lieferungen | Fehlende Datei bei Jobstart, Altersanzeige | Erwarteter Stichtag mit Fälligkeit auch ohne Importversuch |
-| Registry | Festes Schema | Versionierte, additive Migration von Qualitätsmetadaten |
-| Aufbewahrung | Historie bleibt erhalten | Vorschau und sichere Auswahl alter unveröffentlichter Fehlversuche |
+| pointblank integration | Basic adapter with rule-level failure ratio and severity | Native warning/blocking thresholds, per-step overrides and segment evidence |
+| Ingestion | Local files, unchanged landing, Raw and candidates | Separate checks before Raw and direct R data-frame ingestion |
+| Contracts | Schema, required fields, keys, R rules and owner | Reviewed type drafts, differences, operator and column metadata |
+| Diagnostics | Raw registry tables and dbt-specific accessors | Shared status/quality views, release history and recursive lineage |
+| Reports | Quarto/Connect templates | Quality HTML/JSON, native pointblank reports and a testthat expectation |
+| dbt and releases | Separate lifecycles | Explicit snapshot publication of one freshly validated relation |
+| Missing deliveries | Missing file at job start and age indicators | Expected business date and deadline monitoring without an import attempt |
+| Registry | Fixed schema | Versioned, additive quality-metadata migration |
+| Retention | Preserved history | Preview and safe selection of expired unpublished failed-run tables |
 
-## Konkrete Nutzungsgrenzen
+## Current boundaries
 
-* Der Registry-Betrieb benötigt einen koordinierten Writer. Die Migration und
-  Konfliktprüfung machen daraus keinen verteilten Multiwriter-Dienst.
-* `dl_dbt_publish()` veröffentlicht eine Relation. Atomare mehrtabellige
-  Release-Bündel mit gemeinsamem dm-Gate sind noch nicht implementiert.
-* dbt v2/Fusion und automatisch erzeugte Remote-Profile für S3/PostgreSQL sind
-  nicht nachgewiesen. Der geprüfte CLI-Weg verwendet dbt-core und dbt-duckdb.
-* Das RDS-Landing nach API-/Excel-Aufbereitung archiviert das R-Ergebnis.
-  Originaldateien werden nur über dateibasierte Quellen unverändert archiviert.
-* Es gibt keinen allgemeinen Source-Pluginvertrag, keine inkrementelle
-  Quell-CDC und keine automatische Schema-Migration fachlicher Nutzdaten.
-* `dl_cleanup()` löscht keine veröffentlichten Releases, DuckLake-Snapshots oder
-  Dateien im Objektspeicher. Es implementiert keine allgemeine Retention-Policy.
-* Ein Scheduler bleibt extern. Ein `targets`-Adapter und ein gemischter
-  R/dbt-Graph gehören nicht zum aktuellen Paketumfang.
-* OpenMetadata, commons und data-dict werden nicht als vollständig integrierte
-  Dienste ausgegeben. YAML-Exporte bleiben ausdrücklich begrenzte Schnittstellen.
+* Registry operations require one coordinated writer. Migration and conflict
+  checks do not provide distributed writer coordination.
+* `dl_dbt_publish()` publishes one relation. Atomic multi-table releases with a
+  shared dm gate are not implemented.
+* dbt v2/Fusion and generated remote profiles for S3/PostgreSQL are unverified.
+  The tested CLI path uses dbt-core and dbt-duckdb.
+* RDS landing after API/Excel preparation archives the R result. File-based
+  sources are required to archive the original file unchanged.
+* There is no general source-plugin protocol, incremental source change-data
+  capture or automatic migration of business data schemas.
+* `dl_cleanup()` retains published releases, DuckLake snapshots and object-store
+  files. It does not implement a general retention policy.
+* Scheduling remains external. A targets adapter and a combined R/dbt task
+  graph are outside the current implementation.
+* OpenMetadata, commons and data-dict are not fully integrated services.
+  YAML exports are explicitly limited interfaces.
 
-## Warum diese Grenzen bestehen bleiben
+## What further extensions require
 
-Für diese Fähigkeiten fehlen entweder nachgewiesene externe Laufzeitumgebungen
-oder ein zusätzlicher fachlicher Vertrag, etwa eine Lösch-/Retention-Policy und
-Transaktionsgrenzen mehrerer Produkte. Sie als bereits vorhanden auszugeben wäre
-irreführend. Das Paket bleibt ein nutzbarer, überprüfbarer R-Kern. Ein eigener
-Scheduler, Berechtigungssystem, visueller ETL-Editor oder vollständige
-Spalten-Lineage aus beliebigem R-Code sind weiterhin bewusste Nichtziele.
+These capabilities need either verified external environments or additional
+behavioral contracts, such as retention rules and transaction boundaries for
+multiple products. They remain explicit extension points. An embedded scheduler,
+permission system, visual ETL editor and complete column lineage from arbitrary
+R code are outside the current scope.
 
-## Dokumentation und Referenzen
+## Documentation and references
 
-* [Ausführbarer Qualitätsleitfaden](https://janwein.github.io/lakefold/articles/quality-gates.html)
-* [pointblank: Action Levels](https://rstudio.github.io/pointblank/reference/action_levels.html)
-* [pointblank: Agent-Reports](https://rstudio.github.io/pointblank/reference/get_agent_report.html)
-* [R Packages: Funktionsdokumentation](https://r-pkgs.org/man.html)
-* [Posit Skills](https://github.com/posit-dev/skills)
+* [Executable quality guide](https://janwein.github.io/lakefold/articles/quality-gates.html)
+* [pointblank action levels](https://rstudio.github.io/pointblank/reference/action_levels.html)
+* [pointblank agent reports](https://rstudio.github.io/pointblank/reference/get_agent_report.html)
+* [R Packages: function documentation](https://r-pkgs.org/man.html)
+* [Posit skills](https://github.com/posit-dev/skills)

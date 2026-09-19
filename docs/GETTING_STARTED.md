@@ -1,9 +1,8 @@
-# In zehn Minuten zum ersten Datenprodukt
+# Your first data product in ten minutes
 
-Dieses Beispiel ist vollständig, benötigt keine Zugangsdaten und verwendet
-synthetische Daten. Es läuft standardmäßig auf dem lokalen DuckDB-Testbackend.
-Für DuckLake im `dl_config()` den Backendwert auf `"ducklake"` ändern; dann wird
-die passende Erweiterung beim Verbinden geladen.
+This complete example uses synthetic data and requires no credentials. It runs
+on the local DuckDB backend. To use DuckLake, set `backend = "ducklake"` in
+`dl_config()`; the extension is loaded when connecting.
 
 ## Installation
 
@@ -14,11 +13,11 @@ library(lakefold)
 library(dplyr)
 ```
 
-R >= 4.2 ist nötig. Für vollständige Reproduzierbarkeit die Abhängigkeiten im
-eigenen Projekt sperren. Das Repository ist eine Entwicklungsversion; die
-Prüfnachweise stehen in [VALIDATION.md](VALIDATION.md).
+R >= 4.2 is required. Lock dependencies in your own project for reproducibility.
+This repository contains a development version; see the
+[validation record](VALIDATION.md) for test evidence.
 
-## 1. Eine Lieferung erstellen
+## 1. Create a delivery
 
 ```r
 root <- tempfile("lakefold-tutorial-")
@@ -31,7 +30,7 @@ write.csv(data.frame(
 ), input, row.names = FALSE)
 ```
 
-## 2. Konfiguration und Contract definieren
+## 2. Define configuration and a contract
 
 ```r
 config <- dl_config(
@@ -43,8 +42,8 @@ config <- dl_config(
 
 contract <- dl_contract(
   id = "finance.reserves_contract", version = "1.0.0",
-  owner = "Finance", description = "Reserve in EUR je Vertrag und Stichtag",
-  grain = "Ein Vertrag an einem Stichtag",
+  owner = "Finance", description = "Reserve in EUR per policy and business date",
+  grain = "One policy at one business date",
   columns = c(id = "character", date = "Date", amount = "numeric"),
   key = c("id", "date"),
   rules = list(dl_rule("nonnegative", function(data) {
@@ -56,12 +55,11 @@ contract <- dl_contract(
 )
 ```
 
-`columns` beschreibt erwartete R-Typen. Der Reader muss sie herstellen; der
-Contract konvertiert fehlerhafte Eingaben nicht stillschweigend. Standardmäßig
-sind alle deklarierten Spalten erforderlich und nicht-null, zusätzliche Spalten
-und leere Lieferungen sind nicht erlaubt.
+`columns` declares expected R types. The reader must produce them; the contract
+does not silently coerce invalid input. By default, every declared column is
+required and non-null, and extra columns and empty deliveries are rejected.
 
-## 3. Quelle und Ablauf zusammenstellen
+## 3. Compose the source and workflow
 
 ```r
 source <- dl_source("finance.csv", input, reader = function(path) {
@@ -80,11 +78,11 @@ pipeline
 dl_plan(pipeline)
 ```
 
-Hier werden Definitionen zusammengesetzt. Erst der nächste Aufruf öffnet den
-Lake und liest die Quelldatei. Die Originaldatei enthält weiterhin 100 und 200;
-der veröffentlichte Kandidat wird 100.000 und 200.000 EUR enthalten.
+These calls assemble definitions. The next call opens the lake and reads the
+source file. The original still contains 100 and 200; the published candidate
+will contain EUR 100,000 and EUR 200,000.
 
-## 4. Ausführen und lesen
+## 4. Execute and read
 
 ```r
 run <- pipeline |> dl_execute(business_date = "2026-08-31")
@@ -94,17 +92,18 @@ lake <- dl_connect(config)
 dl_tbl(lake, "finance.reserves") |> collect()
 ```
 
-Erwartet: Status `published`, zwei Zeilen, Summe 300.000 EUR. Für Reproduzierbarkeit
-explizit mit `dl_tbl(lake, "finance.reserves", release = run$release_id)` lesen.
-`collect()` lädt das Resultat in R; vorher möglichst in DuckDB filtern/aggregieren.
+Expect status `published`, two rows and a total of EUR 300,000. For a reproducible
+read, specify `dl_tbl(lake, "finance.reserves", release = run$release_id)`.
+`collect()` brings the result into R, so filter or aggregate in DuckDB first
+where possible.
 
-## 5. Eine freigegebene Kennzahl berechnen
+## 5. Calculate an approved metric
 
 ```r
 reserve <- dl_metric(
   "finance.total_reserve", "finance.reserves",
   expr = sum(amount), time_column = "date", time_behavior = "stock",
-  unit = "EUR", owner = "Finance", description = "Gesamte Reserve am Stichtag",
+  unit = "EUR", owner = "Finance", description = "Total reserve at the business date",
   approved = TRUE, code_version = "tutorial-v1"
 )
 value <- reserve |> dl_execute(lake, at = as.Date("2026-08-31"))
@@ -115,10 +114,11 @@ dl_report_release(lake, "report-2026-08", list(reserve = value),
                   code_version = "tutorial-v1")
 ```
 
-`approved = TRUE` erklärt eine fachliche Freigabe; es löst keinen Genehmigungsprozess
-aus. Das Report-Release speichert Werte und Herkunft, rendert aber kein PDF oder Word.
+`approved = TRUE` records a declared business approval; it does not start an
+approval process. The report release stores values and provenance. Rendering a
+PDF or Word document is a separate operation.
 
-## 6. Qualität und Wiederholung nachvollziehen
+## 6. Inspect quality and repeated execution
 
 ```r
 again <- pipeline |> dl_execute(lake, business_date = "2026-08-31")
@@ -130,19 +130,19 @@ dl_catalog_export(lake, file.path(root, "catalog.json"))
 dl_disconnect(lake)
 ```
 
-Der gleiche Input mit gleichen Definitionen und gleichem fachlichem Stichtag
-wird nicht erneut veröffentlicht. Ein Cache-Treffer hat selbst kein neues
-Quality-Tibble; die ursprünglichen Ergebnisse stehen unter dem ursprünglichen
-Run in der Registry. Eine fehlgeschlagene Lieferung ersetzt keine freigegebenen Daten.
+The same input, definitions and business date reuse the existing release.
+A cache hit does not create new quality evidence. Use `dl_quality(again)` or
+`dl_quality(lake, run_id = again$run_id)` to resolve the original checks.
+A failed delivery never replaces published data.
 
-## Weiterführende Beispiele
+## Further examples
 
-* [Fehler, Korrekturen und historische Releases](QUALITY_AND_HISTORY.md)
-* [Produkte, Joins, Kennzahlen und Reports](PRODUCTS_AND_METRICS.md)
-* [Definition und Ausführung im Detail](WORKFLOWS.md)
-* Vollständige Demo: `source(system.file("examples", "end_to_end.R", package = "lakefold"))`
-* Katalog: `install.packages(c("shiny", "bslib"))`, danach
-  `dl_catalog(snapshot = file.path(root, "catalog.json"))`
+* [Failures, corrections and historical releases](QUALITY_AND_HISTORY.md)
+* [Products, joins, metrics and reports](PRODUCTS_AND_METRICS.md)
+* [Definitions and execution in detail](WORKFLOWS.md)
+* Full demo: `source(system.file("examples", "end_to_end.R", package = "lakefold"))`
+* Catalog: install `shiny` and `bslib`, then call
+  `dl_catalog(snapshot = file.path(root, "catalog.json"))`.
 
-Für die Nutzung in eigenen Jobs eine Funktion um den Ablauf legen und geöffnete
-Verbindungen mit `on.exit(dl_disconnect(lake), add = TRUE)` schließen.
+Wrap scheduled workflows in a function and close connections with
+`on.exit(dl_disconnect(lake), add = TRUE)`.
