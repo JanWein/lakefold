@@ -36,6 +36,8 @@ complete metric definition and pinned release in the manifest.}
 }
 \value{
 Tibble with a dl_manifest attribute for report reproducibility.
+Grouped results are ordered by the requested dimensions using C collation
+so database row order does not change report identity.
 }
 \description{
 Calculate a metric on a pinned published release
