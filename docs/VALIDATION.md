@@ -1,4 +1,52 @@
-# Prüfstand lakefold 0.3.0
+# Prüfstand lakefold 0.4.0
+
+Prüfdatum: 19. September 2026. Lokal Ubuntu 24.04 und R 4.3.3.
+
+| Prüfung | Ergebnis |
+|---|---|
+| Vollständiger `R CMD check --no-manual` | 0 Errors, 0 Warnings, 0 Notes |
+| Einzelprüfungen im abschließenden Paketcheck | 262 bestanden, 0 fehlgeschlagen, 0 Warnungen, 0 übersprungen |
+| Separater vollständiger DuckLake-Lauf | Bestanden, einschließlich realem dbt und Snapshot-Veröffentlichung |
+| Beispiele und Vignetten | Alle Paketbeispiele geprüft; sieben Vignetten gebaut und deren R-Code ausgeführt |
+| API und Referenz | 62 exportierte Funktionen, 52 Hilfethemen, vollständiger pkgdown-Index |
+| Tests | 55 Testfälle; neue Regressionen für Qualitätsgates, Migration, Berichte und dbt-Veröffentlichung |
+
+Die GitHub-Workflows prüfen jeden veröffentlichten Stand zusätzlich mit R 4.5.1
+auf DuckDB und DuckLake und bauen/deployen die Website. Ihr Ergebnis ist unter
+[GitHub Actions](https://github.com/JanWein/lakefold/actions) nachvollziehbar.
+Die folgenden lokalen Ergebnisse sind kein vorweggenommener CI-Status.
+
+## Neue fachliche Nachweise
+
+* Native pointblank-Schwellen warnen oder blockieren je Segment. Kleine Segmente
+  werden nicht durch eine globale Fehlerquote verdeckt.
+* Fehlende Action Levels, inaktive Schritte und Auswertungsfehler blockieren.
+* Ein fehlgeschlagenes Eingangsgate erhält Landing und alten Release, schreibt
+  aber keine neue Raw-Tabelle. Das abschließende Kandidatengate bleibt aktiv.
+* Data-Frame-Zulieferungen erhalten Datumstypen und wiederverwenden identische
+  Lieferungen über den bestehenden Cache.
+* Qualitätsberichte zeigen den Gate-Entscheid, escapen HTML-Inhalte und enthalten
+  keine Fehlzeilen-Extrakte oder Samples.
+* Contract-Drafts benötigen explizite Bestätigung; der Vergleich zeigt
+  strukturelle Verschärfungen und semantisch zu prüfende Änderungen.
+* Diagnose-Accessors unterscheiden letzten Versuch, festgehaltenen Release und
+  Cache-Herkunft. Ein dbt-Prozessfehler bleibt neben erfolgreichen Nodes sichtbar.
+* dbt-Relationen werden erneut kopiert und geprüft. Spätere Änderungen an einer
+  Relation verändern keinen früher veröffentlichten Release.
+* Fehlende fachliche Stichtage werden ohne Importversuch erkannt. Erfolgreiche
+  Benachrichtigungen werden dedupliziert; Transportfehler bleiben retryfähig.
+* Die additive Registry-Migration erhält alte Nachweise und kann wiederholt
+  aufgerufen werden; unbekannte neuere Schemata werden abgewiesen.
+* Cleanup startet mit einer Vorschau und lässt veröffentlichte Tabellen und
+  Qualitätsnachweise auch bei tatsächlicher Bereinigung unverändert.
+
+Geprüfte Kernkombination: DuckDB 1.5.5 in R und Python, pointblank 0.12.4,
+dbt-core 1.12.5, dbt-duckdb 1.10.1 und dm 1.1.2. dbt-Telemetrie ist deaktiviert.
+Produktives S3, PostgreSQL, dbt v2/Fusion, parallele Writer, Windows/macOS und
+Last-/Dauerbetrieb werden weiterhin nicht als nachgewiesen ausgegeben.
+
+## Historischer Prüfstand 0.3.0
+
 
 Prüfdatum: 19. September 2026. Ubuntu 24.04, R 4.3.3.
 

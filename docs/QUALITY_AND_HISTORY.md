@@ -28,9 +28,10 @@ Regel hebt den Contract nicht auf. Toleranzen beziehen sich auf Testeinheiten,
 nicht zwangsläufig auf Zeilen. `dl_quality_counts(2, 100)` bedeutet zwei
 fehlgeschlagene von 100 Einheiten. `max_failure = 0.02` lässt das noch zu.
 
-`pointblank`-Actions bestimmen nicht die Veröffentlichung. Der Adapter liest
-die tatsächlichen Resultate; inaktive oder leere Prüfpläne werden nicht als
-Erfolg behandelt. Es gibt keinen allgemeinen Schalter zum Erzwingen der Publikation.
+`dl_pointblank(policy = "agent")` übernimmt die nativen Action Levels je
+Prüfschritt und Segment. Warnungen erlauben die Freigabe, Stop/Error/Critical
+blockieren. `policy = "rule"` behält die bisherige Fehlerquoten-Regel bei.
+Inaktive, fehlerhafte oder leere Prüfpläne gelten in beiden Fällen nicht als Erfolg. Es gibt keinen allgemeinen Schalter zum Erzwingen der Publikation.
 
 ## Fehler diagnostizieren
 
@@ -40,9 +41,9 @@ out$status
 out$quality
 out$error   # bei technischen Fehlern, nur lokal untersuchen
 
-runs <- dl_registry(lake, "runs")
-quality <- dl_registry(lake, "quality_results")
-quality[quality$run_id == out$run_id, ]
+dl_status(out)
+dl_quality(lake, run_id = out$run_id)
+dl_quality_report(dl_quality(out), "quality.html")
 ```
 
 Ein Job sollte den Standard `stop_on_failure = TRUE` beibehalten. Dann wird nach
