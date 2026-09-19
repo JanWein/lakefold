@@ -190,6 +190,57 @@ test_that("existing unmarked catalogs are not adopted implicitly", {
   expect_snapshot(error = TRUE, dl_open(root))
 })
 
+test_that("arbitrary nonempty folders are left untouched", {
+  root <- withr::local_tempdir()
+  writeLines("existing custom catalog", file.path(root, "custom.db"))
+  expect_snapshot(error = TRUE, dl_open(root))
+  expect_equal(list.files(root, all.files = TRUE, no.. = TRUE), "custom.db")
+  expect_equal(
+    readLines(file.path(root, "custom.db")),
+    "existing custom catalog"
+  )
+})
+
+test_that("a blocked first contracted run still requires a contract after reopen", {
+  root <- withr::local_tempdir()
+  lake <- dl_open(root)
+  withr::defer(dl_close(lake))
+  contract <- dl_contract("checked", columns = c(id = "integer"), key = "id")
+  result <- dl_write(
+    lake,
+    data.frame(id = c(1L, 1L)),
+    "orders",
+    contract,
+    stop_on_failure = FALSE
+  )
+  expect_equal(result$status, "blocked")
+  dl_close(lake)
+  lake <- dl_open(root)
+  expect_snapshot(error = TRUE, dl_write(lake, data.frame(id = 1L), "orders"))
+  expect_equal(nrow(dl_releases(lake, "orders")), 0L)
+  expect_equal(
+    dl_write(lake, data.frame(id = 1L), "orders", contract)$status,
+    "published"
+  )
+})
+
+test_that("a blocked contract upgrade cannot fall back to the automatic schema", {
+  lake <- dl_open(withr::local_tempdir())
+  withr::defer(dl_close(lake))
+  dl_write(lake, data.frame(id = 1L), "orders")
+  contract <- dl_contract("checked", columns = c(id = "integer"), key = "id")
+  result <- dl_write(
+    lake,
+    data.frame(id = c(1L, 1L)),
+    "orders",
+    contract,
+    stop_on_failure = FALSE
+  )
+  expect_equal(result$status, "blocked")
+  expect_snapshot(error = TRUE, dl_write(lake, data.frame(id = 1L), "orders"))
+  expect_equal(dl_read(lake, "orders")$id, 1L)
+})
+
 test_that("a data expression needs a deliberate asset name", {
   lake <- dl_open(withr::local_tempdir())
   withr::defer(dl_close(lake))
