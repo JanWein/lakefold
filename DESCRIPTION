@@ -13,7 +13,7 @@ Description: Combines reusable specifications and explicit execution steps for
 License: MIT + file LICENSE
 Encoding: UTF-8
 Depends: R (>= 4.2.0)
-Imports: DBI, duckdb (>= 1.5.5), dplyr, dbplyr, tibble, rlang, digest, jsonlite
+Imports: DBI, duckdb (>= 1.5.5), dplyr (>= 1.1.0), dbplyr, tibble, rlang, digest, jsonlite
 Suggests: testthat (>= 3.0.0), pointblank, dm, shiny, bslib, yaml,
     readr, readxl, paws.storage, knitr, rmarkdown, processx, withr
 Config/testthat/edition: 3

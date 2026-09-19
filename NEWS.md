@@ -8,6 +8,8 @@
   Reject ambiguous duplicate-group custom metric results.
 * Preserve current delivery evidence across corrections to older partitions.
 * Generate framework IDs without consuming or creating R's random seed.
+* Order grouped metric results deterministically before hashing, so database
+  row order does not change report identity.
 * Make repeated report saves ignore only calculation timestamps and retain the
   first saved evidence. Deduplicate identical measurement lineage edges.
 
