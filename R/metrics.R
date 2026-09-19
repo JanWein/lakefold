@@ -329,7 +329,8 @@ dl_measure <- function(
 #' @param results Named list of dl_measure results.
 #' @param code_version Reporting code version.
 #' @param params Report parameters.
-#' @return Report manifest including persisted result values.
+#' @return Report manifest including result values as data frames, both on
+#'   initial save and an identical retry. Retries preserve original timestamps.
 #' @export
 #' @examples
 #' root <- tempfile("lakefold-example-")
@@ -386,7 +387,9 @@ dl_report_release <- function(
       # Tibbles and data.frames have the same canonical JSON representation.
       abort("Metric result changed after calculation.")
     }
-    list(manifest = m, values = as.data.frame(x))
+    values <- as.data.frame(x)
+    attr(values, "dl_manifest") <- NULL
+    list(manifest = m, values = values)
   })
   manifest <- list(
     id = id,
@@ -408,7 +411,12 @@ dl_report_release <- function(
     ) {
       abort("Report id already exists with different content.")
     }
-    return(dl_report_read(lake, id))
+    saved <- jdecode(old$manifest[[1]])
+    for (name in names(manifest$measures)) {
+      manifest$measures[[name]]$manifest$calculated_at <-
+        saved$measures[[name]]$manifest$calculated_at
+    }
+    return(manifest)
   } else {
     DBI::dbWithTransaction(lake$con, {
       insert_meta(

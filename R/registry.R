@@ -101,6 +101,9 @@ dl_registry <- function(
   )
 ) {
   assert_lake(lake)
+  if (length(table) == 1L && table %in% c("ru", "run")) {
+    table <- "runs"
+  }
   table <- match.arg(table)
   query(lake, paste("SELECT * FROM", meta(lake, table)))
 }

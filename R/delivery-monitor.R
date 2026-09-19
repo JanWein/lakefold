@@ -13,6 +13,7 @@
 #' @param business_date Expected date, as `Date` or ISO `YYYY-MM-DD` string.
 #' @param due_at,at Due time and evaluation time, both POSIXct scalars.
 #' @param notify Optional function receiving an event without source rows.
+#'   Requires `record = TRUE` to retain deduplication evidence.
 #' @param date_column Optional business-date column to inspect in the current
 #'   release. Inferred for a single date partition; otherwise the delivery's
 #'   recorded business date is used. Supply explicitly for multi-date full writes.
@@ -45,6 +46,11 @@ dl_check_delivery <- function(
 ) {
   assert_lake(lake)
   flag(record, "record")
+  if (!record && !is.null(notify)) {
+    abort(
+      "Notifications require record = TRUE so delivery attempts can be deduplicated."
+    )
+  }
   if (record) {
     assert_writable(lake)
   }
