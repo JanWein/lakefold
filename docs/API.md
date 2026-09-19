@@ -1,10 +1,10 @@
-# API as of 0.5.0
+# API as of 0.6.0
 
 New to the package? Read [Why lakefold?](WHY_LAKEFOLD.md), then follow the
 [monthly reporting walkthrough](GETTING_STARTED.md) before browsing all functions.
 
 The complete grouped reference is available on the [documentation website](https://janwein.github.io/lakefold/reference/index.html).
-All 66 exported functions have package help. In R, use `help(package = "lakefold")`.
+All 70 exported functions have package help. In R, use `help(package = "lakefold")`.
 
 Start with `dl_open()`, `dl_write()`, `dl_read()` and `dl_close()`.
 Configuration and business contracts are optional on this path. Existing
@@ -80,3 +80,8 @@ diagnostics. See the [quality guide](https://janwein.github.io/lakefold/articles
 | `dl_tbl()` | [dl_tbl.Rd](../man/dl_tbl.Rd) |
 | `dl_validate()` | [dl_validate.Rd](../man/dl_validate.Rd) |
 | `dl_write()` | [dl_write.Rd](../man/dl_write.Rd) |
+
+| `dl_compare()` | [dl_compare.Rd](../man/dl_compare.Rd) |
+| `dl_quality_errors()` | [dl_quality_errors.Rd](../man/dl_quality_errors.Rd) |
+| `dl_recover()` | [dl_recover.Rd](../man/dl_recover.Rd) |
+| `dl_report_read()` | [dl_report_read.Rd](../man/dl_report_read.Rd) |

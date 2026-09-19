@@ -27,6 +27,38 @@ A dbt project is an additional specification, separate from registered
 The resulting dbt relations are not automatically registered as immutable
 lakefold releases.
 
+## From 0.5.0 to 0.6.0
+
+Open an existing lake once with a writable 0.6.0 connection. The additive schema
+3 migration creates `_dl.run_owners` to identify future writers. Existing assets,
+releases, quality results and reports are retained. Older runs have unknown
+writer ownership. After migration use 0.6.0 or later; a read-only connection
+never performs a migration and requires a schema 3 catalog.
+
+Recreate metric definitions and give previously registered metrics a new
+`version`. Earlier versions stored abbreviated formula labels, which could
+collide for distinct long formulas. Version 0.6.0 fingerprints the full expression
+and its input declarations. It cannot reconstruct missing historical formula
+text, so it refuses to reinterpret an old identity. Historical report values
+remain readable with `dl_report_read()`; they are not recalculated or rewritten.
+`code_version` must still cover dependencies and captured external values.
+
+Existing automatically inferred integer schemas are verified against their old
+fingerprint, then widened to numeric in a new automatic contract version on the
+next write. Earlier releases and definitions keep their identities and values.
+Explicit integer contracts remain strict. Spaced and quoted column names are
+accepted; asset and schema names retain their existing restrictions.
+
+Other additions are optional: `partition_by`, source functions, `read_only`,
+`dl_compare()`, `dl_report_read()`, local quality exceptions and explicit recovery.
+Metric owner, description and unit may be omitted. A metric with no time column
+defaults to flow; with a time column it defaults to stock. Approval and code
+version remain explicit when executing a governed metric.
+
+Report retries compare release IDs, metric identities, parameters and values,
+ignoring only `calculated_at`. A successful retry retains the first saved
+calculation times. Readback uses JSON value types, including ISO date strings.
+
 ## From 0.4.0 to 0.5.0
 
 The simple API is additive: `dl_open()`, `dl_write()`, `dl_read()` and `dl_close()`.

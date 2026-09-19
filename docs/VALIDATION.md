@@ -1,4 +1,60 @@
-# Validation record for lakefold 0.5.0
+# Validation record for lakefold 0.6.0
+
+Check date: 19 September 2026. Local environment: Ubuntu 24.04 and R 4.3.3.
+All inputs were synthetic. Results below refer to the 0.6.0 implementation.
+
+| Check | Result |
+|---|---|
+| Full `R CMD check --no-manual` | 0 errors, 0 warnings, 0 notes |
+| DuckDB package-check expectations | 442 passed; 0 failures, warnings or skips |
+| Separate complete DuckLake suite | 94 test cases; 442 expectations passed; 0 failures, warnings or skips |
+| External integrations | Actual dbt execution, pointblank gates and dm checks exercised |
+| Documentation | Nine executable vignettes built and rebuilt; package examples checked |
+| Public reference | 70 exported functions and 59 help topics |
+| Monthly example script | Executed; original 350, correction 370 and September 390 verified |
+| Synthetic 100,000-row workload | Initial write, partition correction and complete difference counts passed on both backends |
+
+The 22 additional test cases cover full-formula identities, old metric protection,
+missing-value checks with pronouns and explicit inputs, random-seed isolation,
+read-only storage enforcement, unchanged registry reads, report retries and
+historical values, partition-aware delivery monitoring, automatic numeric schema
+migration, quoted column names, bounded comparisons, callback snapshots, local
+exceptions, explicit recovery, product cache bypass and saved configurations.
+
+The schema migration test starts from schema 2, rejects read-only migration,
+retains release data and definitions, and verifies idempotent migration to 3.
+Known live writers block recovery; unknown owners need external confirmation.
+Linux process identity uses host, boot and process start. Other hosts take the
+conservative unknown-owner path.
+
+## Local timing example
+
+One run of the bundled `inst/examples/benchmark.R` with 100,000 rows measured:
+
+| Backend | Initial write | Partition correction | Keyed comparison |
+|---|---:|---:|---:|
+| DuckDB | 0.236 s | 0.236 s | 0.227 s |
+| DuckLake | 0.665 s | 0.602 s | 0.545 s |
+
+These are single local observations, not throughput guarantees or a sustained
+load benchmark. Each correction still materializes a full candidate, and history
+retains complete release tables. Folder size before connection close is reported
+by the script but is not a durable-storage measurement.
+
+## CI scope and remaining verification
+
+The workflow retains Linux R 4.5.1 with real dbt on both backends and adds
+DuckDB compatibility jobs for R 4.2.3, Windows and macOS. The added jobs do not
+install the external dbt CLI or opt into DuckLake. See
+[GitHub Actions](https://github.com/JanWein/lakefold/actions) for results tied to
+the actual commit; a configured job is not evidence of success by itself.
+
+Production PostgreSQL/S3, remote restore, concurrent writers, incremental storage
+and atomic multi-table publication remain outside this release's verified scope.
+A targets adapter and automatic retention are not implemented. These boundaries
+are also documented in the feature overview and operating guide.
+
+# Historical record: lakefold 0.5.0
 
 Check date: 19 September 2026. Local environment: Ubuntu 24.04 and R 4.3.3.
 

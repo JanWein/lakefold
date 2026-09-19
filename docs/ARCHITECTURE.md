@@ -1,4 +1,4 @@
-# Architecture as of 0.5.0
+# Architecture as of 0.6.0
 
 lakefold organizes data workflows around definitions, execution and inspection.
 Users can start with `dl_open()`, `dl_write()` and `dl_read()`, then compose steps
@@ -54,6 +54,7 @@ DuckLake's internal metadata tables.
 | `dbt.R`, `dbt-init.R`, `dbt-publish.R` | dbt configuration, CLI execution, artifacts and explicit snapshot publication |
 | `registry.R` | Versioned definitions, releases and additive metadata migration |
 | `diagnostics.R`, `quality-reports.R` | Shared inspection and quality report exports |
+| `compare.R`, `recovery.R` | Database-side release differences and explicit abandoned-run recovery |
 | `delivery-monitor.R`, `maintenance.R` | Expected deliveries and cleanup of unpublished failed-run tables |
 | `catalog.R` | Freshness information and a read-only Shiny app |
 | `adapters.R` | Explicit YAML exports and capability declarations |
@@ -129,3 +130,23 @@ paths. Distribute them according to the operating project's access rules.
 The [design review](DESIGN_REVIEW.md) explains how these extensions fit the
 framework's composition principles. Adding more storage backends should follow
 clear use cases and a stable core interface.
+
+
+## Read-only execution and metric identities
+
+`read_only = TRUE` attaches persistent storage with DuckDB's `READ_ONLY` option,
+skips directory creation and registry migration, and rejects write APIs before
+input acquisition. The in-memory connection may still load required extensions.
+Measurements default to no recording on this connection and carry the complete
+metric definition in their result manifest. New transient metrics are allowed,
+but an existing ID/version cannot be reused with a changed definition.
+
+Formula identity uses the full deparsed expression, never a display label.
+Closure environments are not serialized; explicit `code_version` remains the
+contract for changed external values and dependencies. Identical report retries
+ignore only calculation timestamps. Storage, definitions and semantic report
+inputs remain versioned.
+
+Registry schema 3 adds writer ownership for new runs. Linux recovery checks
+host, boot and process start; unknown owners require explicit operator evidence
+that the writer stopped. Recovery never infers abandonment solely from age.

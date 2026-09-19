@@ -11,7 +11,7 @@ It uses synthetic monthly reserve data and runs locally without credentials.
 | 2 | Store August's delivery: North 100, South 250 | Write and read a dataset totaling 350 |
 | 3 | Correct South to 270 | Current data totals 370; the first release still totals 350 |
 | 4 | Require one row per entity/date | A duplicate is blocked and the successful data stays available |
-| 5 | Add a complete September delivery | Month replacement keeps August 370 and September 390 together |
+| 5 | Add September with `partition_by = "date"` | Month replacement keeps August 370 and September 390 together |
 | 6, optional | Build monthly totals | Reuse a prepared table with recorded inputs |
 | 7, optional | Define a reserve metric | Record the formula and select one reporting date |
 | 8, optional | Record the original report | Preserve its value of 350 and the input version used |
