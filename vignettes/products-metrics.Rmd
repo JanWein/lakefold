@@ -7,9 +7,9 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
-# Produkte, relationale Modelle, Metrics und Reports
+# Products, relational models, metrics and reports
 
-## Ein Produkt baut auf Releases auf
+## Build a product from releases
 
 ```r
 product <- dl_product(
@@ -20,21 +20,21 @@ product <- dl_product(
 product |> dl_execute(lake)
 ```
 
-`inputs` ist ein benannter Vektor von Asset-IDs. Der Builder erhält eine benannte
-Liste von Lazy Tables. Vor dem Build werden konkrete Input-Releases aufgelöst;
-die Lineage hält sie fest. Ein späterer Quell-Release baut das Produkt nicht
-automatisch neu. Für Wiederholbarkeit lassen sich alle Inputs explizit pinnen:
+`inputs` is a named vector of asset IDs. The builder receives a named list of
+lazy tables. Specific input releases are resolved before the build and recorded
+in lineage. A later source release does not automatically rebuild the product.
+Pin every input when explicit repeatability is required:
 
 ```r
 dl_build(lake, product, releases = c(reserves = input_release_id))
 ```
 
-Der Produkt-Contract beschreibt das Ergebnis, nicht zwingend die Quellschemata.
-Mehrere Inputs können im Builder über dplyr gejoint werden. Granularität,
-Kardinalität und mögliche Vervielfachungen müssen fachlich geprüft werden.
-Ein Produkt ist derzeit eine Ergebnistabelle, kein atomarer Mehrtabellen-Release.
+The product contract describes the output, which may differ from the source
+schemas. Join multiple inputs with dplyr inside the builder. Review grain,
+cardinality and potential row multiplication as part of the business logic.
+A product currently publishes one result table, not an atomic multi-table bundle.
 
-## dm ist ein Modell, keine automatische Join-Engine
+## Declare relationships with dm
 
 ```r
 model <- dl_model(
@@ -43,27 +43,26 @@ model <- dl_model(
 )
 ```
 
-`dm` ist optional. Das Objekt enthält Lazy Tables und gepinnte Releases.
-Deklarierte Primär-/Fremdschlüssel werden geprüft. Joins und die Auswahl der
-gewünschten Granularität bleiben in der Produktfunktion. Es wird keine
-Power-BI-/DAX-Semantik emuliert.
+The optional dm integration returns a native model containing lazy tables and
+pinned releases. Declared primary and foreign keys are checked. The product
+function still determines joins and the desired grain. Power BI/DAX semantics
+are not emulated.
 
-## Kennzahlen brauchen fachliche Semantik
+## Define metric semantics
 
-| Definition | Regel |
+| Definition | Rule |
 |---|---|
-| `time_behavior = "stock"` | Genau ein nicht-fehlender Stichtag in der ausgewählten Eingabe |
-| `time_behavior = "flow"` | Mehrere Zeitpunkte sind möglich; die Formel bestimmt die Aggregation |
-| `dimensions` | Ausschließlich diese Spalten sind als `by` und Filter erlaubt |
-| `na_policy = "reject"` | Fehlende relevante Eingaben blockieren die Berechnung |
-| `na_policy = "expression"` | Die Formel legt den Umgang mit fehlenden Werten fest |
-| `approved = FALSE` | Berechnung wird blockiert |
+| `time_behavior = "stock"` | Exactly one non-missing business date in the selected input |
+| `time_behavior = "flow"` | Multiple dates are allowed; the formula determines aggregation |
+| `dimensions` | Only these columns are permitted in `by` and filters |
+| `na_policy = "reject"` | Missing relevant inputs block calculation |
+| `na_policy = "expression"` | The expression determines how missing values are handled |
+| `approved = FALSE` | Calculation is blocked |
 
-`expr = sum(amount, na.rm = TRUE)` bei gleichzeitigem `na_policy = "reject"`
-entfernt fehlende Eingaben nicht: die vorgelagerte Prüfung blockiert. Für bewusstes
-Ignorieren ausdrücklich `na_policy = "expression"` wählen und fachlich begründen.
-Fehlende/nicht-endliche numerische Ergebnisse sowie leere Custom-Ergebnisse
-werden trotzdem abgewiesen.
+Using `expr = sum(amount, na.rm = TRUE)` with `na_policy = "reject"` still blocks
+missing inputs at the preceding check. Choose `na_policy = "expression"`
+explicitly when ignoring missing values is justified. Missing or non-finite
+numeric outputs and empty custom outputs are rejected in either case.
 
 ```r
 value <- metric |> dl_execute(lake,
@@ -72,28 +71,26 @@ value <- metric |> dl_execute(lake,
 )
 ```
 
-Dieses Beispiel setzt eine Metric mit freigegebener Dimension `company` voraus.
-Für Quoten, gewichtete Mittel oder komplexe Kennzahlen dient
-`compute = function(data, dimensions, params) ...`. Eine solche Funktion muss
-die angeforderte Gruppierung und Rückgabespalten korrekt umsetzen. Das Framework
-prüft nicht automatisch die ökonomische Richtigkeit einer Formel.
+This example assumes a metric with `company` as an approved dimension.
+Use `compute = function(data, dimensions, params) ...` for ratios, weighted means
+or more complex metrics. The callback must implement the requested grouping and
+return the required columns. The framework cannot establish the economic
+correctness of a formula.
 
-## Ein Report-Release ist ein Nachweis
+## Record a report release
 
-`dl_measure()` hängt ein `dl_manifest` an sein Ergebnis. Es enthält Definition,
-Input-Release, Parameter, Eingabequalität und Ergebnis-Hash. `dl_report_release()`
-speichert Manifest und Werte. Nachträgliche Änderungen an den Werten werden
-abgewiesen; ein vorhandener Reportname darf keine andere Bedeutung bekommen.
+`dl_measure()` attaches a `dl_manifest` to its result. It contains the definition,
+input release, parameters, input quality and result hash. `dl_report_release()`
+stores the manifest and values. Later changes to those values are rejected;
+an existing report identifier cannot be reused with different contents.
 
-Ein neuer Aufruf derselben Kennzahl kann einen anderen Berechnungszeitpunkt im
-Manifest tragen. Deshalb für die idempotente Wiederholung eines Report-Release
-entweder dasselbe Ergebnisobjekt weiterverwenden oder eine neue Reportversion
-vergeben. Report-Release ist kein PDF-/Word-Renderer.
+A new calculation of the same metric may carry a different calculation time in
+its manifest. For an idempotent report-publication retry, reuse the same result
+object or assign a new report version. PDF/Word rendering is a separate concern.
 
-## Sichere KI-Anbindung
+## Integrate with AI tools explicitly
 
-Das Paket führt Kennzahlen ohne LLM aus. Der commons-YAML-Export ist eine
-begrenzte deklarative Brücke und kein getesteter Chat-/Agent-Server. Es gibt
-keine Authentifizierung, keinen geschützten SQL-Endpunkt und keine automatische
-Validierung von LLM-Abfragen. Ein sicherer Chatzugriff benötigt diese Komponenten
-zusätzlich; sie werden von lakefold nicht stillschweigend bereitgestellt.
+The package calculates metrics without an LLM. The commons YAML export is a
+limited declarative interface. It does not provide a tested chat/agent server,
+authentication, a protected SQL endpoint or automatic validation of LLM queries.
+Those components must be supplied separately for an authenticated chat service.
