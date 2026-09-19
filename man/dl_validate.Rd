@@ -4,12 +4,18 @@
 \alias{dl_validate}
 \title{Validate a candidate against a contract}
 \usage{
-dl_validate(data, contract)
+dl_validate(data, contract, stage = "candidate", keep_agents = FALSE)
 }
 \arguments{
 \item{data}{A data frame or lazy table.}
 
 \item{contract}{Contract definition.}
+
+\item{stage}{Label stored with each check, such as \code{"ingest"} or
+\code{"candidate"}.}
+
+\item{keep_agents}{Retain interrogated pointblank agents as an in-memory
+attribute for \code{\link[=dl_pointblank_report]{dl_pointblank_report()}}. Defaults to \code{FALSE}.}
 }
 \value{
 A tibble with one row per check. Only passed and warning permit
