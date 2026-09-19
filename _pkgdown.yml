@@ -1,0 +1,26 @@
+url: https://janwein.github.io/lakefold/
+destination: site
+home:
+  title: lakefold
+  description: R workflows for data lakes, dbt and relational models.
+template:
+  bootstrap: 5
+reference:
+  - title: Package overview
+    contents: lakefold-package
+  - title: Configure and connect
+    contents: [dl_config, dl_catalog_duckdb, dl_setup, dl_disconnect, dl_capabilities]
+  - title: Ingest and publish
+    contents: [dl_ingest, dl_source, dl_pipeline, dl_step_transform, dl_plan, dl_execute, dl_run, dl_interrupted]
+  - title: Contracts and quality
+    contents: [dl_contract, dl_rule, dl_validate, dl_contract_yaml]
+  - title: Build with dbt
+    contents: [dl_dbt_init, dl_dbt_project, dl_dbt_build, dl_dbt_status, dl_dbt_lineage, dl_dbt_model]
+  - title: Products, models and metrics
+    contents: [dl_product, dl_build, dl_model, dl_tbl, dl_metric, dl_measure, dl_report_release, dl_commons_yaml]
+  - title: Metadata and catalog
+    contents: [dl_register, dl_registry, dl_freshness, dl_catalog_export, dl_catalog]
+articles:
+  - title: Guides
+    navbar: ~
+    contents: [getting-started, dbt-workflows, workflow-design, quality-history, products-metrics, design-review]

@@ -1,0 +1,27 @@
+# Local credentials and runtime state
+.Renviron
+.Renviron.*
+.env
+.env.*
+!.env.example
+.Rhistory
+.RData
+.Ruserdata
+.Rproj.user/
+*.duckdb*
+*.ducklake*
+*.parquet
+landing/
+landing-cache/
+data/
+demo-runtime/
+catalog.json
+# Build output
+*.tar.gz
+*.zip
+*.Rcheck/
+check/
+public/
+site/
+renv/library/
+renv/staging/

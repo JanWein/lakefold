@@ -1,0 +1,23 @@
+Package: lakefold
+Title: R Workflows for Data Lakes, dbt and Relational Models
+Version: 0.3.0
+Authors@R: person("Jan-Hendrik", "Weinert", role = c("aut", "cre"), email = "65009403+JanWein@users.noreply.github.com")
+Description: A modular grammar for landing source files, validating immutable
+    candidates, publishing versioned data products and calculating governed
+    metrics. Uses DuckLake or a local DuckDB backend, lazy tidyverse queries,
+    optional pointblank validation, dm models and a read-only Shiny catalog.
+    Runs dbt through its command-line interface and exposes build results,
+    dependency lineage and lazy relational models in R.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Depends: R (>= 4.2.0)
+Imports: DBI, duckdb (>= 1.5.5), dplyr, dbplyr, tibble, rlang, digest, jsonlite
+Suggests: testthat (>= 3.0.0), pointblank, dm, shiny, bslib, yaml,
+    readr, readxl, paws.storage, knitr, rmarkdown, processx, withr
+Config/testthat/edition: 3
+Roxygen: list(markdown = TRUE)
+URL: https://janwein.github.io/lakefold/,
+    https://github.com/JanWein/lakefold
+BugReports: https://github.com/JanWein/lakefold/issues
+VignetteBuilder: knitr
+Config/roxygen2/version: 8.1.0

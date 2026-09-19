@@ -1,0 +1,12 @@
+^docs$
+^scripts$
+^\.github$
+^\.gitignore$
+^README\.en\.md$
+^CONTRIBUTING\.md$
+^LICENSE\.md$
+^_pkgdown\.yml$
+^public$
+^site$
+^check$
+^.*\.Rproj$
