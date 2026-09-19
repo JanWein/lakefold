@@ -4,7 +4,13 @@
 \alias{dl_validate}
 \title{Validate a candidate against a contract}
 \usage{
-dl_validate(data, contract, stage = "candidate", keep_agents = FALSE)
+dl_validate(
+  data,
+  contract,
+  stage = "candidate",
+  keep_agents = FALSE,
+  keep_errors = FALSE
+)
 }
 \arguments{
 \item{data}{A data frame or lazy table.}
@@ -16,6 +22,10 @@ dl_validate(data, contract, stage = "candidate", keep_agents = FALSE)
 
 \item{keep_agents}{Retain interrogated pointblank agents as an in-memory
 attribute for \code{\link[=dl_pointblank_report]{dl_pointblank_report()}}. Defaults to \code{FALSE}.}
+
+\item{keep_errors}{Retain original R conditions in an in-memory \code{dl_errors}
+attribute. They can contain private data and are never persisted in the
+registry. Inspect with \code{\link[=dl_quality_errors]{dl_quality_errors()}}. Defaults to \code{FALSE}.}
 }
 \value{
 A tibble with one row per check. Only passed and warning permit

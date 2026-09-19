@@ -13,13 +13,18 @@ dl_write(
   code_version = NULL,
   input_contract = NULL,
   cache = NULL,
+  partition_by = character(),
   ...
 )
 }
 \arguments{
 \item{lake}{Connected lake or \code{\link[=dl_config]{dl_config()}}.}
 
-\item{data}{Data frame, or path to a local file.}
+\item{data}{Data frame, path to a local file, or a zero-argument function
+returning a data frame. A source function is called once per write before
+cache lookup; its returned data is archived as RDS. Use it to connect
+existing API or database clients. It requires \code{name} and does not archive
+the original transport response.}
 
 \item{name}{Optional asset name. Defaults to the data frame's variable name
 or the file name without its extension. Expressions need an explicit name.
@@ -37,6 +42,10 @@ Names start with a letter and use letters, digits, underscores or dots.}
 readers and structural checks; custom callbacks need \code{code_version} to
 enable reuse. \code{FALSE} always runs validation again.}
 
+\item{partition_by}{Optional column names identifying complete partitions
+to replace. Omit to replace the whole asset. Every row of each supplied
+partition replaces that partition; other partitions remain published.}
+
 \item{...}{Arguments passed to \code{\link[=dl_ingest]{dl_ingest()}}, such as \code{business_date},
 \code{notify}, \code{layer} and \code{stop_on_failure}.}
 }
@@ -47,7 +56,8 @@ A \code{dl_run_result} with status, release ID and quality results.
 \description{
 Starts the normal landing, validation and publication workflow. Without a
 contract, the first successful write establishes a structural schema. Later
-writes must match that schema. Missing values are allowed; empty tables are
+writes must match that schema. Automatic numeric columns accept integers
+and decimals; explicit integer contracts remain strict. Missing values are allowed; empty tables are
 blocked. No keys, business rules, owners or freshness deadlines are guessed.
 }
 \details{

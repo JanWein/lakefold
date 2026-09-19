@@ -11,7 +11,8 @@ dl_measure(
   at = NULL,
   release = NULL,
   filters = list(),
-  params = list()
+  params = list(),
+  record = !isTRUE(lake$config$read_only)
 )
 }
 \arguments{
@@ -28,6 +29,10 @@ dl_measure(
 \item{filters}{Named list of exact-match filters on permitted dimensions.}
 
 \item{params}{Parameters passed to custom compute functions.}
+
+\item{record}{Record definition and lineage. Defaults to \code{TRUE} on a writable
+lake and \code{FALSE} on a read-only lake. Unrecorded results still carry their
+complete metric definition and pinned release in the manifest.}
 }
 \value{
 Tibble with a dl_manifest attribute for report reproducibility.

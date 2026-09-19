@@ -10,7 +10,8 @@ dl_config(
   layers = c("raw", "validated", "products"),
   landing = "landing",
   backend = c("ducklake", "duckdb"),
-  install_extensions = TRUE
+  install_extensions = TRUE,
+  read_only = FALSE
 )
 }
 \arguments{
@@ -26,6 +27,9 @@ S3).}
 \item{backend}{DuckLake, or local DuckDB for offline development.}
 
 \item{install_extensions}{Allow DuckDB to install required extensions.}
+
+\item{read_only}{Attach existing storage read-only and skip schema creation
+and migration. A lake created by a newer package may require an upgrade.}
 }
 \value{
 A connection-free \code{dl_config} specification.

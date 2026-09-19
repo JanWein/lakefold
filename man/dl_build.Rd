@@ -10,7 +10,8 @@ dl_build(
   releases = NULL,
   business_date = NA_character_,
   notify = NULL,
-  stop_on_failure = TRUE
+  stop_on_failure = TRUE,
+  cache = TRUE
 )
 }
 \arguments{
@@ -26,6 +27,9 @@ by input alias.}
 \item{notify}{Optional function(event).}
 
 \item{stop_on_failure}{Fail the job after metadata has been saved.}
+
+\item{cache}{Reuse a matching release. Set \code{FALSE} to re-evaluate builders
+that consult external state. Change \code{code_version} for intentional changes.}
 }
 \value{
 Run result.

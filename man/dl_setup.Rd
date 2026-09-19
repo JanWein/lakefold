@@ -11,10 +11,11 @@ dl_setup(
   layers = c("raw", "validated", "products"),
   landing = "landing",
   backend = c("ducklake", "duckdb"),
-  install_extensions = TRUE
+  install_extensions = TRUE,
+  read_only = FALSE
 )
 
-dl_connect(config)
+dl_connect(config, read_only = config$read_only \%||\% FALSE)
 }
 \arguments{
 \item{catalog}{Metadata configuration.}
@@ -29,6 +30,9 @@ S3).}
 \item{backend}{DuckLake, or local DuckDB for offline development.}
 
 \item{install_extensions}{Allow DuckDB to install required extensions.}
+
+\item{read_only}{Attach existing storage read-only and skip schema creation
+and migration. A lake created by a newer package may require an upgrade.}
 
 \item{config}{A configuration from a previously connected lake.}
 }

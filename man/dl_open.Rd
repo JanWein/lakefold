@@ -5,7 +5,7 @@
 \alias{dl_close}
 \title{Open a local lake with sensible defaults}
 \usage{
-dl_open(path = "lakefold", backend = NULL)
+dl_open(path = "lakefold", backend = NULL, read_only = FALSE)
 
 dl_close(lake)
 }
@@ -15,6 +15,8 @@ the working directory.}
 
 \item{backend}{Optional \code{"duckdb"} or \code{"ducklake"}. DuckLake requires its
 DuckDB extension. Defaults to the saved choice, or DuckDB for a new folder.}
+
+\item{read_only}{Open an existing lake without registry or data writes.}
 
 \item{lake}{Connected lake to close.}
 }

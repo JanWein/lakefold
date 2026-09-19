@@ -11,15 +11,16 @@ dl_metric(
   compute = NULL,
   dimensions = character(),
   time_column = NULL,
-  time_behavior = c("stock", "flow"),
-  unit,
-  owner,
-  description,
+  time_behavior = if (is.null(time_column)) "flow" else "stock",
+  unit = "",
+  owner = "",
+  description = "",
   version = "1.0.0",
   approved = FALSE,
   na_policy = "reject",
   empty_policy = "error",
-  code_version
+  code_version,
+  input_columns = NULL
 )
 }
 \arguments{
@@ -36,12 +37,12 @@ metrics.}
 
 \item{time_column}{Column representing the business date.}
 
-\item{time_behavior}{stock requires exactly one selected date; flow may span
-dates.}
+\item{time_behavior}{\code{stock} requires exactly one selected date; \code{flow} may
+span dates. Defaults to stock when \code{time_column} is supplied, otherwise flow.}
 
-\item{unit}{Unit.}
+\item{unit}{Optional unit.}
 
-\item{owner, description}{Business metadata.}
+\item{owner, description}{Optional business metadata.}
 
 \item{approved}{Whether business review is complete.}
 
@@ -50,6 +51,9 @@ dates.}
 \item{empty_policy}{Policy description.}
 
 \item{code_version}{Version of metric code and dependencies.}
+
+\item{input_columns}{Optional explicit input columns for dynamic expressions
+or custom functions. Known expression columns are always checked as well.}
 }
 \value{
 Metric specification. Reports execute it directly without an LLM.
