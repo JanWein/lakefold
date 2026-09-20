@@ -76,6 +76,37 @@ it current. Other targets have their own persistence guarantees.
 | Send lineage or catalog metadata | `catalog_openlineage(...)`, `catalog_openmetadata(...)` |
 | Manage a dependency graph or deployment | `as_targets(...)`, `init_project(...)` |
 
+## Grow into a layered data stack
+
+When several reports reuse the same deliveries, separate receiving data from
+preparing it and approving it for consumers. The optional lake/dbt workflow adds
+four explicit layers: **raw**, **staging**, **core** and **marts**.
+
+```r
+# After configuring a lake and providing orders.csv (see the guide below):
+accepted <- ingest(config, "orders.csv", name = "orders",
+  quality = ~ amount >= 0)
+
+project <- dbt_init("analytics", config, sources = list(orders = accepted))
+built <- dbt_build(project)
+approved <- dbt_publish(config, built, "customer_revenue")
+
+collect(approved)
+```
+
+`ingest()` checks a delivery before writing RAW and retains receipt evidence when
+it rejects one. dbt then builds `stg_orders`, `core_orders` and `customer_revenue`
+from the accepted release. `dbt_publish()` takes a checked, immutable snapshot for
+consumers. A dbt data-test failure can leave earlier model writes in place; it
+does not change an already published release. Without an explicit contract,
+publication infers structure and does not invent business rules.
+
+The [step-by-step layered guide](https://janwein.github.io/tidyweave/articles/layered-data-stack.html)
+starts with real R data, explains each layer and shows optional pointblank,
+DuckLake, OpenMetadata and report consumption. Shiny and Quarto use ordinary R
+tables. Power BI can consume an approved database or Parquet export through its
+existing connectors; deployment and refresh remain external responsibilities.
+
 ## Learn by building
 
 1. [Why use it?](https://janwein.github.io/tidyweave/articles/why-tidyweave.html)
@@ -84,9 +115,11 @@ it current. Other targets have their own persistence guarantees.
    One table, checks, several inputs and optional storage.
 3. [Monthly reporting](https://janwein.github.io/tidyweave/articles/getting-started.html)
    Accept a correction, reject a duplicate and reproduce an issued report.
-4. [Architecture](https://janwein.github.io/tidyweave/articles/workflow-design.html)
+4. [A layered data stack](https://janwein.github.io/tidyweave/articles/layered-data-stack.html)
+   Receive checked RAW data, build SQL layers and approve outputs for consumers.
+5. [Architecture](https://janwein.github.io/tidyweave/articles/workflow-design.html)
    How a simple API supports interchangeable components.
-5. [Write an adapter](https://janwein.github.io/tidyweave/articles/extending-tidyweave.html)
+6. [Write an adapter](https://janwein.github.io/tidyweave/articles/extending-tidyweave.html)
    A complete source, target and quality extension.
 
 [Function reference](https://janwein.github.io/tidyweave/reference/index.html) ·
@@ -109,7 +142,7 @@ streaming engine, enterprise identity system or distributed transaction manager.
 Lake and local evidence writes require one coordinated writer. Lazy execution
 still depends on the operations supported by the selected backend.
 
-**0.8.0 is a development version, not a stable release candidate.** Public APIs
+**0.9.0 is a development version, not a stable release candidate.** Public APIs
 may change without compatibility aliases. The package was previously named
 lakefold. See [CONTRIBUTING.md](CONTRIBUTING.md) for the English documentation,
 Posit skills, testing and package-development workflow. MIT licensed.

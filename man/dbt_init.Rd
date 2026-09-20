@@ -4,7 +4,13 @@
 \alias{dbt_init}
 \title{Create a runnable local dbt starter project}
 \usage{
-dbt_init(path, config, name = "tidyweave_demo", executable = "dbt")
+dbt_init(
+  path,
+  config,
+  name = "tidyweave_demo",
+  executable = "dbt",
+  sources = NULL
+)
 }
 \arguments{
 \item{path}{Character scalar giving a new or empty directory.}
@@ -16,15 +22,30 @@ digits and underscores, starting with a letter.}
 
 \item{executable}{Character scalar giving a dbt executable name or path.
 It is passed to \code{\link[processx:run]{processx::run()}} without a shell.}
+
+\item{sources}{Optional named list accepted by \code{\link[=dbt_sources]{dbt_sources()}}. The canned
+order example requires an \code{orders} entry whose recorded schema includes
+\code{order_id}, \code{customer_id} and \code{amount}. Staging casts \code{amount} to SQL
+\code{double}, including when input amounts are character strings. Invalid
+numeric strings fail the dbt build. Other named sources also receive
+staging models. For arbitrary business models use \code{\link[=dbt_sources]{dbt_sources()}} with
+your own project instead of this order-specific starter.}
 }
 \value{
 A \code{\link[=dbt_project]{dbt_project()}} specification pointing to the written project
-and profile. Files contain synthetic data and local paths, no credentials.
+and profile. Its \code{source_config} records the expected catalog. Source mode
+creates no seeds and never writes RAW tables. Configure
+\code{layers = c("raw", "staging", "core", "marts")} in \code{\link[=lake_config]{lake_config()}}.
+A named layer vector can map \code{staging}, \code{core} and \code{marts} to other schema
+names; the ingestion schema remains \code{raw}. Seed mode also works with the
+usual three-layer lake configuration, creating its dbt schemas on build.
 }
 \description{
-Write a small dbt-duckdb project with synthetic order data, staging and
-reporting models, and uniqueness/not-null tests. Existing non-empty
-directories are never overwritten. No database or subprocess is opened.
+Write a small dbt-duckdb project with RAW inputs, staging casts, a core
+order model, customer revenue and uniqueness/not-null tests. Supply accepted
+R-ingested \code{sources} to use real immutable RAW relations. With no sources,
+the starter remains a runnable synthetic seed demonstration. Existing
+non-empty directories are never overwritten. No connection is opened.
 }
 \details{
 The generated profile targets the catalog in \code{config} through the \code{lake}
@@ -35,7 +56,7 @@ an appropriate profile yourself and use \code{\link[=dbt_project]{dbt_project()}
 uses the dbt-duckdb profile format; it does not install dbt or adapters.
 }
 \examples{
-\dontshow{if (requireNamespace("duckdb", quietly = TRUE)) withAutoprint(\{ # examplesIf}
+\dontshow{if (requireNamespace("duckdb", quietly = TRUE) && requireNamespace("yaml", quietly = TRUE)) withAutoprint(\{ # examplesIf}
 root <- tempfile("tidyweave-example-")
 config <- lake_config(
   catalog = registry_duckdb(file.path(root, "lake.duckdb")),

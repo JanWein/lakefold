@@ -1,8 +1,10 @@
 #' Create a runnable local dbt starter project
 #'
-#' Write a small dbt-duckdb project with synthetic order data, staging and
-#' reporting models, and uniqueness/not-null tests. Existing non-empty
-#' directories are never overwritten. No database or subprocess is opened.
+#' Write a small dbt-duckdb project with RAW inputs, staging casts, a core
+#' order model, customer revenue and uniqueness/not-null tests. Supply accepted
+#' R-ingested `sources` to use real immutable RAW relations. With no sources,
+#' the starter remains a runnable synthetic seed demonstration. Existing
+#' non-empty directories are never overwritten. No connection is opened.
 #'
 #' The generated profile targets the catalog in `config` through the `lake`
 #' attachment. Supported configurations use a local metadata catalog and local
@@ -15,11 +17,23 @@
 #' @param config A [lake_config()] with a local DuckDB catalog and local storage.
 #' @param name Character scalar. A dbt project identifier containing letters,
 #'   digits and underscores, starting with a letter.
+#' @param sources Optional named list accepted by [dbt_sources()]. The canned
+#'   order example requires an `orders` entry whose recorded schema includes
+#'   `order_id`, `customer_id` and `amount`. Staging casts `amount` to SQL
+#'   `double`, including when input amounts are character strings. Invalid
+#'   numeric strings fail the dbt build. Other named sources also receive
+#'   staging models. For arbitrary business models use [dbt_sources()] with
+#'   your own project instead of this order-specific starter.
 #' @inheritParams dbt_project
 #' @returns A [dbt_project()] specification pointing to the written project
-#'   and profile. Files contain synthetic data and local paths, no credentials.
+#'   and profile. Its `source_config` records the expected catalog. Source mode
+#'   creates no seeds and never writes RAW tables. Configure
+#'   `layers = c("raw", "staging", "core", "marts")` in [lake_config()].
+#'   A named layer vector can map `staging`, `core` and `marts` to other schema
+#'   names; the ingestion schema remains `raw`. Seed mode also works with the
+#'   usual three-layer lake configuration, creating its dbt schemas on build.
 #' @seealso [dbt_build()], [product()]
-#' @examplesIf requireNamespace("duckdb", quietly = TRUE)
+#' @examplesIf requireNamespace("duckdb", quietly = TRUE) && requireNamespace("yaml", quietly = TRUE)
 #' root <- tempfile("tidyweave-example-")
 #' config <- lake_config(
 #'   catalog = registry_duckdb(file.path(root, "lake.duckdb")),
@@ -34,7 +48,8 @@ dbt_init <- function(
   path,
   config,
   name = "tidyweave_demo",
-  executable = "dbt"
+  executable = "dbt",
+  sources = NULL
 ) {
   need("yaml")
   ident(name)
@@ -47,6 +62,87 @@ dbt_init <- function(
       "The starter requires lake_config() with local catalog and storage.",
       "tw_dbt_invalid"
     )
+  }
+  schemas <- dbt_starter_schemas(config, !is.null(sources))
+  source_types <- if (is.null(sources)) {
+    list(
+      orders = c(
+        order_id = "integer",
+        customer_id = "integer",
+        amount = "numeric"
+      )
+    )
+  } else {
+    binding <- dbt_source_binding(sources)
+    if (!identical(binding$database, "lake")) {
+      abort(
+        "The starter profile attaches RAW releases under database lake.",
+        "tw_dbt_invalid"
+      )
+    }
+    if (!"orders" %in% names(sources)) {
+      abort(
+        "The order starter needs sources = list(orders = accepted_raw). Use dbt_sources() for a general project.",
+        "tw_dbt_invalid"
+      )
+    }
+    types <- lapply(sources, function(result) {
+      schema <- result$metadata$schema
+      if (is.list(schema)) {
+        schema <- unlist(schema, use.names = TRUE)
+      }
+      if (
+        !is.character(schema) ||
+          !length(schema) ||
+          is.null(names(schema)) ||
+          anyNA(schema) ||
+          anyNA(names(schema)) ||
+          any(!nzchar(names(schema))) ||
+          anyDuplicated(names(schema))
+      ) {
+        abort(
+          "The starter needs recorded column types on every accepted RAW result.",
+          "tw_dbt_invalid"
+        )
+      }
+      if (any(grepl("\\{\\{|\\{%|\\{#", names(schema)))) {
+        abort(
+          "Rename source columns containing dbt template delimiters before using the starter.",
+          "tw_dbt_invalid"
+        )
+      }
+      dbt_sql_types(schema)
+      schema
+    })
+    if (
+      !all(c("order_id", "customer_id", "amount") %in% names(types$orders)) ||
+        !types$orders[["amount"]] %in%
+          c("character", "integer", "numeric", "integer64")
+    ) {
+      abort(
+        "The order starter requires order_id, customer_id and amount as numbers or numeric strings. Use dbt_sources() for other schemas.",
+        "tw_dbt_invalid"
+      )
+    }
+    if (
+      any(vapply(
+        sources,
+        function(result) {
+          !identical(
+            dbt_catalog_fingerprint(result$output_config),
+            dbt_catalog_fingerprint(config)
+          )
+        },
+        logical(1)
+      ))
+    ) {
+      abort(
+        "Starter RAW sources must belong to config's catalog.",
+        "tw_dbt_invalid"
+      )
+    }
+    types$orders[["amount"]] <- "numeric"
+    types
   }
   path <- absolute_path(path)
   if (file.exists(path) && !dir.exists(path)) {
@@ -61,7 +157,11 @@ dbt_init <- function(
     )
   }
   project <- dbt_project(path, path, target = "dev", executable = executable)
-  directories <- c("models/staging", "models/marts", "seeds", "macros")
+  project$source_config <- config
+  directories <- c("models/staging", "models/core", "models/marts", "macros")
+  if (is.null(sources)) {
+    directories <- c(directories, "seeds")
+  }
   for (directory in directories) {
     dir.create(
       file.path(path, directory),
@@ -74,7 +174,7 @@ dbt_init <- function(
     type = "duckdb",
     path = ":memory:",
     database = "lake",
-    schema = "staging",
+    schema = schemas[["staging"]],
     threads = 1L
   )
   if (config$backend == "ducklake") {
@@ -93,38 +193,62 @@ dbt_init <- function(
   models <- stats::setNames(
     list(list(
       `+materialized` = "table",
-      staging = list(`+schema` = "staging"),
-      marts = list(`+schema` = "marts")
+      staging = list(`+schema` = schemas[["staging"]]),
+      core = list(`+schema` = schemas[["core"]]),
+      marts = list(`+schema` = schemas[["marts"]])
     )),
     name
   )
-  seeds <- stats::setNames(list(list(`+schema` = "raw")), name)
-  yaml::write_yaml(
-    list(
-      name = name,
-      version = "1.0.0",
-      `config-version` = 2L,
-      profile = name,
-      `model-paths` = list("models"),
-      `seed-paths` = list("seeds"),
-      `macro-paths` = list("macros"),
-      models = models,
-      seeds = seeds
+  definition <- list(
+    name = name,
+    version = "1.0.0",
+    `config-version` = 2L,
+    profile = name,
+    `model-paths` = list("models"),
+    `macro-paths` = list("macros"),
+    models = models
+  )
+  if (is.null(sources)) {
+    definition$`seed-paths` <- list("seeds")
+    definition$seeds <- stats::setNames(list(list(`+schema` = "raw")), name)
+    writeLines(
+      c("order_id,customer_id,amount", "1,101,25", "2,101,75", "3,102,50"),
+      file.path(path, "seeds", "raw_orders.csv")
+    )
+  } else {
+    definition$`seed-paths` <- list()
+  }
+  yaml::write_yaml(definition, file.path(path, "dbt_project.yml"))
+  if (!is.null(sources)) {
+    dbt_sources(project, sources)
+  }
+  for (source_name in names(source_types)) {
+    columns <- source_types[[source_name]]
+    sql_types <- dbt_sql_types(columns)
+    quoted <- paste0('"', gsub('"', '""', names(columns), fixed = TRUE), '"')
+    projection <- paste0("  cast(", quoted, " as ", sql_types, ") as ", quoted)
+    input <- if (is.null(sources)) {
+      "{{ ref('raw_orders') }}"
+    } else {
+      paste0("{{ source('raw', '", source_name, "') }}")
+    }
+    writeLines(
+      c("select", paste(projection, collapse = ",\n"), paste("from", input)),
+      file.path(path, "models", "staging", paste0("stg_", source_name, ".sql"))
+    )
+  }
+  writeLines(
+    c(
+      "select order_id, customer_id, amount as order_amount,",
+      "  amount > 0 as is_positive_order",
+      "from {{ ref('stg_orders') }}"
     ),
-    file.path(path, "dbt_project.yml")
-  )
-  writeLines(
-    c("order_id,customer_id,amount", "1,101,25", "2,101,75", "3,102,50"),
-    file.path(path, "seeds", "raw_orders.csv")
-  )
-  writeLines(
-    "select order_id, customer_id, amount from {{ ref('raw_orders') }}",
-    file.path(path, "models", "staging", "stg_orders.sql")
+    file.path(path, "models", "core", "core_orders.sql")
   )
   writeLines(
     c(
-      "select customer_id, sum(amount) as revenue",
-      "from {{ ref('stg_orders') }}",
+      "select customer_id, sum(order_amount) as revenue",
+      "from {{ ref('core_orders') }}",
       "group by customer_id"
     ),
     file.path(path, "models", "marts", "customer_revenue.sql")
@@ -135,11 +259,19 @@ dbt_init <- function(
       models = list(
         list(
           name = "stg_orders",
-          description = "One row per synthetic order.",
+          description = "One row per order, with explicit source types.",
           columns = list(
             list(name = "order_id", tests = list("unique", "not_null")),
             list(name = "customer_id", tests = list("not_null"))
           )
+        ),
+        list(
+          name = "core_orders",
+          description = "Order amounts and a reusable positive-order flag.",
+          columns = list(list(
+            name = "order_id",
+            tests = list("unique", "not_null")
+          ))
         ),
         list(
           name = "customer_revenue",
@@ -176,7 +308,11 @@ dbt_init <- function(
     c(
       paste0("# ", name),
       "",
-      "Synthetic tidyweave starter project.",
+      if (is.null(sources)) {
+        "Synthetic seed demonstration: raw -> staging -> core -> marts."
+      } else {
+        "Accepted R-ingested RAW releases -> staging -> core -> marts."
+      },
       "",
       "Install a compatible dbt CLI and DuckDB adapter, then run from R:",
       "",
@@ -188,6 +324,14 @@ dbt_init <- function(
       "dbt_lineage(result)",
       "```",
       "",
+      if (is.null(sources)) {
+        "For real ingestion, create a new project with dbt_init(..., sources = list(orders = accepted_raw))."
+      } else {
+        "This project has no dbt seeds. Rebind a newer accepted release explicitly with dbt_sources(project, list(orders = accepted_raw))."
+      },
+      "stg_orders casts source types; core_orders names order_amount and derives is_positive_order.",
+      "customer_revenue aggregates the core model by customer_id.",
+      "dbt_sources() manages only its marked source YAML; edit the SQL models normally.",
       "Close R connections to this catalog before running dbt. Reconnect afterwards.",
       "profiles.yml contains machine-specific paths and is intentionally gitignored.",
       "The schema macro uses exact schema names. Use a separate catalog for each environment.",
@@ -196,4 +340,29 @@ dbt_init <- function(
     file.path(path, "README.md")
   )
   project
+}
+
+dbt_starter_schemas <- function(config, sourced) {
+  roles <- c("raw", "staging", "core", "marts")
+  schemas <- stats::setNames(roles, roles)
+  if (!is.null(names(config$layers))) {
+    mapped <- intersect(roles, names(config$layers))
+    schemas[mapped] <- unname(config$layers[mapped])
+  }
+  if (!identical(schemas[["raw"]], "raw")) {
+    abort("The ingestion schema must be raw.", "tw_dbt_invalid")
+  }
+  if (sourced && !all(schemas %in% config$layers)) {
+    abort(
+      "Configure raw, staging, core and marts layers before creating a RAW-source starter.",
+      "tw_dbt_invalid"
+    )
+  }
+  if (anyDuplicated(schemas)) {
+    abort(
+      "The four dbt starter layers need distinct schema names.",
+      "tw_dbt_invalid"
+    )
+  }
+  schemas
 }

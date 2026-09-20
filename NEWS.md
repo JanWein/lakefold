@@ -1,3 +1,34 @@
+# tidyweave 0.9.0
+
+* `catalog_openmetadata_dbt()` uses OpenMetadata's optional Python ingestion
+  engine for invocation artifacts. `dbt_build(catalog = ...)` records delivery
+  separately from the build outcome; `publish_metadata()` retries it without
+  rebuilding data. Existing remote services and compatible engines are required.
+* `dbt_contract()` exports explicit schema expectations and supported data tests
+  as dbt model properties. Untranslated rules are reported rather than silently
+  discarded; R business checks remain in R.
+* `dbt_init()` can start from accepted R-ingested data and creates staging, core
+  and marts models. Configure the four layers explicitly for a new lake.
+* `dbt_publish()` accepts a lake configuration and an unambiguous model name.
+  Contracts, asset names and definition versions have optional defaults;
+  inferred contracts check structure without inventing business policy.
+* `dbt_sources()` binds stable logical dbt source names to exact accepted RAW
+  releases. Updating a delivery updates its generated source binding without
+  rewriting SQL models or guessing physical table names.
+* `ingest()` accepts ordinary R inputs with optional native or pointblank
+  checks before RAW persistence. Rejected deliveries retain landing evidence
+  and leave previous accepted releases available.
+* `source_release()` accepts a lake configuration and reads the pinned release
+  through an owned read-only connection, retaining input lineage. Connected-lake
+  sources still support lazy reads.
+* The English layered-data-stack guide explains receipt, preparation and
+  publication step by step, with an executable example and consumer patterns
+  for Shiny, Quarto and database/Parquet exports.
+
+This is a development release. The layer layout is explicit; existing lakes
+are not silently migrated. Compatibility commitments begin at the first stable
+release candidate.
+
 # tidyweave 0.8.0
 
 * The package is renamed to tidyweave. The development API now uses clear,

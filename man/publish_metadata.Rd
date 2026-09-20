@@ -9,18 +9,31 @@ publish_metadata(catalog, metadata, ...)
 \arguments{
 \item{catalog}{Function or catalog adapter.}
 
-\item{metadata}{Descriptive run metadata without input rows or connections.}
+\item{metadata}{Descriptive product run metadata without input rows or
+connections, or a \code{tw_dbt_result} for a catalog supporting dbt artifacts.}
 
 \item{...}{Reserved for adapter-specific options.}
 }
 \value{
-The adapter's result, invisibly; no specific value is required.
+The adapter's result; no specific value is required. Functions are
+called invisibly. The OpenMetadata dbt adapter returns a delivery receipt.
 }
 \description{
-Catalog adapters receive metadata after successful execution. A function is
-sufficient for a small integration. Its return value is ignored. Metadata
+Catalog adapters receive product metadata after execution according to their
+declared lifecycle support. A function is sufficient for a small integration.
+Its return value is ignored. Metadata
 delivery is separate from data publication: a catalog failure is recorded
 as a warning and does not pretend that a committed data release was undone.
+}
+\details{
+\code{\link[=dbt_build]{dbt_build()}} and \code{\link[=dbt_test]{dbt_test()}} also accept a catalog function, or an S3
+adapter with \code{capabilities(x)$metadata_inputs = "tw_dbt_result"}. These
+receive the full dbt result, including local artifact paths, the manifest,
+and dbt stdout/stderr. Callback authors control what is transmitted; these
+diagnostics can contain SQL or database messages. Valid artifacts from
+failed dbt tests can still be delivered without changing the dbt outcome.
+\code{\link[=catalog_openmetadata_dbt]{catalog_openmetadata_dbt()}} delegates to the existing OpenMetadata ingestion
+engine and returns a retryable, credential-free delivery receipt.
 }
 \examples{
 received <- NULL

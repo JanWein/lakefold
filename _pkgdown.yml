@@ -15,15 +15,15 @@ reference:
   - title: Choose a destination
     contents: [target_lake, target_database, target_parquet, target_pins]
   - title: Execution evidence and metadata
-    contents: [status, run_history, retry_catalogs, catalog_openlineage, catalog_openmetadata, catalog_export, catalog_app]
+    contents: [status, run_history, retry_catalogs, catalog_openlineage, catalog_openmetadata, catalog_openmetadata_dbt, catalog_export, catalog_app]
   - title: Projects and orchestration
     contents: [init_project, as_targets]
   - title: Lake configuration and history
-    contents: [open_lake, lake_config, registry_duckdb, setup_lake, disconnect_lake, write_data, read_release, tbl, compare, releases, lineage, register, registry, freshness, check_delivery, interrupted, recover, cleanup]
+    contents: [open_lake, lake_config, registry_duckdb, setup_lake, disconnect_lake, ingest, write_data, read_release, tbl, compare, releases, lineage, register, registry, freshness, check_delivery, interrupted, recover, cleanup]
   - title: Metrics and issued reports
     contents: [model, metric, measure, report_release, report_read, commons_yaml]
   - title: Work with dbt
-    contents: [dbt_init, dbt_project, dbt_build, dbt_status, dbt_lineage, dbt_model, dbt_publish]
+    contents: [dbt_init, dbt_project, dbt_sources, dbt_contract, dbt_build, dbt_status, dbt_lineage, dbt_model, dbt_publish]
   - title: Write an extension
     contents: [capabilities, check_component, read_source, execute_transform, run_quality, write_target, publish_metadata]
 articles:
@@ -32,7 +32,7 @@ articles:
     contents: [why-tidyweave, composing-products, getting-started]
   - title: Add capabilities
     navbar: Guides
-    contents: [optional-integrations, everyday-workflows, quality-gates, quality-history, products-metrics, dbt-workflows]
+    contents: [layered-data-stack, optional-integrations, everyday-workflows, quality-gates, quality-history, products-metrics, dbt-workflows]
   - title: Understand and extend
     navbar: Architecture
     contents: [workflow-design, extending-tidyweave, design-review]

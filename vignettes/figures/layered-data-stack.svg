@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="748" viewBox="0 0 760 748" role="img" aria-labelledby="title description">
+  <title id="title">From a received delivery to an approved consumer release</title>
+  <desc id="description">Landing preserves the delivery. Input checks either reject it with evidence or accept an immutable RAW release. dbt prepares staging, core and marts models. Publication snapshots an approved mart for consumers; metadata delivery is separate.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8Z" fill="#526477"/></marker>
+  </defs>
+  <rect width="760" height="748" rx="16" fill="#f7f9fc"/>
+  <g stroke="#526477" stroke-width="2" fill="none" marker-end="url(#arrow)">
+    <path d="M227 78V110"/><path d="M227 168V205"/><path d="M227 263V290"/>
+    <path d="M227 348V375"/><path d="M227 433V460"/><path d="M227 518V555"/>
+    <path d="M227 613V650"/><path d="M422 139H487"/>
+    <path d="M422 402H487" stroke-dasharray="5 5"/>
+  </g>
+  <g font-family="Arial, sans-serif" fill="#183247">
+    <g stroke="#a9bdcf" stroke-width="1.5" fill="#fff">
+      <rect x="32" y="20" width="390" height="58" rx="9"/>
+      <rect x="32" y="110" width="390" height="58" rx="9"/>
+      <rect x="32" y="205" width="390" height="58" rx="9" fill="#e6f3ef"/>
+      <rect x="32" y="290" width="390" height="58" rx="9" fill="#eaf1fb"/>
+      <rect x="32" y="375" width="390" height="58" rx="9" fill="#eaf1fb"/>
+      <rect x="32" y="460" width="390" height="58" rx="9" fill="#eaf1fb"/>
+      <rect x="32" y="555" width="390" height="58" rx="9" fill="#e6f3ef"/>
+      <rect x="32" y="650" width="390" height="58" rx="9"/>
+      <rect x="490" y="110" width="238" height="78" rx="9" fill="#fff1ed"/>
+      <rect x="490" y="360" width="238" height="108" rx="9"/>
+    </g>
+    <g text-anchor="middle" font-size="18" font-weight="bold">
+      <text x="227" y="44">Delivery and landing</text>
+      <text x="227" y="134">Optional input checks</text>
+      <text x="227" y="229">RAW: accepted delivery</text>
+      <text x="227" y="314">STAGING: stg_orders</text>
+      <text x="227" y="399">CORE: core_orders</text>
+      <text x="227" y="484">MARTS: customer_revenue</text>
+      <text x="227" y="579">Approved immutable release</text>
+      <text x="227" y="674">R, Shiny, Quarto and BI exports</text>
+      <text x="609" y="138">Rejected delivery</text>
+      <text x="609" y="390">Optional metadata</text>
+    </g>
+    <g text-anchor="middle" font-size="14">
+      <text x="227" y="65">Keep evidence of what arrived</text>
+      <text x="227" y="155">Native rules, contracts or pointblank</text>
+      <text x="227" y="250">Pin one successful release as the dbt source</text>
+      <text x="227" y="335">Select and standardize source columns</text>
+      <text x="227" y="420">Reuse the business-level order model</text>
+      <text x="227" y="505">Prepare a table for a reporting question</text>
+      <text x="227" y="600">Snapshot and validate before changing approval</text>
+      <text x="227" y="695">Read the pinned release, not mutable dbt tables</text>
+      <text x="609" y="160">Landing and check</text>
+      <text x="609" y="179">evidence remain</text>
+      <text x="609" y="414">Complete dbt invocation</text>
+      <text x="609" y="440">OpenMetadata; separate retry</text>
+    </g>
+    <text x="242" y="191" font-size="13" fill="#37624f">accepted</text>
+    <text x="442" y="129" font-size="13" fill="#7c4f3e">failed</text>
+    <text x="490" y="543" font-size="14">dbt models can change.</text>
+    <text x="490" y="566" font-size="14">Failed tests do not undo</text>
+    <text x="490" y="589" font-size="14">earlier model writes.</text>
+    <text x="32" y="733" font-size="13" fill="#526477">Approval is a release marker and snapshot, not a fifth layer or a BI deployment.</text>
+  </g>
+</svg>

@@ -65,7 +65,7 @@ test_that("real dbt builds and tests the starter project", {
   if (!result$success) {
     return(invisible(NULL))
   }
-  expect_equal(sum(result$results$status == "pass"), 5L)
+  expect_equal(sum(result$results$status == "pass"), 7L)
   expect_equal(dbt_test(project, echo = FALSE)$success, TRUE)
   lake <- connect_lake(config)
   withr::defer(disconnect_lake(lake))
@@ -100,4 +100,127 @@ test_that("real dbt builds and tests the starter project", {
     ),
     150
   )
+})
+
+test_that("RAW starter binds ingestion releases without creating dbt seeds", {
+  skip_if_not_installed("yaml")
+  root <- withr::local_tempdir()
+  config <- lake_config(
+    registry_duckdb(file.path(root, "lake.db")),
+    storage_local(file.path(root, "data")),
+    backend = "duckdb",
+    layers = c("raw", "staging", "core", "marts")
+  )
+  accepted <- structure(
+    list(
+      status = "published",
+      run_id = "run1",
+      asset = "orders",
+      release_id = "release1",
+      output_config = config,
+      outputs = list(
+        type = "lake release",
+        database = "lake",
+        schema = "raw",
+        table = "accepted_orders_1",
+        asset = "orders",
+        release_id = "release1"
+      ),
+      metadata = list(
+        schema = c(
+          order_id = "integer",
+          customer_id = "integer",
+          amount = "character"
+        )
+      )
+    ),
+    class = "tw_run_result"
+  )
+  project <- dbt_init(
+    file.path(root, "dbt"),
+    config,
+    sources = list(orders = accepted)
+  )
+  expect_false(dir.exists(file.path(project$path, "seeds")))
+  staging <- paste(
+    readLines(file.path(project$path, "models/staging/stg_orders.sql")),
+    collapse = "\n"
+  )
+  expect_match(staging, "source('raw', 'orders')", fixed = TRUE)
+  expect_match(staging, 'cast("amount" as double)', fixed = TRUE)
+  expect_match(
+    paste(
+      readLines(file.path(project$path, "models/core/core_orders.sql")),
+      collapse = "\n"
+    ),
+    "amount as order_amount",
+    fixed = TRUE
+  )
+  expect_match(
+    paste(
+      readLines(file.path(project$path, "models/marts/customer_revenue.sql")),
+      collapse = "\n"
+    ),
+    "ref('core_orders')",
+    fixed = TRUE
+  )
+  expect_identical(
+    yaml::read_yaml(file.path(
+      project$path,
+      "models/tidyweave_sources_raw.yml"
+    ))$sources[[1]]$tables[[1]]$identifier,
+    "accepted_orders_1"
+  )
+  expect_false(file.exists(config$catalog$path))
+  bad <- accepted
+  bad$metadata$schema <- c(id = "integer")
+  expect_error(
+    dbt_init(file.path(root, "bad"), config, sources = list(orders = bad)),
+    "order starter requires"
+  )
+  expect_false(dir.exists(file.path(root, "bad")))
+  expect_error(
+    dbt_init(
+      file.path(root, "generic"),
+      config,
+      sources = list(customers = accepted)
+    ),
+    "order starter needs"
+  )
+  templated <- accepted
+  templated$metadata$schema <- c(
+    templated$metadata$schema,
+    stats::setNames("character", "{{ unsafe }}")
+  )
+  expect_error(
+    dbt_init(
+      file.path(root, "templated"),
+      config,
+      sources = list(orders = templated)
+    ),
+    "template delimiters"
+  )
+  expect_false(dir.exists(file.path(root, "templated")))
+})
+
+test_that("named lake layers configure the three transformation schemas", {
+  skip_if_not_installed("yaml")
+  root <- withr::local_tempdir()
+  config <- lake_config(
+    backend = "duckdb",
+    layers = c(
+      raw = "raw",
+      staging = "prep",
+      core = "business",
+      marts = "reporting"
+    )
+  )
+  project <- dbt_init(file.path(root, "dbt"), config)
+  properties <- yaml::read_yaml(file.path(
+    project$path,
+    "dbt_project.yml"
+  ))$models$tidyweave_demo
+  expect_identical(properties$staging$`+schema`, "prep")
+  expect_identical(properties$core$`+schema`, "business")
+  expect_identical(properties$marts$`+schema`, "reporting")
 })

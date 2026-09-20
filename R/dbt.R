@@ -69,9 +69,17 @@ dbt_project <- function(
 #'   exit
 #'   status, failed nodes or missing artifacts. The condition's `result` field
 #'   retains diagnostics. Set `FALSE` to inspect failures as ordinary results.
+#' @param catalog Optional [catalog_openmetadata_dbt()] adapter, a function
+#'   receiving the dbt result, or an S3 catalog whose `capabilities()` declares
+#'   `metadata_inputs = "tw_dbt_result"` and implements `publish_metadata()`.
+#'   After dbt
+#'   finishes, hand this invocation's artifacts to OpenMetadata's ingestion
+#'   engine. A delivery failure warns and leaves the dbt outcome unchanged.
+#'   Retry with `publish_metadata(catalog, result)` without rebuilding models.
 #' @returns A `tw_dbt_result` list with `status` (integer exit code), `success`
 #'   (logical), `command`, `results` (node tibble), parsed `manifest`,
-#'   `artifacts_dir`, `stdout`, `stderr` and `artifact_error`. Warnings reported
+#'   `artifacts_dir`, `stdout`, `stderr`, `artifact_error`, `invocation_id`,
+#'   `artifact_hashes` and optional `catalog_delivery`. Warnings reported
 #'   by dbt are retained and do not by themselves count as failure.
 #' @seealso [dbt_status()], [dbt_lineage()], [dbt_model()]
 #' @examplesIf nzchar(Sys.getenv("TIDYWEAVE_DBT_EXAMPLE_PROJECT"))
@@ -87,7 +95,8 @@ dbt_build <- function(
   vars = list(),
   echo = TRUE,
   timeout = Inf,
-  stop_on_failure = TRUE
+  stop_on_failure = TRUE,
+  catalog = NULL
 ) {
   dbt_run(
     project,
@@ -98,7 +107,8 @@ dbt_build <- function(
     vars,
     echo,
     timeout,
-    stop_on_failure
+    stop_on_failure,
+    catalog
   )
 }
 
@@ -111,7 +121,8 @@ dbt_test <- function(
   vars = list(),
   echo = TRUE,
   timeout = Inf,
-  stop_on_failure = TRUE
+  stop_on_failure = TRUE,
+  catalog = NULL
 ) {
   dbt_run(
     project,
@@ -122,7 +133,8 @@ dbt_test <- function(
     vars,
     echo,
     timeout,
-    stop_on_failure
+    stop_on_failure,
+    catalog
   )
 }
 
@@ -181,7 +193,8 @@ dbt_run <- function(
   vars,
   echo,
   timeout,
-  stop_on_failure
+  stop_on_failure,
+  catalog = NULL
 ) {
   if (!inherits(project, "tw_dbt_project")) {
     abort("Use dbt_project() first.", "tw_dbt_invalid")
@@ -189,6 +202,7 @@ dbt_run <- function(
   flag(full_refresh, "full_refresh")
   flag(echo, "echo")
   flag(stop_on_failure, "stop_on_failure")
+  dbt_check_catalog(catalog)
   if (
     !is.numeric(timeout) ||
       length(timeout) != 1L ||
@@ -282,7 +296,10 @@ dbt_run <- function(
       artifacts_dir = artifacts,
       stdout = process$stdout,
       stderr = process$stderr,
-      artifact_error = NULL
+      artifact_error = NULL,
+      invocation_id = NULL,
+      artifact_hashes = NULL,
+      catalog_delivery = NULL
     ),
     class = "tw_dbt_result"
   )
@@ -292,8 +309,13 @@ dbt_run <- function(
   } else {
     result$results <- parsed$results
     result$manifest <- parsed$manifest
+    result$invocation_id <- parsed$manifest$metadata$invocation_id
+    result$artifact_hashes <- dbt_artifact_hashes(artifacts)
     result$success <- identical(result$status, 0L) &&
       all(result$results$status %in% c("success", "pass", "warn"))
+  }
+  if (!is.null(catalog)) {
+    result$catalog_delivery <- dbt_deliver_metadata(catalog, result)
   }
   if (stop_on_failure && !result$success) {
     abort(
@@ -303,6 +325,70 @@ dbt_run <- function(
     )
   }
   result
+}
+
+dbt_check_catalog <- function(catalog) {
+  if (is.null(catalog) || is.function(catalog)) {
+    return(invisible(catalog))
+  }
+  if (
+    !component_method("publish_metadata", catalog) ||
+      !"tw_dbt_result" %in% capabilities(catalog)$metadata_inputs
+  ) {
+    abort(
+      "catalog must be a function or a publish_metadata() adapter declaring metadata_inputs = 'tw_dbt_result' in capabilities().",
+      "tw_dbt_invalid"
+    )
+  }
+  invisible(catalog)
+}
+
+dbt_deliver_metadata <- function(catalog, result) {
+  delivery <- list(
+    status = "pending",
+    destination = if (is.function(catalog)) {
+      "callback"
+    } else {
+      class(catalog)[[1L]]
+    },
+    invocation_id = result$invocation_id,
+    attempt = 1L,
+    started_at = now(),
+    finished_at = NULL,
+    exit_status = NULL,
+    error_class = NULL,
+    message = NULL,
+    recorded = FALSE
+  )
+  valid <- tryCatch(dbt_catalog_artifacts(result), error = identity)
+  if (inherits(valid, "error")) {
+    delivery$status <- "blocked"
+    delivery$error_class <- "tw_dbt_artifact_invalid"
+    delivery$message <- "Metadata delivery blocked: dbt artifacts are missing, malformed or changed. Use the original unchanged artifacts from this invocation."
+  } else {
+    outcome <- tryCatch(publish_metadata(catalog, result), error = identity)
+    if (inherits(outcome, "error")) {
+      delivery$error_class <- "tw_dbt_catalog_delivery_error"
+      delivery$message <- "Metadata delivery failed. Check the catalog configuration and connectivity, then retry publish_metadata(catalog, result)."
+    } else if (
+      !is.function(catalog) &&
+        is.list(outcome) &&
+        is.character(outcome$status) &&
+        length(outcome$status) == 1L &&
+        outcome$status %in% c("delivered", "pending", "blocked")
+    ) {
+      # Structured adapter receipts are part of its public delivery contract.
+      # Do not retain arbitrary adapter return values or callback environments.
+      return(outcome[intersect(names(delivery), names(outcome))])
+    } else {
+      delivery$status <- "delivered"
+    }
+  }
+  delivery$finished_at <- now()
+  if (delivery$status != "delivered") {
+    dbt_catalog_warning(delivery)
+  }
+  delivery
 }
 
 dbt_empty_results <- function() {
@@ -345,7 +431,11 @@ dbt_read_artifacts <- function(path) {
   run_id <- runs$metadata$invocation_id
   manifest_id <- manifest$metadata$invocation_id
   if (
-    is.null(run_id) || is.null(manifest_id) || !identical(run_id, manifest_id)
+    !is.character(run_id) ||
+      length(run_id) != 1L ||
+      is.na(run_id) ||
+      !nzchar(run_id) ||
+      !identical(run_id, manifest_id)
   ) {
     abort(
       "dbt artifacts must belong to the same invocation.",
