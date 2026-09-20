@@ -172,14 +172,15 @@ released <- product("orders") |>
   set_target(target_lake(config)) |>
   run()
 
-lake <- connect_lake(config)
 prepared <- product("orders.prepared", released) |>
   dplyr::filter(amount >= 50) |>
   run()
 input_for_dbt <- collect(prepared)
 prepared$inputs[, c("asset", "release_id")]
-close_lake(lake)
 ```
+
+The result supplies its exact release reference. Execution opens and closes its
+own read connection, so no manual connection is needed for this step.
 
 Pass `input_for_dbt` to a product with an appropriate `transform_dbt()` step.
 Collect and close borrowed local catalog connections before dbt starts. For a managed dbt project, pass the successful result through
