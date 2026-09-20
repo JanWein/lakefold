@@ -5,10 +5,10 @@ enterprise-platform equivalence. The scope is an R-first framework that combines
 existing tools. A working adapter is distinct from an operated production service.
 Consult [the validation record](VALIDATION.md) for verified environments.
 
-The 0.9.0 development increment makes the batch path from receipt to consumer
+The 0.10.0 development grammar makes the batch path from receipt to consumer
 explicit. `ingest()` accepts a delivery after optional input checks;
-`dbt_sources()` binds that exact RAW release to a logical SQL source;
-`dbt_build()` prepares staging, core and marts; `dbt_publish()` approves an
+managed dbt sources bind exact accepted releases to logical SQL names;
+`run(dbt_project(...))` prepares staging, core and marts; `publish()` approves an
 immutable consumer snapshot. The [layered tutorial](https://janwein.github.io/tidyweave/articles/layered-data-stack.html)
 explains this path with ordinary R data before introducing infrastructure.
 
@@ -16,20 +16,21 @@ explains this path with ordinary R data before introducing infrastructure.
 
 | Requirement | tidyweave implementation | Boundary or remaining responsibility |
 |---|---|---|
-| Small first workflow | `product()`, `add_source()`, `run()`, `collect()` | An R session and core dependencies suffice. |
+| Small first workflow | `product(name, data)`, ordinary dplyr verbs, `run()`, `collect()` | An R session and core dependencies suffice. |
 | Multiple sources | Named sources and nested product dependencies | Cross-system joins need an explicit placement/materialization choice. |
 | Files and APIs | CSV/TSV/RDS, optional Excel, Arrow/Parquet, httr2 requests and bounded pagination | Authentication, rate policy and API-specific parsing remain configured in the existing client. |
 | Receipt and RAW acceptance | `ingest()` archives a delivery, runs optional native/pointblank checks before RAW and returns an exact immutable release reference | Inputs are materialized in R; this is batch ingestion, not streaming or CDC. Rejected landing evidence is retained. |
 | Database connectivity | DBI sources and targets; caller connections or factories | Install the relevant DBI/ODBC driver. HANA/PostgreSQL support is through DBI, not a claim that every driver was tested. |
 | Logical access and pushdown | Lazy DBI/dbplyr tables and Arrow queries | Arbitrary R functions and some targets materialize data. No federated query optimizer is implemented. |
-| Transformations | Ordinary R functions, SQL escape hatch and staged dbt models | dbt owns its graph, tests and incremental materializations. |
-| Layered SQL preparation | Explicit raw/staging/core/marts starter; `dbt_sources()` binds accepted RAW releases without rewriting model SQL | The canned starter is an orders example. Design business models in normal dbt files; configure remote profiles separately. |
+| Transformations | Deferred real dplyr calls, ordinary functions, SQL and dbt models | dbt owns its graph, tests and incremental materializations. |
+| Layered SQL preparation | Explicit raw/staging/core/marts starter; managed `dbt_project(..., sources)` binds accepted releases from any layer | The canned starter is an orders example. Design business models in normal dbt files; configure remote profiles separately. |
 | Contracts | Types, required fields, keys, business rules, optional ownership/version metadata and schema differences | Semantic compatibility still needs human judgment. |
 | R/dbt schema bridge | `dbt_contract()` exports SQL column types, supported key/null tests and schema enforcement properties | R predicates, pointblank, composite keys and R lifecycle policies are not automatically translated. Unsupported rules are explicit. |
-| Quality | Native predicates, reference checks and optional pointblank | Quality thresholds express policy; sampling is not proof of every row. |
+| Quality | Interchangeable native/Pointblank predicates, reference checks and optional custom agents | Quality thresholds express policy; sampling is not proof of every row. |
+| Checked enrichment | `add_lookup()` with native or dm validation, explicit equality keys and no silent orphan/drop behavior | General joins, cross-backend movement and temporal matching need explicit transformations. |
 | Profiling | Aggregate column summaries | Profiling is not automatic anomaly detection or PII classification. |
 | Durable publication | DuckDB/DuckLake releases; optional DBI, Parquet and pins targets | Only lake targets provide the package's immutable-release lifecycle. Other guarantees are adapter-specific. |
-| Consumer approval | `dbt_publish(config, result, model)` snapshots a successful selected model; `collect()` returns the approved data | dbt data tests run after materialization. Earlier model writes are not rolled back; coordinate writers between build and snapshot. |
+| Consumer approval | `publish(result, model, to = config)` snapshots a successful selected model; `collect()` returns the approved data | dbt data tests run after materialization. Earlier model writes are not rolled back; coordinate writers between build and snapshot. |
 | Incremental work | Partition replacement for lakes; dbt incremental models; targets caching | Generic change-data capture and stream checkpointing are outside the package. |
 | Dependency execution | Direct product dependencies or optional targets | Use an external runner for schedules, resource allocation and process-level recovery. |
 | Operational evidence | Run history, quality incidents and structured metadata | Evidence does not itself provide alert routing, uptime monitoring or an incident-management service. |

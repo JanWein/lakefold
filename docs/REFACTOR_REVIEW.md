@@ -1,68 +1,81 @@
-# Architecture review: lakefold 0.7 to tidyweave 0.8
+# Architecture review: tidyweave 0.9 to 0.10
 
-Baseline: commit `047f4cc`, reviewed on 20 September 2026. This is an experimental
-development release. Compatibility commitments begin with the first stable
-release candidate. The rename deliberately removes the old `dl_*` public API.
+The 0.10.0 review focused on accessibility: keep the existing publication
+integrity while removing repeated integration work from ordinary R workflows.
+The implementation is still in development. See the
+[design decisions](UNIFIED_GRAMMAR_PLAN.md),
+[executable walkthrough](https://janwein.github.io/tidyweave/articles/relational-insurance.html)
+and [validation record](VALIDATION.md) for scope and evidence.
 
 ## What was already strong
 
-The existing package had valuable guarantees: original input archives, immutable
-lake releases, pinned report inputs, full-candidate quality checks and a release
-marker committed together with lineage and successful run status. Its pointblank
-integration preserved native thresholds and segmented evidence. DBI, dbplyr, dbt
-and ordinary R functions offered useful escape hatches. These capabilities are
-retained rather than replaced by a new storage engine.
+The package already separated product definitions, source and target adapters,
+execution results and contracts. Optional integrations stayed optional. Lake
+publication retained input archives, immutable releases, full-candidate gates,
+lineage and pinned report evidence. Ordinary R functions, DBI, dbplyr, Pointblank
+and dbt supplied useful extension paths. These boundaries were worth retaining.
 
-## What needed to change
+The main weakness was the amount of code needed to connect them. The insurance
+tutorial needed fifteen helpers, including repeated source binding, profile,
+relationship and release bookkeeping. Readers had to understand infrastructure
+before they could follow the business calculation.
 
-| Category | Previous weakness | Decision and practical effect |
+## Important changes
+
+| Previous issue | Result in 0.10.0 | Why it matters |
 |---|---|---|
-| UX | A product constructor returned two different classes depending on its arguments. | One product class and named sources cover both direct and derived products. |
-| API consistency | Several public execution and build paths competed for attention. | `run()` is the execution verb; `publish()` is the immediate storage shortcut. Low-level lake machinery is internal. |
-| UX | Adding a source silently replaced the previous one. | Sources accumulate by name; replacing an existing name is explicit. |
-| Coupling | The simple product path materialized database sources immediately. | DBI sources and compatible transformations retain lazy tables; inspection reveals materialization boundaries. |
-| UX | Automatic contracts rejected factors; function predicates behaved differently from formulas. | Factor labels have character semantics without coercing the input object. Functions can return row-wise logical vectors. |
-| UX | Explicit contracts silently enabled a 48-hour freshness policy. | Freshness is opt-in. Business deadlines are never inferred. |
-| Architecture | Metadata delivery lived inside execution and was not recoverable independently. | Durable run evidence and a delivery outbox support retries without re-running data transformations. |
-| Extension | Adapters lacked comparable capability declarations. | S3 interfaces and explicit capabilities expose supported operations and limits. |
-| Integration | Useful ecosystem components required ad hoc callbacks. | Optional adapters cover DBI targets, Arrow/Parquet, pins, httr2, targets and metadata services. |
-| Documentation | Parallel Markdown and vignette guides drifted, and advanced machinery leaked into the introduction. | Executable English vignettes are canonical. The README starts with an ordinary table and a few verbs. |
+| Simple transformations needed wrapper functions | Real dplyr methods append deferred operations to the existing product | Familiar R expressions remain readable and execute against the actual table |
+| Product construction required a separate source step | `product(name, data)` accepts ordinary inputs directly | A first useful definition is one call |
+| Quality engine choice changed simple check syntax | One logical predicate can use native or Pointblank execution | Optional infrastructure does not dominate the common case |
+| Relational enrichment required a hand-built dm model | `add_lookup()` checks equality keys, parent uniqueness and unmatched children, with native or dm validation | The primary row grain stays explicit without repeating constraint plumbing |
+| Reusing accepted data required manual release references | Successful lake results normalize into pinned release sources | The framework carries identity it already knows; other results retain their submitted data or query |
+| Ingestion's argument direction differed from other verbs | `data |> ingest()` and optional `to = "path"` | Simple receipt workflows need no configuration object |
+| Local storage repeated several paths | `lake_config(path = ...)` adds explicit backend/layer choices | Advanced configuration remains possible without making it mandatory |
+| dbt required repeated profiles and source YAML | Managed project specifications derive those bindings at execution | SQL models can focus on logical inputs while exact releases remain recorded |
+| R and dbt outputs used different publication idioms | `run()` and `publish()` dispatch to the appropriate existing engine | The same intention uses the same verbs without rebuilding dbt inside R |
+| Measurements required connection and release bookkeeping | `measure(approved_lake_result, metric)` retains the exact release | Consumer calculations can be pinned without repeating identifiers |
+| Competing generic names depended on attachment order | `collect()`, `explain()` and `tbl()` reuse dplyr's generics | Familiar calls have one dispatch mechanism |
+| The tutorial hid the workflow in integration helpers | Four business-definition helpers and one runner, extracted from visible vignette steps | Readers can see the actual data decisions in the public grammar |
 
-## Resulting model
+## Resulting architecture
 
-The user describes a product: its sources, transformations, optional expectations
-and destination. Ordinary tables, paths and functions remain valid inputs.
-Internally, normalization establishes component semantics, validation checks the
-definition, execution resolves dependencies, and adapters perform the work.
+One product describes a primary table, ordered preparation, auxiliary lookup
+dependencies, optional expectations and a destination. Normalization accepts
+ordinary R values and successful results. Preflight validates the dependency
+graph and adapter configuration. Execution reads and prepares data, checks it,
+then delegates publication and evidence to their existing components.
 
-There is one execution lifecycle but different storage guarantees. An R result,
-a replaceable database table, a pin and an immutable lake release are not
-interchangeable guarantees. `capabilities()` and the integration guide make those
-differences explicit. Selecting an adapter does not confer lake transactions on
-an unrelated backend.
+A dplyr step captures an expression and its environment; it does not implement
+another data-manipulation language. A lookup exposes its reference dependency
+without turning the primary input into a named list. Source, transformation,
+quality and target adapters remain replaceable. No second product class or
+mutable platform object was introduced.
 
-## Why this architecture
+A managed dbt project is still a dbt project. Its ordinary SQL, model contracts
+and data tests remain visible. A concise `dbt_contract()` export shares structural
+metadata with R; unsupported business rules remain in the R gate or explicit SQL
+tests. This bounded bridge is useful. Another managed-contract abstraction would
+add a concept without removing the need to understand those limits.
 
-The external API follows tidyverse principles: readable verbs, ordinary R
-objects, pipes and progressive configuration. Structural ideas from tidymodels
-inform the inside: inspectable specifications, reusable composition, lifecycle
-validation and replaceable implementations. Users do not need to understand
-these internal layers to prepare and check a table.
+## Remaining boundaries and tradeoffs
 
-The package coordinates mature tools. DBI provides connectivity, dbplyr pushes
-queries into databases, Arrow reads columnar data, dbt manages SQL models,
-pointblank evaluates specialist checks and targets manages dependency execution
-and caching. There is no separate plugin registry or mandatory class for an
-ordinary R function.
+* Receipt checks and lake publication materialize data. Large-data execution
+  requires compatible lazy transformations and an appropriate backend strategy.
+* Lookups cover checked many-to-one equality relationships. Interval joins,
+  allocation, CDC, streaming and cross-system movement need explicit designs.
+* Captured environments and external state remain ordinary R behavior. Inspection
+  is descriptive; caching needs deliberate code identity and invalidation policy.
+* Lake results have immutable release guarantees. Other results reuse submitted
+  tables or lazy queries; they do not freeze a mutable destination or live query.
+* Managed dbt profiles cover local DuckDB and DuckLake. Remote adapters retain
+  their own profiles, credentials and deployment checks. Model writes are not a
+  transaction across the whole dbt graph.
+* Report issuance remains an explicit registry write. Keys, time semantics,
+  ownership, metric approval and publication policy are business choices.
+* Scheduling, authorization, remote catalog operation and distributed recovery
+  remain responsibilities of surrounding systems. Adapter availability is not
+  proof of a production deployment.
 
-## Remaining boundaries
-
-- A local lake and evidence directory require coordinated writers.
-- Native R functions can require memory even when their input was lazy.
-- Function closures and external services need explicit cache invalidation.
-- dbt staging/build side effects are outside the final product publication gate.
-- Metadata delivery is at least once and separate from data publication.
-- Remote deployments need their own permissions, operational controls and tests.
-
-See [modern-stack coverage](MODERN_DATA_STACK.md) for requirement-level boundaries
-and [validation evidence](VALIDATION.md) for the checks actually performed.
+The improvement is a smaller set of actions for users, backed by the existing
+modular execution and publication guarantees. The earlier 0.7 to 0.8 architecture
+review remains available in git history; this page describes the current review.

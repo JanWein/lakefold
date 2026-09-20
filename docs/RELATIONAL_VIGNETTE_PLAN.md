@@ -1,4 +1,9 @@
-# Relational insurance reporting vignette
+# Relational insurance reporting vignette (0.9.0 baseline)
+
+This records the earlier implementation and its validation. The 0.10.0
+[unified grammar plan](UNIFIED_GRAMMAR_PLAN.md) replaces the integration helpers
+with direct product, lookup, dplyr and managed dbt calls. New verification belongs
+in [VALIDATION.md](VALIDATION.md).
 
 Build an English, executable tutorial for multiple synthetic deliveries,
 Pointblank acceptance before RAW, real dm enrichment, independently contracted
