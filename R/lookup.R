@@ -21,7 +21,8 @@
 #' explicitly before using this step. This helper does not perform that transfer.
 #' @param x A product specification.
 #' @param source Reference data, a path, source adapter, product, or successful
-#'   result. Successful published results identify exact immutable releases.
+#'   result. Lake results pin exact immutable releases; other results reuse
+#'   their retained output.
 #' @param by Equality keys, supplied as a character vector, a named vector
 #'   mapping input to reference columns, or [dplyr::join_by()]. Inequality,
 #'   rolling and cross joins belong in ordinary dplyr transformations.
