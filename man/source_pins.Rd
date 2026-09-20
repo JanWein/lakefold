@@ -19,8 +19,12 @@ A source specification for \code{\link[=add_source]{add_source()}}.
 \description{
 Pass a configured pins board; authentication belongs to pins. A version fixes
 the requested revision when the board supports versioning. Without a version,
-the current pin is read at execution time. Board credentials are excluded from
-inspection. Pin contents must be a data frame or tibble.
+the board's current pin is read at execution time. Some boards resolve versions
+with identical timestamps by their content hash. For these ties, tidyweave
+uses its publication metadata to recover write order. A tie containing external
+writes without this metadata requires an explicit \code{version}; no order is
+guessed. Board credentials are excluded from inspection. Pin contents must be
+a data frame or tibble.
 }
 \examples{
 \dontshow{if (requireNamespace("pins", quietly = TRUE)) withAutoprint(\{ # examplesIf}

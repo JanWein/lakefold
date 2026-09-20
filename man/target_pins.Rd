@@ -20,9 +20,18 @@ A target specification for \code{\link[=set_target]{set_target()}}.
 }
 \description{
 Storage, authentication and version retention belong to pins and the board.
-The output descriptor records the version reported by the board after writing
-when available. Coordinate writers externally; this adapter does not promise
-atomic or immutable publication. Extra arguments go to \code{\link[pins:pin_write]{pins::pin_write()}}.
+The output descriptor identifies this write using supported pins user metadata,
+rather than assuming that a hash-sorted version is newest. Identical content
+may reuse the current version. Coordinate writers externally; this adapter
+does not promise atomic or immutable publication. A return to older tied
+content can trigger pins' unchanged-content shortcut and is rejected if it
+cannot be confirmed. After the board timestamp advances, use
+\code{target_pins(board, name, force_identical_write = TRUE)} to publish that content,
+or choose a new pin name. Ordinary retries can keep hitting the same shortcut.
+Forcing an identical version identifier within the same timestamp can fail
+after pins updates its metadata; do not use it to bypass timestamp collisions.
+The publication ID is verified after writing. Storage remains pins' responsibility.
+Extra arguments go to \code{\link[pins:pin_write]{pins::pin_write()}}.
 }
 \examples{
 \dontshow{if (requireNamespace("pins", quietly = TRUE)) withAutoprint(\{ # examplesIf}
