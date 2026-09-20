@@ -1,3 +1,23 @@
+# tidyweave 0.12.0.9000
+
+* `compare(first, second)` compares exact publication results and manages its
+  own read-only connection.
+* `measure()` accepts successful in-memory trials using the same metric
+  definitions. Trial measurements retain quality evidence but cannot be issued
+  as reports, even if the metric is approved.
+* `quality_rows()` explicitly retrieves bounded row diagnostics for predicates,
+  missing required values, duplicate keys and unmatched lookups. Row data stays
+  outside persisted metadata and portable quality reports.
+* `report_release()` preserves full double precision and detects small numeric
+  changes after measurement. Nested columns are rejected before writing, with
+  instructions to return named atomic columns. Old reports remain readable;
+  legacy measurements must be recalculated before issuing new reports.
+* `trial()` disables configured targets, catalogs and durable run evidence
+  throughout a product graph without changing its stored definition.
+* `workflow()` declares dependent receipt, preparation, dbt and measurement
+  steps with ordinary named functions. Corrections rerun affected branches;
+  failures block consumers while retaining successful steps for explicit retry.
+
 # tidyweave 0.12.0
 
 * Products built from published results reuse a retained open lake connection

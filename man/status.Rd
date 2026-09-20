@@ -8,7 +8,7 @@ status(x, asset = NULL)
 }
 \arguments{
 \item{x}{A connected lake, \code{\link[=run]{run()}} result, \code{\link[=dbt_build]{dbt_build()}} result or a
-measurement or measurement set from \code{\link[=measure]{measure()}}.}
+measurement or measurement set from \code{\link[=measure]{measure()}}, or a \code{\link[=workflow]{workflow()}} result.}
 
 \item{asset}{Optional asset ID when querying a lake.}
 }
@@ -18,7 +18,8 @@ A tibble with \code{engine}, \code{id}, \code{status}, \code{success}, \code{rel
 \code{succeeded}, \code{blocked}, \code{failed} or \code{skipped} (unknown states are \code{NA}).
 Missing deliveries are \code{blocked} because no acceptable input is available.
 A dbt process failure remains visible even when
-individual nodes passed. No raw stdout or stderr is included.
+individual nodes passed. No raw stdout or stderr is included. Workflow
+results return a compact table with \code{step}, \code{status} and \code{success}.
 }
 \description{
 Inspect execution status across R and dbt workflows

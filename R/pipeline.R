@@ -643,7 +643,8 @@ run.tw_pipeline <- function(
             abort(
               "Input quality gate blocked writing the raw table.",
               "tw_input_blocked",
-              quality = input_quality
+              quality = input_quality,
+              diagnostic = list(data = extracted, contract = input_contract)
             )
           }
         }
@@ -728,7 +729,15 @@ run.tw_pipeline <- function(
             "Publication blocked; inspect quality_results for this run.",
             notify
           )
-          run_result(run, "blocked", quality = quality)
+          blocked <- run_result(run, "blocked", quality = quality)
+          blocked$diagnostic <- list(
+            lake = lake,
+            config = lake$config,
+            schema = pub$layer,
+            table = candidate$name,
+            contract = candidate_contract
+          )
+          blocked
         } else {
           publish_candidate(
             lake,
@@ -772,7 +781,9 @@ run.tw_pipeline <- function(
         "Input blocked before raw ingestion; inspect quality_results.",
         notify
       )
-      run_result(run, "blocked", quality = e$quality)
+      blocked <- run_result(run, "blocked", quality = e$quality)
+      blocked$diagnostic <- e$diagnostic
+      blocked
     },
     error = function(e) {
       status <- if (inherits(e, "tw_missing_delivery")) "missing" else "error"

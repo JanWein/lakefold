@@ -24,7 +24,9 @@ measure(
 )
 }
 \arguments{
-\item{x}{Connected lake or successful published \code{tw_run_result}.}
+\item{x}{Connected lake or successful \code{tw_run_result}. In-memory \code{\link[=trial]{trial()}}
+results support exploratory measurements with the same definitions. They
+cannot be recorded or saved in issued reports, even for approved metrics.}
 
 \item{...}{Reserved for future extensions.}
 

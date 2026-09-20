@@ -7,9 +7,9 @@ template:
   bootstrap: 5
 reference:
   - title: Start here - define, try and publish
-    contents: [tidyweave-package, product, product-dplyr, run, publish, collect]
+    contents: [tidyweave-package, product, product-dplyr, run, trial, publish, collect]
   - title: Everyday - checks and explanations
-    contents: [contract, add_lookup, status, quality, quality_report, lineage]
+    contents: [contract, add_lookup, status, quality, quality_report, quality_rows, lineage]
   - title: Everyday - calculations and reports
     contents: [metric_set, metric, measure, report_release, report_read]
   - title: Configure and reuse
@@ -25,7 +25,7 @@ reference:
   - title: Integration - execution evidence and metadata
     contents: [run_history, retry_catalogs, catalog_openlineage, catalog_openmetadata, catalog_openmetadata_dbt, catalog_export, catalog_app]
   - title: Integration - projects and orchestration
-    contents: [init_project, as_targets]
+    contents: [workflow, init_project, as_targets]
   - title: Integration - lake configuration and history
     contents: [open_lake, lake_config, registry_duckdb, setup_lake, disconnect_lake, write_data, read_release, tbl, compare, releases, register, registry, freshness, check_delivery, interrupted, recover, cleanup]
   - title: Integration - dbt

@@ -23,11 +23,11 @@ orders <- product("orders", data.frame(id = 1:3, amount = c(25, 75, 50))) |>
   dplyr::mutate(amount = round(amount, 2)) |>
   add_quality(~ amount >= 0)
 
-result <- orders |> run()
+result <- orders |> trial()
 collect(result)
 ```
 
-A **product** holds the instructions. `run()` executes them; `collect()` returns
+A **product** holds the instructions. `trial()` tries them without configured writers; `collect()` returns
 an ordinary tibble. The example needs no database, owner field or version number.
 Use familiar dplyr expressions to explore the collected table. Add an explicit
 contract when you know the required types, business key and meaning of a row.
@@ -36,9 +36,10 @@ contract when you know the required types, business key and meaning of a row.
 
 ```r
 bad_delivery <- data.frame(id = 1:3, amount = c(-25, 75, 50))
-failed <- orders |> run(data = bad_delivery, stop_on_failure = FALSE)
+failed <- orders |> trial(data = bad_delivery, stop_on_failure = FALSE)
 status(failed)
 quality_report(failed)
+quality_rows(failed, ~ amount >= 0)
 ```
 
 Checks reject unacceptable data; they do not silently drop bad rows. The
@@ -59,7 +60,8 @@ collect(first)  # Original values remain available
 collect(second)
 ```
 
-`run()` without a target is an in-memory trial. `publish()` writes checked data
+`trial()` disables configured targets and catalogs throughout the product graph.
+`run()` executes the configured workflow, including any configured targets. `publish()` writes checked data
 to the chosen destination, not to the public internet. The local lake keeps
 immutable releases and checks the complete candidate before making it current.
 These deliveries replace the complete table. Complete-month replacement is an
@@ -70,6 +72,9 @@ value: `execution_config(to = "reporting-lake")`. Pass it as the product's
 `execution` argument. Step-specific choices remain explicit; defaults are not
 global settings. In workflows with several inputs, supply a named `sources` list
 at execution. Stable source names and nested product IDs identify what changed.
+
+Compare two publications directly with `compare(first, second)`. No manual lake
+connection or release-ID lookup is needed.
 
 ## Calculate and keep a report
 
@@ -89,6 +94,14 @@ Metric sets share their product, dimensions and time settings. For exploration,
 omit approval and code version; saving an issued report requires explicitly
 approved, versioned definitions. Approval records your decision, not an external
 authorization process. Report readback retrieves saved values without recalculating.
+
+Use the same metrics on `trial(orders)` while exploring. Trial measurements cannot
+be issued as reports; publish and recalculate when ready.
+
+For a multi-step monthly process, define a `workflow()` of named functions once.
+Function arguments declare dependencies, including receipt, product and dbt steps.
+`run(flow, inputs = list(payments = corrected), previous = first_run)` reruns
+affected branches and exposes step status. Keep report issuance explicit.
 
 ## Follow one guide, then add what you need
 

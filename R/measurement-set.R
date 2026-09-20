@@ -34,6 +34,7 @@ measure_set <- function(
   }
   if (
     inherits(x, "tw_run_result") &&
+      x$status %in% c("published", "cached") &&
       !(inherits(x$output_lake, "tw_lake") && DBI::dbIsValid(x$output_lake$con))
   ) {
     source <- normalize_result_source(x)
@@ -83,7 +84,7 @@ measure_set <- function(
 }
 
 measurement_set_hash <- function(x) {
-  fingerprint(list(
+  report_fingerprint(list(
     names = names(x),
     metadata = attr(x, "tw_set_metadata"),
     results = lapply(x, function(value) {

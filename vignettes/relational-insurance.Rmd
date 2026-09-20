@@ -616,18 +616,34 @@ A late correction adds a January receipt of EUR 250 for policy P5. This is a new
 full snapshot with eleven transactions. Brokers and policy snapshots are unchanged.
 
 ```{r accept-correction, eval=isTRUE(knitr::opts_knit$get("tangle")) || run_stack}
+monthly <- workflow(
+  received = function(payments) {
+    deliveries$payments |>
+      replace_sources(insurance.payments = payments) |> ingest()
+  },
+  enriched = function(received) {
+    payment_product |> publish(sources = list(payments = received), layer = "staging")
+  },
+  built = function(enriched) {
+    project |> run(sources = list(payments = enriched), echo = FALSE)
+  },
+  released = function(built) {
+    built |> publish("monthly_performance", contract = contracts$mart,
+      asset = "insurance.monthly_performance", layer = "marts")
+  },
+  measures = function(released) {
+    measure(released, metrics = metrics, at = c(january, february), period = "each")
+  },
+  inputs = list(payments = inputs$payments), code_version = "insurance-workflow-v1")
 corrected_inputs <- insurance_corrected_inputs(inputs)
+correction <- run(monthly, inputs = list(payments = corrected_inputs$payments))
+status(correction)
 corrected_raw <- raw
-corrected_delivery <- deliveries$payments |>
-  replace_sources(insurance.payments = corrected_inputs$payments)
-corrected_raw$payments <- corrected_delivery |> ingest()
+corrected_raw$payments <- correction$results$received
 corrected_products <- published
-corrected_products$payments <- payment_product |>
-  publish(sources = list(payments = corrected_raw$payments), layer = "staging")
-rebuilt <- project |>
-  run(sources = list(payments = corrected_products$payments), echo = FALSE)
-corrected_release <- rebuilt |> publish("monthly_performance", contract = contracts$mart,
-  asset = "insurance.monthly_performance", layer = "marts")
+corrected_products$payments <- correction$results$enriched
+rebuilt <- correction$results$built
+corrected_release <- correction$results$released
 ```
 
 The delivery definition keeps its RAW checks. The named `payments` source
@@ -635,13 +651,16 @@ reuses the enriched product's lookups and contract, while the dbt project rebind
 only its logical `payments` input. Brokers and policy releases remain pinned.
 Unknown or ambiguous names fail early; the original definitions remain reusable.
 
-The RAW acceptance, enriched publication, SQL build and approved snapshot are
-visible business steps. Updating an R product graph does not automatically
-execute a separate dbt project, and these writes are not one transaction.
+The workflow records the RAW, enrichment, dbt, publication and measurement
+dependencies once. A correction replaces the named delivery and runs its consumers.
+Unchanged successful branches can be reused. Failed steps block their consumers;
+`stop_on_failure = FALSE` returns all step status for diagnosis and an explicit
+retry with `previous`. These writes are not one transaction. Broker and policy
+releases stay pinned in this payment-correction workflow. Change `code_version`
+when changing the captured definitions. Report issuance stays explicit.
 
 ```{r measure-correction, eval=isTRUE(knitr::opts_knit$get("tangle")) || run_stack}
-corrected_measures <- measure(corrected_release, metrics = metrics,
-  at = c(january, february), period = "each")
+corrected_measures <- correction$results$measures
 corrected_totals <- measure(corrected_release,
   metrics = metrics[c("cash_collected", "cash_to_due")],
   at = c(january, february), period = "aggregate")
