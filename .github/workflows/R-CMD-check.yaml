@@ -17,8 +17,8 @@ jobs:
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       R_KEEP_PKG_SOURCE: "yes"
-      DATALOOM_TEST_BACKEND: ${{ matrix.backend }}
-      DATALOOM_TEST_DUCKLAKE: "true"
+      TIDYWEAVE_TEST_BACKEND: ${{ matrix.backend }}
+      TIDYWEAVE_TEST_DUCKLAKE: "true"
       _R_CHECK_FORCE_SUGGESTS_: "true"
       DBT_SEND_ANONYMOUS_USAGE_STATS: "false"
       DBT_ENGINE_SEND_ANONYMOUS_USAGE_STATS: "false"
@@ -40,10 +40,10 @@ jobs:
           python-version: '3.12'
       - name: Install pinned dbt integration engine
         run: |
-          python -m venv "$RUNNER_TEMP/lakefold-dbt"
-          "$RUNNER_TEMP/lakefold-dbt/bin/python" -m pip install dbt-core==1.12.5 dbt-duckdb==1.10.1 duckdb==1.5.5
-          "$RUNNER_TEMP/lakefold-dbt/bin/python" -c "import dbt.cli.main, duckdb"
-          echo "LAKEFOLD_DBT_EXECUTABLE=$RUNNER_TEMP/lakefold-dbt/bin/dbt" >> "$GITHUB_ENV"
+          python -m venv "$RUNNER_TEMP/tidyweave-dbt"
+          "$RUNNER_TEMP/tidyweave-dbt/bin/python" -m pip install dbt-core==1.12.5 dbt-duckdb==1.10.1 duckdb==1.5.5
+          "$RUNNER_TEMP/tidyweave-dbt/bin/python" -c "import dbt.cli.main, duckdb"
+          echo "TIDYWEAVE_DBT_EXECUTABLE=$RUNNER_TEMP/tidyweave-dbt/bin/dbt" >> "$GITHUB_ENV"
       - name: Check package
         run: Rscript scripts/check.R
       - uses: actions/upload-artifact@v4
@@ -67,8 +67,8 @@ jobs:
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       R_KEEP_PKG_SOURCE: "yes"
-      DATALOOM_TEST_BACKEND: duckdb
-      DATALOOM_TEST_DUCKLAKE: "false"
+      TIDYWEAVE_TEST_BACKEND: duckdb
+      TIDYWEAVE_TEST_DUCKLAKE: "false"
       _R_CHECK_FORCE_SUGGESTS_: "true"
       NOT_CRAN: "true"
     steps:
