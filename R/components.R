@@ -329,12 +329,19 @@ check_component.tw_product <- function(x, ...) invisible(validate(x))
 #' Read a pinned lake release as a product source
 #'
 #' Execution resolves an omitted `release_id` once and records its immutable
-#' identity. The connected lake remains caller-owned. This source connects
-#' governed releases to ordinary product composition.
-#' @param lake Connected lake, kept open by its caller.
+#' identity. Pass a configuration to open an existing lake read-only, collect
+#' the selected release into an ordinary tibble, and close the owned connection.
+#' This requires enough memory for the release. A connected lake instead returns
+#' a lazy table and remains caller-owned; keep it open while using that table.
+#' Construction and validation do not open or create a lake. This source connects
+#' governed releases to ordinary product composition and consumer exports.
+#' When publishing back to the same lake, execution can reuse its open handle;
+#' configuration sources still return materialized values without owning it.
+#' @param lake Connected lake or [lake_config()] describing an existing lake.
 #' @param asset Published asset name.
 #' @param release_id Optional immutable release identifier.
-#' @returns A source adapter; reads return a lazy table.
+#' @returns A source adapter. Reads return a lazy table for a connected lake or
+#'   a tibble for a configuration, with the exact release reference attached.
 #' @export
 #' @examples
 #' if (FALSE) {
@@ -348,29 +355,72 @@ source_release <- function(lake, asset, release_id = NULL) {
   if (!is.null(release_id)) {
     scalar(release_id, "release_id")
   }
-  structure(
+  source <- structure(
     list(lake = lake, asset = asset, release_id = release_id),
     class = "tw_release_source"
   )
+  check_component(source)
+  source
 }
 #' @export
 check_component.tw_release_source <- function(x, ...) {
-  assert_lake(x$lake)
+  asset_id(x$asset)
+  if (!is.null(x$release_id)) {
+    scalar(x$release_id, "release_id")
+  }
+  if (inherits(x$lake, "tw_config")) {
+    do.call(lake_config, unclass(x$lake))
+    need("duckdb")
+  } else if (inherits(x$lake, "tw_lake")) {
+    assert_lake(x$lake)
+  } else {
+    abort("Use a connected lake or lake_config() for a release source.")
+  }
   invisible(x)
 }
 #' @export
 inspect.tw_release_source <- function(x, ...) {
+  config <- if (inherits(x$lake, "tw_config")) x$lake else x$lake$config
   list(
     type = "lake release",
     asset = x$asset,
     release_id = x$release_id,
-    backend = x$lake$config$backend
+    backend = config$backend
   )
 }
 #' @export
 read_source.tw_release_source <- function(source, ...) {
-  ref <- resolve_release(source$lake, source$asset, source$release_id)
-  data <- tbl(source$lake, source$asset, ref$release_id[[1]])
+  read_release_source(source)
+}
+
+read_release_source <- function(source, execution_lake = NULL) {
+  check_component(source)
+  materialized <- inherits(source$lake, "tw_config")
+  reuse <- materialized &&
+    inherits(execution_lake, "tw_lake") &&
+    identical(
+      source$lake[c("backend", "catalog", "storage")],
+      execution_lake$config[c("backend", "catalog", "storage")]
+    )
+  owned <- materialized && !reuse
+  lake <- if (reuse) {
+    execution_lake
+  } else if (owned) {
+    connect_lake(source$lake, read_only = TRUE)
+  } else {
+    source$lake
+  }
+  if (owned) {
+    on.exit(disconnect_lake(lake), add = TRUE)
+  }
+  ref <- resolve_release(lake, source$asset, source$release_id)
+  data <- dplyr::tbl(
+    lake$con,
+    table_id(ref$schema_name[[1]], ref$table_name[[1]])
+  )
+  if (materialized) {
+    data <- collect(data)
+  }
   attr(data, "tw_input_reference") <- list(
     asset = source$asset,
     release_id = ref$release_id[[1]],

@@ -481,7 +481,7 @@ run.tw_pipeline <- function(
   if (!isTRUE(pipeline$infer_contract)) {
     register(lake, contract)
   }
-  if (!is.null(input_contract)) {
+  if (!is.null(input_contract) && !isTRUE(pipeline$infer_input_contract)) {
     register(lake, input_contract)
   }
   register(lake, pipeline)
@@ -594,6 +594,17 @@ run.tw_pipeline <- function(
           abort("Reader modified immutable landing input.")
         }
         input_quality <- NULL
+        if (isTRUE(pipeline$infer_input_contract)) {
+          resolver <- attr(pipeline, "tw_resolve_input_contract")
+          if (!is.function(resolver)) {
+            abort(
+              "Rebuild the ingestion from project code before executing it."
+            )
+          }
+          input_contract <- resolver(extracted)
+          assert_contract_ready(input_contract)
+          register(lake, input_contract)
+        }
         if (!is.null(input_contract)) {
           if (!is.data.frame(extracted)) {
             abort(
@@ -672,7 +683,11 @@ run.tw_pipeline <- function(
         } else {
           candidate$data
         }
-        quality <- validate(quality_data, contract)
+        candidate_contract <- contract
+        if (isTRUE(pipeline$input_rules_only)) {
+          candidate_contract$rules <- list()
+        }
+        quality <- validate(quality_data, candidate_contract)
         persist_quality(lake, run, contract, quality)
         quality <- dplyr::bind_rows(input_quality, quality)
         if (!quality_ok(quality)) {

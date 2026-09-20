@@ -102,7 +102,7 @@ capabilities.tw_release_source <- function(x, ...) {
   component_capabilities(
     read = TRUE,
     write = FALSE,
-    lazy = TRUE,
+    lazy = inherits(x$lake, "tw_lake"),
     transactions = TRUE,
     partition = FALSE,
     immutable = TRUE
