@@ -15,9 +15,8 @@ separate product type for derived data.
 
 ```{r definition}
 library(tidyweave)
-orders <- product("orders") |>
-  add_source(data.frame(id = 1:2, amount = c(10, 20))) |>
-  add_transform(function(data) transform(data, amount = amount * 2)) |>
+orders <- product("orders", data.frame(id = 1:2, amount = c(10, 20))) |>
+  dplyr::mutate(amount = amount * 2) |>
   add_quality(~ amount >= 0)
 orders
 explain(orders)
@@ -36,7 +35,8 @@ trivial operation.
 | Intent | Simple representation | Interchangeable implementation |
 |---|---|---|
 | Acquire data | Table, function or path | DBI, Arrow/Parquet, httr2 API, pins, custom source |
-| Prepare a table | R function | Supported lazy dplyr operations, SQL or dbt adapter |
+| Prepare a table | Deferred dplyr call or R function | Actual dplyr/dbplyr operations, SQL or dbt adapter |
+| Enrich a primary table | `add_lookup()` with explicit equality keys | Native or dm checks; same guaranteed many-to-one join |
 | Define expectations | Type vector or contract | Native schema and key checks |
 | Check business rules | Formula or function | Native counts, pointblank or custom quality engine |
 | Write the result | Target | Lake, DBI table, Parquet file, pin or custom writer |
@@ -61,7 +61,25 @@ both implement `write_target()`.
 The lake adapter owns archival, full-candidate gates, release history and its
 publication transaction. Internal storage helpers support that job; they are
 not another public workflow language. `run()` is the common execution verb.
-`publish()` is a convenience that supplies a local lake target when absent.
+`publish()` shares the approval intention across products and successful dbt
+builds. It supplies a local lake target for a product when absent. Receipt
+validation uses data-first `ingest()` before any RAW table is written.
+
+## Familiar syntax, deferred execution
+
+The supported dplyr verbs are methods on the same product, not replacement
+implementations of dplyr. Expressions and their environments are captured during
+definition and invoked against the runtime table in step order. Inspection never
+evaluates them. Unsupported verbs use `add_transform(function(data) ...)`.
+
+Lookup references are auxiliary dependencies. They are validated, memoized and
+recorded as lineage while the primary transform input remains one table.
+Successful lake results normalize to immutable release references. Other results
+reuse their retained submitted table or lazy query, preserving backend-specific
+mutability. DBI append results reuse the submitted batch, not a snapshot of the
+whole destination. Native and Pointblank logical rules share a predicate; native and dm lookups share cardinality and orphan policy.
+Managed dbt projects derive connection profiles and accepted source bindings at
+execution, while ordinary SQL models and dbt tests remain outside the R grammar.
 
 ## Lifecycle and results
 

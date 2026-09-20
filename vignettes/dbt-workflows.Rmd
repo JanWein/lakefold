@@ -19,10 +19,10 @@ its SQL graph. Choose the entry point that matches your work:
 
 | Your task | Entry point | Result |
 |---|---|---|
-| Run an existing dbt project | `dbt_build()` | dbt result and invocation artifacts |
+| Run an existing dbt project | `dbt_project(...) |> run()` | dbt result and invocation artifacts |
 | Transform a product's incoming table with a dbt model | `transform_dbt()` | Staged input, selected dbt build and materialized output |
 | Inspect current dbt relations and declared keys | `dbt_model()` | Lazy `dm` model borrowing your lake connection |
-| Publish one successful dbt relation as an immutable release | `dbt_publish()` | A quality-gated governed release |
+| Publish one successful dbt relation as an immutable release | `built |> publish("model")` | A quality-gated governed release |
 
 The first three operations do not make dbt tables immutable. A product can add a
 lake target for a governed snapshot of its final output. Data quality failures
@@ -48,17 +48,25 @@ catalog configuration. Their production behavior requires separate verification.
 ## Start with an existing project or generate an example
 
 ```{r existing-project}
-existing <- dbt_project("analytics", profiles_dir = "analytics")
+config <- lake_config(path = "reporting-lake", backend = "duckdb",
+  layers = c("raw", "staging", "core", "marts"))
+existing <- dbt_project("analytics", lake = config)
 existing
 ```
 
-Construction does not run dbt. The following optional starter creates only files:
+Construction creates no profile, source file or connection. Supply
+`sources = list(orders = accepted_result)` for managed bindings to exact releases
+under the `inputs` source group. At execution, tidyweave prepares the local
+DuckDB/DuckLake profile and managed source YAML. Existing SQL continues to use
+ordinary `source('inputs', 'orders')` expressions.
+
+For other adapters, or a profile managed by your deployment, use
+`dbt_project("analytics", profiles_dir = "analytics")` instead. The following
+optional starter creates example SQL and project files:
 
 ```{r scaffold, eval=requireNamespace("duckdb", quietly=TRUE) && requireNamespace("yaml", quietly=TRUE)}
 config <- lake_config(
-  registry_duckdb(file.path(root, "lake.duckdb")),
-  storage_local(file.path(root, "data")),
-  landing = file.path(root, "landing"), backend = "duckdb"
+  path = file.path(root, "lake"), backend = "duckdb"
 )
 project <- dbt_init(file.path(root, "dbt"), config)
 list.files(project$path, recursive = TRUE)
@@ -76,7 +84,7 @@ Set `executable` in `dbt_project()` when dbt is not on your `PATH`.
 lake <- connect_lake(config)
 close_lake(lake)
 
-built <- dbt_build(project, echo = FALSE)
+built <- project |> run(echo = FALSE)
 dbt_status(built)
 dbt_lineage(built)
 dbt_test(project, select = "customer_revenue", echo = FALSE)
@@ -165,9 +173,8 @@ released <- product("orders") |>
   run()
 
 lake <- connect_lake(config)
-prepared <- product("orders.prepared") |>
-  add_source(source_release(lake, "orders", released$release_id)) |>
-  add_transform(function(data) dplyr::filter(data, amount >= 50)) |>
+prepared <- product("orders.prepared", released) |>
+  dplyr::filter(amount >= 50) |>
   run()
 input_for_dbt <- collect(prepared)
 prepared$inputs[, c("asset", "release_id")]
@@ -175,10 +182,10 @@ close_lake(lake)
 ```
 
 Pass `input_for_dbt` to a product with an appropriate `transform_dbt()` step.
-Collect and close borrowed local catalog connections before dbt starts. For a dbt
-project that reads a release directly, declare its exact physical relation in dbt
-source YAML using `registry(lake, "releases")`; updating that reference is an
-explicit project decision.
+Collect and close borrowed local catalog connections before dbt starts. For a managed dbt project, pass the successful result through
+`sources = list(orders = released)`. It binds the exact physical relation and
+records its release lineage. Rebuilding with a correction requires selecting
+that new result explicitly; models keep their logical source names.
 
 ## Inspect current relations or publish a snapshot
 
@@ -194,8 +201,8 @@ dm::dm_examine_constraints(relations)
 dplyr::collect(relations$customers)
 
 schema <- contract(columns = c(customer_id = "integer", revenue = "numeric"))
-release <- dbt_publish(lake, built,
-  model = "model.tidyweave_demo.customer_revenue", contract = schema,
+release <- publish(built, "model.tidyweave_demo.customer_revenue",
+  to = lake, contract = schema,
   asset = "revenue.snapshot", code_version = "reporting-v1")
 read_release(lake, "revenue.snapshot", release$release_id)
 close_lake(lake)
@@ -203,14 +210,14 @@ close_lake(lake)
 
 `dm` checks explicit relational keys; SQL dependencies alone do not establish
 primary or foreign keys. `dbt_model()` borrows the connection and reads current
-relations. `dbt_publish()` validates and snapshots one relation visible now,
+relations. `publish()` validates and snapshots one relation visible now,
 using the dbt invocation as provenance. Coordinate writers between build and
 snapshot. `model()` provides relational access to pinned governed releases.
 
 ## Diagnose a failed invocation
 
 ```{r failure-inspection, eval=FALSE}
-built <- dbt_build(project, stop_on_failure = FALSE)
+built <- project |> run(stop_on_failure = FALSE)
 if (!built$success) {
   dbt_status(built)
   built$stderr
