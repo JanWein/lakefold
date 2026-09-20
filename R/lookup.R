@@ -206,7 +206,7 @@ execute_transform.tw_lookup_transform <- function(
     }
     if (transform$unmatched == "error") {
       orphans <- dplyr::anti_join(left, right, by = by, na_matches = "never")
-      if (count_rows(orphans) > 0) lookup_unmatched_error()
+      if (count_rows(orphans) > 0) lookup_unmatched_error(orphans)
     }
   }
   joined <- dplyr::left_join(
@@ -264,10 +264,15 @@ lookup_parent_error <- function() {
   )
 }
 
-lookup_unmatched_error <- function() {
+lookup_unmatched_error <- function(data = NULL) {
   abort(
     "Some input lookup keys are missing or have no reference match. Correct the keys, or use unmatched = 'keep' to retain missing attributes explicitly.",
-    "tw_lookup_unmatched"
+    "tw_lookup_unmatched",
+    diagnostic = if (!is.null(data)) {
+      list(data = data, failed_rows = TRUE)
+    } else {
+      NULL
+    }
   )
 }
 
@@ -299,7 +304,12 @@ lookup_dm_constraints <- function(data, reference, by, unmatched) {
       (!all(checks$is_key[checks$kind == "FK"]) ||
         lookup_missing_keys(data, names(by)) > 0)
   ) {
-    lookup_unmatched_error()
+    lookup_unmatched_error(dplyr::anti_join(
+      data,
+      reference,
+      by = by,
+      na_matches = "never"
+    ))
   }
   invisible(checks)
 }

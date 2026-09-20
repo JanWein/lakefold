@@ -9,8 +9,10 @@
 #' equal. Integer and numeric columns are compatible. A schema change marks
 #' every matched row as changed. Numeric totals ignore missing values, whose
 #' counts are reported separately. Row order has no significance.
-#' @param lake Connected lake, including a read-only connection.
-#' @param name Published asset name.
+#' @param lake Connected lake, including a read-only connection, or the earlier
+#'   published result. With two results, their exact releases are compared and
+#'   an owned read-only connection is closed automatically.
+#' @param name Published asset name, or the later published result.
 #' @param from,to Optional release IDs. Defaults to the previous and latest
 #'   releases. When only `to` is given, `from` is its preceding release.
 #' @param key Optional business-key column names.
@@ -37,6 +39,47 @@ compare <- function(
   key = NULL,
   limit = 100
 ) {
+  if (inherits(lake, "tw_run_result")) {
+    first <- lake
+    second <- name
+    if (!inherits(second, "tw_run_result") || !is.null(from) || !is.null(to)) {
+      abort("Supply two published results without from or to release IDs.")
+    }
+    a <- normalize_result_source(first)
+    b <- normalize_result_source(second)
+    if (
+      !inherits(a, "tw_release_source") ||
+        !inherits(b, "tw_release_source") ||
+        !identical(first$asset, second$asset)
+    ) {
+      abort("Comparison needs two lake publications of the same product.")
+    }
+    config <- function(source) {
+      if (inherits(source$lake, "tw_lake")) source$lake$config else source$lake
+    }
+    if (
+      !identical(
+        config(a)[c("backend", "catalog", "storage")],
+        config(b)[c("backend", "catalog", "storage")]
+      )
+    ) {
+      abort("Both comparison results must belong to the same lake.")
+    }
+    connections <- Filter(
+      function(con) {
+        inherits(con, "tw_lake") && DBI::dbIsValid(con$con)
+      },
+      list(first$output_lake, second$output_lake, a$lake, b$lake)
+    )
+    lake <- if (length(connections)) connections[[1L]] else NULL
+    if (!inherits(lake, "tw_lake") || !DBI::dbIsValid(lake$con)) {
+      lake <- connect_lake(config(a), read_only = TRUE)
+      on.exit(close_lake(lake), add = TRUE)
+    }
+    name <- first$asset
+    from <- first$release_id
+    to <- second$release_id
+  }
   assert_lake(lake)
   asset_id(name)
   if (

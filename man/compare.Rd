@@ -7,9 +7,11 @@
 compare(lake, name, from = NULL, to = NULL, key = NULL, limit = 100)
 }
 \arguments{
-\item{lake}{Connected lake, including a read-only connection.}
+\item{lake}{Connected lake, including a read-only connection, or the earlier
+published result. With two results, their exact releases are compared and
+an owned read-only connection is closed automatically.}
 
-\item{name}{Published asset name.}
+\item{name}{Published asset name, or the later published result.}
 
 \item{from, to}{Optional release IDs. Defaults to the previous and latest
 releases. When only \code{to} is given, \code{from} is its preceding release.}

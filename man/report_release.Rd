@@ -34,6 +34,11 @@ Report manifest including result values as data frames, both on
 initial save and an identical retry. Retries preserve original timestamps.
 }
 \description{
+Reports preserve double precision. Nested list columns are rejected before
+writing; expand them into named atomic columns in the metric calculation.
+Existing stored reports remain readable; previously rounded values cannot
+be recovered. Recalculate measurements made by older package versions before
+saving a new report.
 Report JSON stores numeric values. Integer64 columns must stay within
 -2^53 to 2^53 inclusive so saved values can be read back exactly. Larger
 integers are rejected before writing; retain those individual results

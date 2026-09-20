@@ -437,33 +437,53 @@ run_relational_insurance <- function(
     inherits(undefined_ratio, "error")
   )
 
-  corrected_inputs <- insurance_corrected_inputs(inputs)
-  corrected_raw <- raw
-  corrected_delivery <- deliveries$payments |>
-    replace_sources(insurance.payments = corrected_inputs$payments)
-  corrected_raw$payments <- corrected_delivery |> ingest()
-  corrected_products <- published
-  corrected_products$payments <- payment_product |>
-    publish(
-      sources = list(payments = corrected_raw$payments),
-      layer = "staging"
-    )
-  rebuilt <- project |>
-    run(sources = list(payments = corrected_products$payments), echo = FALSE)
-  corrected_release <- rebuilt |>
-    publish(
-      "monthly_performance",
-      contract = contracts$mart,
-      asset = "insurance.monthly_performance",
-      layer = "marts"
-    )
-
-  corrected_measures <- measure(
-    corrected_release,
-    metrics = metrics,
-    at = c(january, february),
-    period = "each"
+  monthly <- workflow(
+    received = function(payments) {
+      deliveries$payments |>
+        replace_sources(insurance.payments = payments) |>
+        ingest()
+    },
+    enriched = function(received) {
+      payment_product |>
+        publish(sources = list(payments = received), layer = "staging")
+    },
+    built = function(enriched) {
+      project |> run(sources = list(payments = enriched), echo = FALSE)
+    },
+    released = function(built) {
+      built |>
+        publish(
+          "monthly_performance",
+          contract = contracts$mart,
+          asset = "insurance.monthly_performance",
+          layer = "marts"
+        )
+    },
+    measures = function(released) {
+      measure(
+        released,
+        metrics = metrics,
+        at = c(january, february),
+        period = "each"
+      )
+    },
+    inputs = list(payments = inputs$payments),
+    code_version = "insurance-workflow-v1"
   )
+  corrected_inputs <- insurance_corrected_inputs(inputs)
+  correction <- run(
+    monthly,
+    inputs = list(payments = corrected_inputs$payments)
+  )
+  status(correction)
+  corrected_raw <- raw
+  corrected_raw$payments <- correction$results$received
+  corrected_products <- published
+  corrected_products$payments <- correction$results$enriched
+  rebuilt <- correction$results$built
+  corrected_release <- correction$results$released
+
+  corrected_measures <- correction$results$measures
   corrected_totals <- measure(
     corrected_release,
     metrics = metrics[c("cash_collected", "cash_to_due")],

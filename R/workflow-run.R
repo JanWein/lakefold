@@ -1,0 +1,284 @@
+#' Define a delivery workflow with explicit dependencies
+#'
+#' Named functions describe the receipt, preparation and dbt steps once.
+#' Each function argument names an input or another step. Steps execute in
+#' dependency order; a failed step blocks its consumers. Results remain ordinary
+#' R values, so existing [ingest()], [publish()] and dbt calls keep their meaning.
+#' Keep report issuance outside the workflow as an explicit final decision.
+#'
+#' On correction, pass replacement `inputs` and the `previous` workflow result
+#' to [run()]. Unchanged successful branches are reused; changed inputs and their
+#' consumers rerun. Failed branches retry on the next explicit call. Change
+#' `code_version` whenever code, captured values or dependencies change. Use
+#' `refresh` for named steps whose external sources changed without a new input.
+#' This is sequential orchestration, not a scheduler or a distributed transaction.
+#' Already committed steps stay committed if a later step fails.
+#' @param ... Named step functions. Their arguments must name dependencies;
+#'   defaults and `...` in step functions are not supported.
+#' @param inputs Named list of initial input values.
+#' @param code_version Explicit version of workflow code and dependencies.
+#' @returns A workflow specification accepted by [run()]. Its result contains
+#'   named `results`, effective `inputs`, and a step `status` table.
+#' @export
+#' @examples
+#' flow <- workflow(
+#'   checked = function(delivery) {
+#'     product("orders", delivery) |> add_quality(~ amount >= 0) |> trial()
+#'   },
+#'   total = function(checked) sum(collect(checked)$amount),
+#'   inputs = list(delivery = data.frame(amount = c(10, 20))),
+#'   code_version = "v1"
+#' )
+#' first <- run(flow)
+#' corrected <- run(flow, inputs = list(delivery = data.frame(amount = 40)),
+#'   previous = first)
+#' status(corrected)
+workflow <- function(..., inputs = list(), code_version) {
+  steps <- list(...)
+  scalar(code_version, "code_version")
+  check_names <- function(x) {
+    is.list(x) &&
+      (!length(x) ||
+        (!is.null(names(x)) &&
+          !anyNA(names(x)) &&
+          all(nzchar(names(x))) &&
+          !anyDuplicated(names(x))))
+  }
+  if (
+    !length(steps) ||
+      !check_names(steps) ||
+      !check_names(inputs) ||
+      length(intersect(names(steps), names(inputs))) ||
+      !all(vapply(steps, is.function, logical(1)))
+  ) {
+    abort(
+      "Supply uniquely named step functions and inputs with distinct names."
+    )
+  }
+  dependencies <- lapply(steps, function(step) {
+    args <- formals(step)
+    if (is.null(args) && is.primitive(step)) {
+      abort("Wrap primitive functions in an ordinary function.")
+    }
+    if (
+      "..." %in%
+        names(args) ||
+        any(vapply(
+          as.list(args),
+          function(x) {
+            !rlang::is_missing(x)
+          },
+          logical(1)
+        ))
+    ) {
+      abort(
+        "Step arguments must be required named dependencies, without defaults or dots."
+      )
+    }
+    names(args) %||% character()
+  })
+  if (!all(unlist(dependencies) %in% c(names(inputs), names(steps)))) {
+    abort("Every step argument must name a workflow input or step.")
+  }
+  order <- character()
+  remaining <- names(steps)
+  while (length(remaining)) {
+    ready <- remaining[vapply(
+      dependencies[remaining],
+      function(deps) {
+        all(deps %in% c(names(inputs), order))
+      },
+      logical(1)
+    )]
+    if (!length(ready)) {
+      abort("Workflow dependencies contain a cycle.")
+    }
+    order <- c(order, ready)
+    remaining <- setdiff(remaining, ready)
+  }
+  structure(
+    list(
+      steps = steps,
+      inputs = inputs,
+      dependencies = dependencies,
+      order = order,
+      code_version = code_version
+    ),
+    class = "tw_workflow"
+  )
+}
+
+#' @rdname workflow
+#' @param pipeline A workflow specification.
+#' @param lake Unused; supply storage inside the relevant step definition.
+#' @param previous Previous result from the same workflow input names.
+#' @param refresh Step names to rerun even when their inputs are unchanged.
+#' @param stop_on_failure Signal an error after collecting step status. Set
+#'   `FALSE` to inspect failures directly; errors also retain `condition$result`.
+#' @export
+run.tw_workflow <- function(
+  pipeline,
+  lake = NULL,
+  inputs = list(),
+  previous = NULL,
+  refresh = character(),
+  stop_on_failure = TRUE,
+  ...
+) {
+  rlang::check_dots_empty()
+  pipeline <- do.call(
+    workflow,
+    c(
+      pipeline$steps,
+      list(inputs = pipeline$inputs, code_version = pipeline$code_version)
+    )
+  )
+  flag(stop_on_failure, "stop_on_failure")
+  if (!is.null(lake)) {
+    abort("Configure storage in the workflow's step definitions.")
+  }
+  if (
+    !is.list(inputs) ||
+      (length(inputs) &&
+        (is.null(names(inputs)) ||
+          anyNA(names(inputs)) ||
+          anyDuplicated(names(inputs)) ||
+          !all(names(inputs) %in% names(pipeline$inputs))))
+  ) {
+    abort("Replacement inputs must name existing workflow inputs uniquely.")
+  }
+  if (
+    !is.character(refresh) ||
+      anyNA(refresh) ||
+      !all(refresh %in% names(pipeline$steps))
+  ) {
+    abort("refresh must name existing workflow steps.")
+  }
+  if (
+    !is.null(previous) &&
+      (!inherits(previous, "tw_workflow_result") ||
+        !identical(names(previous$inputs), names(pipeline$inputs)))
+  ) {
+    abort("previous must be a workflow result with the same input names.")
+  }
+  effective <- if (is.null(previous)) pipeline$inputs else previous$inputs
+  if (!is.null(previous)) {
+    revised <- names(pipeline$inputs)[
+      !vapply(
+        names(pipeline$inputs),
+        function(name) {
+          identical(pipeline$inputs[[name]], previous$definition$inputs[[name]])
+        },
+        logical(1)
+      )
+    ]
+    effective[revised] <- pipeline$inputs[revised]
+  }
+  effective[names(inputs)] <- inputs
+  same_code <- !is.null(previous) && identical(previous$definition, pipeline)
+  changed <- if (same_code) {
+    names(effective)[
+      !vapply(
+        names(effective),
+        function(name) {
+          identical(effective[[name]], previous$inputs[[name]])
+        },
+        logical(1)
+      )
+    ]
+  } else {
+    c(names(effective), names(pipeline$steps))
+  }
+  changed <- union(changed, refresh)
+  results <- list()
+  states <- list()
+  errors <- list()
+  failed <- character()
+  for (name in pipeline$order) {
+    deps <- pipeline$dependencies[[name]]
+    if (any(deps %in% failed)) {
+      state <- "skipped"
+      failed <- c(failed, name)
+    } else if (
+      same_code &&
+        !name %in% changed &&
+        !any(deps %in% changed) &&
+        previous$status$status[match(name, previous$status$step)] %in%
+          c("completed", "reused")
+    ) {
+      results[name] <- previous$results[name]
+      state <- "reused"
+    } else {
+      changed <- union(changed, name)
+      value <- tryCatch(
+        {
+          value <- do.call(pipeline$steps[[name]], c(effective, results)[deps])
+          if (
+            (inherits(value, "tw_run_result") &&
+              !value$status %in% c("completed", "published", "cached")) ||
+              (inherits(value, "tw_dbt_result") && !isTRUE(value$success))
+          ) {
+            abort("Step did not complete successfully.", result = value)
+          }
+          list(value = value)
+        },
+        error = function(e) {
+          errors[[name]] <<- e
+          NULL
+        }
+      )
+      if (is.null(value)) {
+        state <- "failed"
+        failed <- c(failed, name)
+      } else {
+        results[name] <- value
+        state <- "completed"
+      }
+    }
+    states[[name]] <- tibble::tibble(
+      step = name,
+      status = state,
+      success = state %in% c("completed", "reused")
+    )
+  }
+  out <- structure(
+    list(
+      results = results,
+      inputs = effective,
+      status = dplyr::bind_rows(states),
+      errors = errors,
+      definition = pipeline
+    ),
+    class = "tw_workflow_result"
+  )
+  if (length(failed) && stop_on_failure) {
+    abort(
+      "Workflow incomplete. Inspect status(condition$result) and condition$result$errors; successful steps remain available for an explicit retry.",
+      "tw_workflow_failed",
+      result = out
+    )
+  }
+  out
+}
+
+#' @export
+print.tw_workflow <- function(x, ...) {
+  cat("<workflow> ", x$code_version, "\n", sep = "")
+  print(tibble::tibble(
+    step = x$order,
+    inputs = vapply(
+      x$dependencies[x$order],
+      function(deps) paste(deps, collapse = ", "),
+      character(1)
+    )
+  ))
+  invisible(x)
+}
+
+#' @export
+print.tw_workflow_result <- function(x, ...) {
+  cat("<workflow result>\n")
+  print(x$status)
+  cat("Step outputs: $results; retained local conditions: $errors.\n")
+  invisible(x)
+}

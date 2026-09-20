@@ -38,13 +38,13 @@ rule checks its contents. Neither silently repairs the input.
 ## Try it and explore an ordinary table
 
 ```{r try-orders}
-trial <- orders |> run()
-collect(trial)
-collect(trial) |> dplyr::summarise(total = sum(amount))
+preview <- orders |> trial()
+collect(preview)
+collect(preview) |> dplyr::summarise(total = sum(amount))
 ```
 
-This needs no storage, metric registration or approval. `run()` without a target
-keeps the result in memory. Use ordinary R analysis while deciding what matters.
+This needs no storage, metric registration or approval. `trial()` keeps the result in memory and disables configured framework writers
+throughout the dependency graph. Use ordinary R analysis while deciding what matters.
 `explain(orders)` shows the plan without reading a source.
 
 ## Understand a failed delivery
@@ -52,9 +52,10 @@ keeps the result in memory. Use ordinary R analysis while deciding what matters.
 ```{r failed-delivery}
 bad_delivery <- delivery
 bad_delivery$amount[1] <- -10
-failed <- orders |> run(data = bad_delivery, stop_on_failure = FALSE)
+failed <- orders |> trial(data = bad_delivery, stop_on_failure = FALSE)
 status(failed)
 quality_report(failed)
+quality_rows(failed, ~ amount >= 0)
 ```
 
 The same definition receives new data. `stop_on_failure = FALSE` returns the
@@ -88,7 +89,7 @@ connection. Ordinary predicates and lookup syntax stay the same. Explicit choice
 and layer defaults apply only to the root product, not to every dependency.
 
 A configured `run()` may write to its configured target. For an in-memory trial,
-use a definition with no destination, as above. `publish()` makes the intention
+use `trial(orders)`, even after storing a destination. `publish()` makes the intention
 to persist visible at the call site.
 
 ## Accept a corrected complete delivery
@@ -119,19 +120,16 @@ and a separate dbt build.
 
 ## See what changed
 
-The comparison tool is an optional history operation. Open a read-only connection
-for the comparison and close it afterwards:
+Compare the two exact results directly:
 
 ```{r compare-orders}
-lake <- open_lake(root, read_only = TRUE)
-difference <- compare(lake, "orders")
-close_lake(lake)
+difference <- compare(first, second)
 difference$numeric_summary
 difference$changed
 ```
 
-The contract supplies the key. By default `compare()` uses the latest two
-releases; explicit `from` and `to` IDs select another pair. Order 1 changed from
+The contract supplies the key. Result comparison pins both selected releases
+and opens and closes its own connection. Lake-based comparison remains available. Order 1 changed from
 10 to 12, order 2 was removed, and order 3 added 30. The overall increase is 12.
 Counts run in the database; row previews are limited to 100 by default.
 
@@ -141,15 +139,15 @@ Counts run in the database; row previews are limited to 100 by default.
 exploratory <- metric_set("orders",
   total = sum(amount),
   count = dplyr::n())
-preview <- second |> measure(metrics = exploratory)
+preview <- orders |> trial() |> measure(metrics = exploratory)
 collect(preview)
 quality(preview)
 ```
 
 These exploratory calculations require neither a code version nor approval and
-do not register unapproved definitions. Their manifests retain the selected
-release and formula. `quality(preview)` resolves checks for that exact source
-release, even if newer data is published later.
+do not register unapproved definitions. Trial measurements retain their execution and formula, and `quality(preview)`
+returns the trial checks. They cannot be issued as a report. The same definitions
+work on a publication result, which pins its exact source release.
 
 When the definitions are ready for an issued report, explicitly identify the
 reviewed version and approval:
@@ -200,6 +198,32 @@ stopifnot(identical(saved, preserved))
 
 The current table now totals 99. The issued report still contains 42 and two
 orders, and `collect(second)` still returns its original corrected data.
+
+## Run a correction through its dependent steps
+
+Define the repeated process once with ordinary named functions. Arguments name
+inputs or other steps, making the dependency graph explicit. The report remains
+an explicit decision after the workflow succeeds.
+
+```{r monthly-workflow}
+monthly <- workflow(
+  accepted = function(delivery) orders |> publish(data = delivery),
+  measures = function(accepted) measure(accepted, metrics = metrics),
+  inputs = list(delivery = corrected), code_version = "monthly-v1")
+first_run <- run(monthly)
+corrected_run <- run(monthly,
+  inputs = list(delivery = data.frame(id = 1L, amount = 45)),
+  previous = first_run)
+status(corrected_run)
+collect(corrected_run$results$measures)
+```
+
+Only changed branches rerun. Successful independent branches can be reused.
+On failure, `run(..., stop_on_failure = FALSE)` returns step status and retained
+conditions in `$errors`; dependent steps are skipped. Supply that result as
+`previous` for an explicit retry after fixing the cause. Already committed steps
+are not rolled back. Change `code_version` when code or captured settings change;
+use `refresh = "accepted"` when an external source changes without a new input.
 
 ## Add infrastructure only when needed
 

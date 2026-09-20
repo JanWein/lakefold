@@ -215,3 +215,25 @@ flag <- function(value, name) {
   }
   value
 }
+
+# Keep registry fingerprints stable; report values need full double precision.
+report_json <- function(x) {
+  as.character(jsonlite::toJSON(
+    canonical(x),
+    auto_unbox = TRUE,
+    null = "null",
+    na = "null",
+    digits = I(17)
+  ))
+}
+report_fingerprint <- function(x) {
+  digest::digest(report_json(x), algo = "sha256", serialize = FALSE)
+}
+
+measurement_fingerprint <- function(x, manifest) {
+  if (identical(manifest$result_hash_version, 2L)) {
+    report_fingerprint(as.data.frame(x))
+  } else {
+    fingerprint(as.data.frame(x))
+  }
+}

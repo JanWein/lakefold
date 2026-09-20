@@ -1,13 +1,14 @@
 #' Inspect execution status across R and dbt workflows
 #' @param x A connected lake, [run()] result, [dbt_build()] result or a
-#'   measurement or measurement set from [measure()].
+#'   measurement or measurement set from [measure()], or a [workflow()] result.
 #' @param asset Optional asset ID when querying a lake.
 #' @returns A tibble with `engine`, `id`, `status`, `success`, `release_id`,
 #'   `asset`, `outcome` and `message`. `outcome` normalizes native statuses to
 #'   `succeeded`, `blocked`, `failed` or `skipped` (unknown states are `NA`).
 #'   Missing deliveries are `blocked` because no acceptable input is available.
 #'   A dbt process failure remains visible even when
-#'   individual nodes passed. No raw stdout or stderr is included.
+#'   individual nodes passed. No raw stdout or stderr is included. Workflow
+#'   results return a compact table with `step`, `status` and `success`.
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("tidyweave-")
@@ -18,6 +19,9 @@
 #' disconnect_lake(lake)
 #' unlink(root, recursive = TRUE)
 status <- function(x, asset = NULL) {
+  if (inherits(x, "tw_workflow_result")) {
+    return(x$status)
+  }
   if (inherits(x, "tw_measurement_set") || is_measurement(x)) {
     x <- diagnostic_measurements(x)
     return(dplyr::bind_rows(lapply(x, function(value) {
@@ -34,7 +38,11 @@ status <- function(x, asset = NULL) {
           manifest$metric,
           "was calculated from",
           manifest$product,
-          "using its pinned published input."
+          if (identical(manifest$input_published, FALSE)) {
+            "using its unpublished trial input."
+          } else {
+            "using its pinned published input."
+          }
         )
       )
     })))
@@ -477,12 +485,19 @@ measurement_quality <- function(x) {
       )
     }
     checks <- if (
-      !identical(manifest$result_hash, fingerprint(as.data.frame(value))) ||
+      !identical(
+        manifest$result_hash,
+        measurement_fingerprint(value, manifest)
+      ) ||
         !is.list(reference) ||
         !identical(reference$asset, manifest$product) ||
-        !identical(reference$release, manifest$release_id)
+        !(identical(reference$release, manifest$release_id) ||
+          (identical(manifest$input_published, FALSE) &&
+            identical(reference$run_id, manifest$input_run)))
     ) {
       unavailable()
+    } else if (identical(manifest$input_published, FALSE)) {
+      reference$trial_quality %||% unavailable()
     } else {
       tryCatch(
         {
@@ -541,7 +556,7 @@ diagnostic_measurements <- function(x) {
     return(x)
   }
   manifest <- attr(x, "tw_manifest")
-  if (!identical(manifest$result_hash, fingerprint(as.data.frame(x)))) {
+  if (!identical(manifest$result_hash, measurement_fingerprint(x, manifest))) {
     abort("Metric result changed after calculation.")
   }
   list(x)

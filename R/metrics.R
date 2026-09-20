@@ -114,7 +114,9 @@ metric <- function(
 #' metric and input evidence needed by [report_release()]. A live caller-owned
 #' lake is borrowed when available. Otherwise the saved configuration opens an
 #' owned read-only connection that closes before returning, including on errors.
-#' @param x Connected lake or successful published `tw_run_result`.
+#' @param x Connected lake or successful `tw_run_result`. In-memory [trial()]
+#'   results support exploratory measurements with the same definitions. They
+#'   cannot be recorded or saved in issued reports, even for approved metrics.
 #' @param metric Single metric definition.
 #' @param metrics Nonempty list of metric definitions for a measurement set.
 #'   Optional unique names label metrics in the collected table. Supply either
@@ -207,7 +209,27 @@ measure <- function(
       abort("Exploratory metrics cannot be recorded. Use record = FALSE.")
     }
   }
-  if (inherits(x, "tw_run_result")) {
+  exploring <- inherits(x, "tw_run_result") && identical(x$status, "completed")
+  if (exploring) {
+    record <- record %||% FALSE
+    flag(record, "record")
+    if (record || !is.null(release)) {
+      abort(
+        "Trial measurements cannot record lineage or select a release. Publish the product first."
+      )
+    }
+    if (!identical(metric$product, x$asset)) {
+      abort("The metric input asset does not match this trial result.")
+    }
+    data <- x$data
+    table_result(data, "Trial measurement input")
+    lake <- source <- NULL
+    ref <- data.frame(
+      release_id = NA_character_,
+      quality = "trial",
+      published_at = NA_character_
+    )
+  } else if (inherits(x, "tw_run_result")) {
     if (
       !is.character(x$status) ||
         length(x$status) != 1L ||
@@ -286,7 +308,7 @@ measure <- function(
   }
   if (record) {
     register(lake, metric)
-  } else if (isTRUE(metric$approved)) {
+  } else if (!exploring && isTRUE(metric$approved)) {
     old <- query(
       lake,
       paste(
@@ -302,8 +324,10 @@ measure <- function(
       )
     }
   }
-  ref <- resolve_release(lake, metric$product, release)
-  data <- tbl(lake, metric$product, ref$release_id[[1]])
+  if (!exploring) {
+    ref <- resolve_release(lake, metric$product, release)
+    data <- tbl(lake, metric$product, ref$release_id[[1]])
+  }
   if (!all(c(by, names(filters), metric$time_column) %in% colnames(data))) {
     abort("Metric columns missing from input product.")
   }
@@ -398,6 +422,8 @@ measure <- function(
     code_version = metric$code_version,
     product = metric$product,
     release_id = ref$release_id[[1]],
+    input_published = !exploring,
+    input_run = if (exploring) x$run_id else NULL,
     input_quality = ref$quality[[1]],
     published_at = ref$published_at[[1]],
     by = by,
@@ -405,21 +431,26 @@ measure <- function(
     filters = filters,
     params = params,
     calculated_at = now(),
-    result_hash = fingerprint(result)
+    result_hash = report_fingerprint(result),
+    result_hash_version = 2L
   )
   attr(result, "tw_manifest") <- manifest
-  attr(result, "tw_quality_reference") <- list(
-    config = if (
-      inherits(x, "tw_run_result") && inherits(source$lake, "tw_config")
-    ) {
-      source$lake
-    } else {
-      lake$config
-    },
-    lake = lake,
-    asset = metric$product,
-    release = ref$release_id[[1]]
-  )
+  attr(result, "tw_quality_reference") <- if (exploring) {
+    list(trial_quality = quality(x), asset = x$asset, run_id = x$run_id)
+  } else {
+    list(
+      config = if (
+        inherits(x, "tw_run_result") && inherits(source$lake, "tw_config")
+      ) {
+        source$lake
+      } else {
+        lake$config
+      },
+      lake = lake,
+      asset = metric$product,
+      release = ref$release_id[[1]]
+    )
+  }
   if (
     record &&
       !query(
@@ -450,6 +481,11 @@ measure <- function(
 
 #' Freeze metric results and input versions for a report
 #'
+#' Reports preserve double precision. Nested list columns are rejected before
+#' writing; expand them into named atomic columns in the metric calculation.
+#' Existing stored reports remain readable; previously rounded values cannot
+#' be recovered. Recalculate measurements made by older package versions before
+#' saving a new report.
 #' Report JSON stores numeric values. Integer64 columns must stay within
 #' -2^53 to 2^53 inclusive so saved values can be read back exactly. Larger
 #' integers are rejected before writing; retain those individual results
@@ -545,6 +581,11 @@ report_release <- function(
     if (is.null(m)) {
       abort("Every result must come from measure().")
     }
+    if (identical(m$input_published, FALSE)) {
+      abort(
+        "Trial measurements cannot be saved in reports. Publish the product and recalculate first."
+      )
+    }
     if (!isTRUE(m$metric_definition$approved)) {
       abort(
         "Exploratory metrics cannot be saved in reports. Approve and recalculate first."
@@ -562,9 +603,31 @@ report_release <- function(
       )
     }
     scalar(m$code_version, "metric code_version")
-    if (!identical(m$result_hash, fingerprint(as.data.frame(x)))) {
+    if (
+      !identical(
+        m$result_hash,
+        if (identical(m$result_hash_version, 2L)) {
+          report_fingerprint(as.data.frame(x))
+        } else {
+          fingerprint(as.data.frame(x))
+        }
+      )
+    ) {
       # Tibbles and data.frames have the same canonical JSON representation.
       abort("Metric result changed after calculation.")
+    }
+    if (
+      any(vapply(
+        x,
+        function(column) {
+          is.list(column) || !is.null(dim(column))
+        },
+        logical(1)
+      ))
+    ) {
+      abort(
+        "Report columns must be atomic vectors. Expand nested metric values into named columns before recalculating and saving a report."
+      )
     }
     for (column in x) {
       if (inherits(column, "integer64")) {
@@ -578,6 +641,11 @@ report_release <- function(
           ))
         }
       }
+    }
+    if (!identical(m$result_hash_version, 2L)) {
+      abort(
+        "Recalculate this measurement before saving: its legacy checksum cannot verify numeric values exactly."
+      )
     }
     values <- as.data.frame(x)
     attr(values, "tw_manifest") <- NULL
@@ -610,7 +678,7 @@ report_release <- function(
     if (
       !identical(
         report_identity(old$manifest[[1]]),
-        report_identity(jencode(manifest))
+        report_identity(report_json(manifest))
       )
     ) {
       abort("Report id already exists with different content.")
@@ -626,7 +694,7 @@ report_release <- function(
       insert_meta(
         lake,
         "reports",
-        list(id = id, created_at = now(), manifest = jencode(manifest))
+        list(id = id, created_at = now(), manifest = report_json(manifest))
       )
       for (m in measures) {
         insert_meta(
@@ -698,7 +766,7 @@ report_identity <- function(json) {
     x$manifest$calculated_at <- NULL
     x
   })
-  jencode(value)
+  report_json(value)
 }
 
 #' Read an immutable report and its saved results

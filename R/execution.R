@@ -390,7 +390,9 @@ tw_execute_target.default <- function(target, product, ...) {
       contract <- product_contract(product, data)
       quality <- validate(data, contract, keep_errors = TRUE)
       if (!quality_ok(quality)) {
-        run_result(run, "blocked", quality = quality)
+        blocked <- run_result(run, "blocked", quality = quality)
+        blocked$diagnostic <- list(data = data, contract = contract)
+        blocked
       } else {
         metadata <- list(
           product = product$id,
