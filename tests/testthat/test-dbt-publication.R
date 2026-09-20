@@ -1,0 +1,171 @@
+dbt_publication_fixture <- function(marts = FALSE) {
+  f <- fixture()
+  if (marts) {
+    f$lake$config$layers <- c(f$lake$config$layers, "marts")
+  }
+  DBI::dbExecute(f$lake$con, "CREATE SCHEMA lake.marts")
+  DBI::dbExecute(
+    f$lake$con,
+    paste(
+      "CREATE TABLE lake.marts.customer_revenue AS",
+      "SELECT 101 AS customer_id, 100.0::DOUBLE AS revenue"
+    )
+  )
+  parsed <- dbt_read_artifacts(system.file(
+    "extdata",
+    "dbt-artifacts",
+    package = "tidyweave"
+  ))
+  f$dbt <- structure(
+    list(
+      success = TRUE,
+      status = 0L,
+      command = "build",
+      results = parsed$results,
+      manifest = parsed$manifest
+    ),
+    class = "tw_dbt_result"
+  )
+  f
+}
+
+test_that("minimal dbt publication returns an exact collectable release", {
+  f <- dbt_publication_fixture()
+  withr::defer(fixture_cleanup(f))
+  release <- dbt_publish(f$lake, f$dbt, "customer_revenue")
+  expect_identical(release$status, "published")
+  expect_identical(release$asset, "customer_revenue")
+  expect_true(DBI::dbIsValid(f$lake$con))
+  expect_identical(release$outputs$database, "lake")
+  expect_identical(release$outputs$schema, "products")
+  expect_identical(release$outputs$release_id, release$release_id)
+  reference <- resolve_release(f$lake, release$asset, release$release_id)
+  expect_identical(release$outputs$table, reference$table_name[[1L]])
+  expect_equal(collect(release)$revenue, 100)
+  expect_length(release$metadata$contract$required, 0L)
+  expect_length(release$metadata$contract$key, 0L)
+  expect_null(release$metadata$contract$max_age_hours)
+  expect_true(release$metadata$contract$allow_empty)
+  DBI::dbExecute(
+    f$lake$con,
+    "UPDATE lake.marts.customer_revenue SET revenue = 200"
+  )
+  expect_equal(collect(release)$revenue, 100)
+  expect_equal(
+    collect(dbt_publish(f$lake, f$dbt, "customer_revenue"))$revenue,
+    200
+  )
+})
+
+test_that("config publication closes owned handles and prefers configured marts", {
+  f <- dbt_publication_fixture(marts = TRUE)
+  withr::defer(fixture_cleanup(f))
+  config <- f$lake$config
+  disconnect_lake(f$lake)
+  release <- dbt_publish(config, f$dbt, "customer_revenue")
+  expect_null(release$output_lake)
+  expect_identical(release$outputs$schema, "marts")
+  expect_equal(collect(release)$revenue, 100)
+  con <- connect_lake(config)
+  withr::defer(disconnect_lake(con))
+  expect_equal(
+    read_release(con, release$asset, release$release_id)$revenue,
+    100
+  )
+})
+
+test_that("automatic versions track definitions but ignore invocation timestamps", {
+  f <- dbt_publication_fixture()
+  withr::defer(fixture_cleanup(f))
+  first <- dbt_publish(f$lake, f$dbt, "customer_revenue")
+  f$dbt$manifest$metadata$invocation_id <- "another-successful-invocation"
+  f$dbt$manifest$metadata$generated_at <- "2026-10-01T00:00:00Z"
+  repeated <- dbt_publish(f$lake, f$dbt, "customer_revenue")
+  expect_identical(repeated$metadata$code_version, first$metadata$code_version)
+  expect_identical(repeated$metadata$version, first$metadata$version)
+  f$dbt$manifest$nodes[["model.shop.customer_revenue"]]$compiled_code <-
+    "SELECT customer_id, revenue FROM a_changed_input"
+  changed <- dbt_publish(f$lake, f$dbt, "customer_revenue")
+  expect_false(identical(
+    changed$metadata$code_version,
+    first$metadata$code_version
+  ))
+  expect_false(identical(changed$metadata$version, first$metadata$version))
+  DBI::dbExecute(
+    f$lake$con,
+    "ALTER TABLE lake.marts.customer_revenue ADD COLUMN currency VARCHAR"
+  )
+  evolved <- dbt_publish(f$lake, f$dbt, "customer_revenue")
+  expect_false(identical(
+    evolved$metadata$contract$version,
+    changed$metadata$contract$version
+  ))
+  expect_false(identical(evolved$metadata$version, changed$metadata$version))
+  DBI::dbExecute(f$lake$con, "DELETE FROM lake.marts.customer_revenue")
+  expect_equal(
+    nrow(collect(dbt_publish(f$lake, f$dbt, "customer_revenue"))),
+    0L
+  )
+})
+
+test_that("invalid invocations and final contracts preserve the consumer release", {
+  f <- dbt_publication_fixture()
+  withr::defer(fixture_cleanup(f))
+  first <- dbt_publish(f$lake, f$dbt, "customer_revenue")
+  failed <- f$dbt
+  failed$success <- FALSE
+  expect_error(
+    dbt_publish(f$lake, failed, "customer_revenue"),
+    "successful dbt build"
+  )
+  absent <- f$dbt
+  absent$results <- absent$results[
+    absent$results$unique_id != "model.shop.customer_revenue",
+  ]
+  expect_error(
+    dbt_publish(f$lake, absent, "customer_revenue"),
+    "succeeded in this build"
+  )
+  wrong <- f$dbt
+  wrong$invocation_id <- "unrelated-invocation"
+  expect_error(
+    dbt_publish(f$lake, wrong, "customer_revenue"),
+    "same invocation"
+  )
+  expect_error(
+    dbt_publish(f$lake, f$dbt, "+customer_revenue"),
+    "exact dbt unique ID"
+  )
+  ambiguous <- f$dbt
+  ambiguous$manifest$nodes[["model.other.customer_revenue"]] <-
+    ambiguous$manifest$nodes[["model.shop.customer_revenue"]]
+  expect_error(
+    dbt_publish(f$lake, ambiguous, "customer_revenue"),
+    "unambiguous"
+  )
+  DBI::dbExecute(
+    f$lake$con,
+    "UPDATE lake.marts.customer_revenue SET revenue = -10"
+  )
+  checked <- contract(
+    columns = c(customer_id = "integer", revenue = "numeric"),
+    rules = list(quality_rule("positive", ~ revenue > 0))
+  )
+  blocked <- dbt_publish(
+    f$lake,
+    f$dbt,
+    "customer_revenue",
+    contract = checked,
+    stop_on_failure = FALSE
+  )
+  expect_identical(blocked$status, "blocked")
+  expect_identical(blocked$metadata$contract$id, "customer_revenue.contract")
+  expect_null(blocked$outputs)
+  expect_error(collect(blocked), "no successful output")
+  expect_equal(collect(first)$revenue, 100)
+  expect_identical(
+    resolve_release(f$lake, first$asset)$release_id[[1L]],
+    first$release_id
+  )
+  expect_true(DBI::dbIsValid(f$lake$con))
+})
