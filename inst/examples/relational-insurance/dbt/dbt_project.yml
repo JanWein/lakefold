@@ -1,0 +1,14 @@
+name: insurance
+version: '1.0.0'
+config-version: 2
+profile: insurance
+model-paths: [models]
+test-paths: [tests]
+macro-paths: [macros]
+models:
+  insurance:
+    +materialized: table
+    core:
+      +schema: core
+    marts:
+      +schema: marts
