@@ -47,6 +47,60 @@ can keep the same source, transformation and rule composition. It can still have
 different limits: a Parquet file does not become a lake release merely because
 both implement `write_target()`.
 
+## Choose execution defaults once
+
+```{r execution-defaults}
+execution <- execution_config(quality = "native", relationships = "native")
+result <- orders |> run(execution = execution)
+collect(result)
+```
+
+A definition describes the requested work; an explicit execution value supplies
+optional engine and destination defaults. A step's explicit engine wins over the
+default. Engine defaults travel through nested products and lookup dependencies.
+Destination and layer defaults apply only to the root product. Dependencies with
+no target remain in memory; their configured targets and layers remain unchanged. `ingest()` always accepts into RAW and rejects
+conflicting publication-layer defaults. There is no ambient global context.
+
+Specialist Pointblank agents and arbitrary quality functions keep their own
+behavior. Choosing an engine for simple rules does not translate unsupported
+specialist checks. `execution_config(quality = "pointblank", relationships = "dm")`
+uses the optional engines with the same predicates and keys. Quality engine
+selection participates in a stored contract's fingerprint. Changing engines for
+an already registered explicit contract can require a new contract version;
+the registered immutable version is not silently replaced.
+
+## Reuse expectations without inventing meaning
+
+```{r contract-composition}
+order_contract <- contract("orders.schema", columns = c(id = "integer", amount = "numeric"),
+  key = "id", grain = "One order")
+enriched_contract <- contract_update(order_contract, id = "orders.enriched.schema",
+  columns = c(channel = "character"), required = c(order_contract$required, "channel"))
+```
+
+`contract_update()` retains the original definition and derives an explicitly
+identified successor. New columns are optional unless included in `required`.
+The key remains meaningful here because adding an attribute preserves one order
+per row. Changing grain requires an explicit key decision. Removing or changing
+columns with existing rules requires explicit rule review. Arbitrary dplyr
+transformations do not receive invented metadata or automatic key guarantees.
+Simple formulas in contracts and `add_quality()` use the same normalization.
+
+## Correct an input without reconstructing the workflow
+
+```{r corrections}
+corrected_orders <- orders |>
+  replace_sources(source_1 = data.frame(id = 1:2, amount = c(10, 25)))
+corrected_orders |> run() |> collect()
+```
+
+For a root product, replacements use named source aliases; a nested product may
+be selected by its ID. Every matching graph reference is updated while shared
+relationships are retained. Unknown and ambiguous names fail early. A managed
+dbt project uses its logical source names. Replacing a definition does not rerun
+it, update an already published release or silently unpin a previous result.
+
 ## The internal layers have small responsibilities
 
 1. **Normalization** accepts convenient R inputs and gives them a consistent role.
@@ -85,8 +139,8 @@ execution, while ordinary SQL models and dbt tests remain outside the R grammar.
 
 ```{r result}
 result <- run(orders)
-result$lifecycle
 status(result)
+lineage(result)
 quality(result)
 collect(result)
 ```
@@ -96,6 +150,10 @@ states, timestamps, inputs, outputs, quality, status and available schema/row
 metadata. A run can complete in memory, publish, reuse a cached release, be
 blocked by quality, or fail during execution. Printing and accessors show the
 useful summary; raw conditions remain available locally for debugging.
+`status()` retains the native `status` and adds the common `outcome` categories
+`succeeded`, `blocked`, `failed` and `skipped`. `lineage(result)` reads recorded
+execution inputs, including pinned release identities when present; it does not
+resolve the definition against today's current data.
 
 Metadata is inferred from execution where possible. Manual metadata is mainly
 business meaning: ownership, descriptions, declared keys and expectations.
@@ -116,6 +174,7 @@ consumes metadata. These are separate responsibilities.
 | DBI source connection factory | tidyweave | Factory sources materialize before closing; lazy output is rejected |
 | Caller-supplied lake | Caller | Close with `close_lake()` when finished |
 | Folder/config opened by a lake target | tidyweave | The result keeps a durable release reference |
+| Configuration/folder passed to report issuance or reading | tidyweave | Issuance writes explicitly; reading is read-only |
 | dbt subprocess connections | dbt | Close conflicting local database connections before invocation |
 | HTTP authentication | httr2 or your request factory | Supply fresh runtime credentials; do not store them in definitions |
 
@@ -123,6 +182,23 @@ Lazy execution keeps supported computation in DBI/Arrow. R-only algorithms and
 certain targets need collection; use `collect()` deliberately. The lake target
 archives materialized inputs. A multi-source join across different backends also
 needs an explicit movement strategy; the framework does not silently invent one.
+
+## Measure in batches, issue explicitly
+
+`measure(approved, metrics = metrics, at = dates, period = "each")` computes the
+metric-by-date combinations and keeps their original manifests in one measurement
+set. `collect()` exposes a long tibble with dimensions, `.metric`, `.period`,
+`.unit` and `value`. The list-valued `.period` preserves dates, including an
+explicit multi-date selection for `period = "aggregate"`. Aggregate mode still
+rejects a multi-date stock metric; convenience does not change time semantics.
+
+`report_release(config, id, measurements, code_version = ...)` issues the original
+measurement set. Its values and labels are integrity-checked, and its exact input
+releases remain evidence. An ordinary collected table does not carry enough
+information to issue that report. `report_read(config, id, values_only = TRUE)`
+returns the saved batch as tidy values without recalculation. See the
+[insurance example](relational-insurance.html) for correction and preservation
+assertions across two monthly periods.
 
 ## Guarantees stay with their owner
 

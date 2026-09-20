@@ -1,3 +1,26 @@
+# tidyweave 0.11.0
+
+* `contract_update()` derives a new explicit contract identity while reusing
+  columns and expectations. Removing or changing columns and grain requires
+  explicit decisions about affected keys, non-null fields and rules.
+* `execution_config()` supplies explicit quality, relationship, destination and
+  layer defaults to `run()`, `publish()` and `ingest()`. Engine defaults propagate
+  through dependencies; local choices win and configured targets are preserved.
+* `measure()` accepts a named list of metrics and computes each selected period
+  or an explicit period aggregate. `collect()` returns tidy values while the
+  original measurement set retains individual release manifests.
+* `replace_sources()` replaces named inputs or nested product definitions without
+  rebuilding the dependency graph. Managed dbt projects accept updated logical
+  source bindings through the same verb; pinned results remain explicit.
+* `report_release()` and `report_read()` accept lake configurations or existing
+  local folders, managing owned connections automatically. Saved batch reports
+  retain measurement labels and periods and read back as tidy values.
+* `status()` exposes common `outcome` categories while retaining native statuses.
+  `lineage()` accepts execution results and reports recorded input evidence.
+
+This is a development version. Stored releases and issued-report evidence retain
+their integrity requirements; API stability begins at the first release candidate.
+
 # tidyweave 0.10.0
 
 * Products accept their primary data directly. Supported ordinary dplyr verbs

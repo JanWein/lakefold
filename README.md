@@ -49,10 +49,26 @@ and `run()` does this automatically.
 
 Use `add_lookup(customers, by = dplyr::join_by(customer_id))` for a checked
 many-to-one enrichment. Parent keys must be unique and non-missing; unmatched
-children fail by default. `engine = "dm"` selects optional dm validation.
-`add_quality(~ amount >= 0, engine = "pointblank")` changes the quality engine
-without changing the predicate. Advanced agents and arbitrary R functions remain
-available when a simple predicate is insufficient.
+children fail by default. Choose optional engines once when executing:
+
+```r
+# Optional packages: pointblank and dm
+execution <- execution_config(quality = "pointblank", relationships = "dm")
+result <- orders |> run(execution = execution)
+status(result)
+lineage(result)
+```
+
+Definitions retain their ordinary predicates and dplyr expressions. Engine
+defaults propagate through dependencies; explicit choices on individual steps
+win. Destination and publication-layer defaults apply only to the root product.
+Dependencies without a target stay in memory; existing dependency targets remain
+unchanged. The configuration is an ordinary value passed to execution, not mutable
+global state. Advanced agents and ordinary R functions remain available.
+
+Quality engine selection participates in the stored contract fingerprint.
+Switching engines for an already registered explicit contract can require a new
+contract version; it does not rewrite the immutable registered definition.
 
 Products and successful results can be inputs to another product. Lake results
 pin immutable releases. Other results reuse their retained submitted table or
@@ -130,6 +146,30 @@ products, builds dbt reporting models and preserves an issued report after a
 correction. It explains the meaning of each row and how to avoid counting
 premium due more than once when a policy has several payments.
 
+## Reuse definitions and consume results
+
+`contract_update()` derives an explicitly identified contract from an existing
+one. Added columns can reuse the original promises; changed grain requires an
+explicit new key and rule decision. `replace_sources()` updates a named input or
+nested product while retaining the rest of the workflow. The original definition
+and already issued results remain unchanged.
+
+```r
+# Given approved data and a named list of metric definitions:
+measurements <- measure(approved, metrics = metrics,
+  at = as.Date(c("2026-01-01", "2026-02-01")), period = "each")
+collect(measurements)
+report_release(config, "monthly-report.v1", measurements,
+  code_version = "report-v1")
+```
+
+Batch collection returns a tidy table with metric, selected period, unit and
+value, plus requested dimensions. Use `period = "aggregate"` explicitly to
+calculate across periods; stock metrics still require one date. Report issuance
+uses the original measurement set to preserve evidence and manages its own
+connection when given a configuration. The insurance walkthrough demonstrates
+corrections and verifies that the original report remains unchanged.
+
 ## Learn by building
 
 1. [Why use it?](https://janwein.github.io/tidyweave/articles/why-tidyweave.html)
@@ -167,7 +207,7 @@ streaming engine, enterprise identity system or distributed transaction manager.
 Lake and local evidence writes require one coordinated writer. Lazy execution
 still depends on the operations supported by the selected backend.
 
-**0.10.0 is a development version, not a stable release candidate.** Public APIs
+**0.11.0 is a development version, not a stable release candidate.** Public APIs
 may change without compatibility aliases. The package was previously named
 lakefold. See [CONTRIBUTING.md](CONTRIBUTING.md) for the English documentation,
 Posit skills, testing and package-development workflow. MIT licensed.

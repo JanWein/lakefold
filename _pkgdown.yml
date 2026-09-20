@@ -6,25 +6,25 @@ home:
 template:
   bootstrap: 5
 reference:
-  - title: Start with a product
-    contents: [tidyweave-package, product, product-dplyr, add_source, add_lookup, ingest, run, publish, collect, inspect, plan, validate]
-  - title: Contracts and quality
-    contents: [contract, contract_from, contract_confirm, contract_diff, quality_rule, quality_reference, quality, expect_quality, profile_data, quality_report, quality_errors, pointblank_report, contract_yaml]
-  - title: Sources and transformations
-    contents: [source_file, source_database, source_release, source_parquet, source_api, source_pins, sql_transform, transform_dbt]
-  - title: Choose a destination
-    contents: [target_lake, target_database, target_parquet, target_pins]
-  - title: Execution evidence and metadata
-    contents: [status, run_history, retry_catalogs, catalog_openlineage, catalog_openmetadata, catalog_openmetadata_dbt, catalog_export, catalog_app]
-  - title: Projects and orchestration
-    contents: [init_project, as_targets]
-  - title: Lake configuration and history
-    contents: [open_lake, lake_config, registry_duckdb, setup_lake, disconnect_lake, write_data, read_release, tbl, compare, releases, lineage, register, registry, freshness, check_delivery, interrupted, recover, cleanup]
-  - title: Metrics and issued reports
+  - title: Everyday - define and execute a product
+    contents: [tidyweave-package, product, product-dplyr, add_source, add_lookup, ingest, run, publish, collect, inspect, plan, validate, execution_config, replace_sources]
+  - title: Everyday - expectations and diagnostics
+    contents: [contract, contract_update, contract_from, contract_confirm, contract_diff, quality_rule, quality_reference, quality, expect_quality, profile_data, quality_report, quality_errors, pointblank_report, contract_yaml, status, lineage]
+  - title: Everyday - metrics and issued reports
     contents: [model, metric, measure, report_release, report_read, commons_yaml]
-  - title: Work with dbt
+  - title: Integration - sources and transformations
+    contents: [source_file, source_database, source_release, source_parquet, source_api, source_pins, sql_transform, transform_dbt]
+  - title: Integration - destinations
+    contents: [target_lake, target_database, target_parquet, target_pins]
+  - title: Integration - execution evidence and metadata
+    contents: [run_history, retry_catalogs, catalog_openlineage, catalog_openmetadata, catalog_openmetadata_dbt, catalog_export, catalog_app]
+  - title: Integration - projects and orchestration
+    contents: [init_project, as_targets]
+  - title: Integration - lake configuration and history
+    contents: [open_lake, lake_config, registry_duckdb, setup_lake, disconnect_lake, write_data, read_release, tbl, compare, releases, register, registry, freshness, check_delivery, interrupted, recover, cleanup]
+  - title: Integration - dbt
     contents: [dbt_init, dbt_project, dbt_sources, dbt_contract, dbt_build, dbt_status, dbt_lineage, dbt_model, dbt_publish]
-  - title: Write an extension
+  - title: Extension - adapter interfaces
     contents: [capabilities, check_component, read_source, execute_transform, run_quality, write_target, publish_metadata]
 articles:
   - title: Start here
