@@ -1,3 +1,3 @@
 library(testthat)
-library(lakefold)
-test_check("lakefold")
+library(tidyweave)
+test_check("tidyweave")
