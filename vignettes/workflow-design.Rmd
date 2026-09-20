@@ -65,10 +65,11 @@ conflicting publication-layer defaults. There is no ambient global context.
 Specialist Pointblank agents and arbitrary quality functions keep their own
 behavior. Choosing an engine for simple rules does not translate unsupported
 specialist checks. `execution_config(quality = "pointblank", relationships = "dm")`
-uses the optional engines with the same predicates and keys. Quality engine
-selection participates in a stored contract's fingerprint. Changing engines for
-an already registered explicit contract can require a new contract version;
-the registered immutable version is not silently replaced.
+uses the optional engines with the same predicates and keys. Selecting an
+execution default leaves the declared contract and its immutable identity
+unchanged. Execution evidence separately records the resolved checking engine.
+Changing the execution can still require a new explicit product code version;
+changing a business promise requires a new contract version.
 
 ## Reuse expectations without inventing meaning
 
@@ -91,11 +92,13 @@ Simple formulas in contracts and `add_quality()` use the same normalization.
 
 ```{r corrections}
 corrected_orders <- orders |>
-  replace_sources(source_1 = data.frame(id = 1:2, amount = c(10, 25)))
+  replace_sources(orders = data.frame(id = 1:2, amount = c(10, 25)))
 corrected_orders |> run() |> collect()
 ```
 
-For a root product, replacements use named source aliases; a nested product may
+A primary source supplied to `product("orders", data)` defaults to the name
+`orders`; `source_name` can make that name more specific. For a root product,
+replacements use named source aliases; a nested product may
 be selected by its ID. Every matching graph reference is updated while shared
 relationships are retained. Unknown and ambiguous names fail early. A managed
 dbt project uses its logical source names. Replacing a definition does not rerun

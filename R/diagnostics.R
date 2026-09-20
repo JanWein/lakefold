@@ -1,6 +1,6 @@
 #' Inspect execution status across R and dbt workflows
 #' @param x A connected lake, [run()] result, [dbt_build()] result or a
-#'   measurement set from [measure()].
+#'   measurement or measurement set from [measure()].
 #' @param asset Optional asset ID when querying a lake.
 #' @returns A tibble with `engine`, `id`, `status`, `success`, `release_id`,
 #'   `asset`, `outcome` and `message`. `outcome` normalizes native statuses to
@@ -18,8 +18,8 @@
 #' disconnect_lake(lake)
 #' unlink(root, recursive = TRUE)
 status <- function(x, asset = NULL) {
-  if (inherits(x, "tw_measurement_set")) {
-    validate_measurement_set(x)
+  if (inherits(x, "tw_measurement_set") || is_measurement(x)) {
+    x <- diagnostic_measurements(x)
     return(dplyr::bind_rows(lapply(x, function(value) {
       manifest <- attr(value, "tw_manifest")
       tibble::tibble(
@@ -30,7 +30,12 @@ status <- function(x, asset = NULL) {
         success = TRUE,
         release_id = manifest$release_id,
         asset = manifest$product,
-        message = ""
+        message = paste(
+          manifest$metric,
+          "was calculated from",
+          manifest$product,
+          "using its pinned published input."
+        )
       )
     })))
   }
@@ -57,7 +62,7 @@ status <- function(x, asset = NULL) {
       success = x$status %in% c("completed", "published", "cached"),
       release_id = x$release_id,
       asset = x$asset %||% NA_character_,
-      message = ""
+      message = run_result_message(x)
     ))
   }
   if (inherits(x, "tw_dbt_result")) {
@@ -121,7 +126,10 @@ metadata_filter <- function(lake, table, asset = NULL, run_id = NULL) {
 #' for that exact published stand. Cached runs resolve to the original release's
 #' checks. These choices prevent an older successful run hiding a recent
 #' failure.
-#' @param x A lake, run result, dbt result or quality tibble.
+#' @param x A lake, run result, measurement, measurement set, dbt result or
+#'   quality tibble.
+#'   Measurement sets resolve their exact input releases using retained
+#'   references. Unavailable references return explicit `not_checked` evidence.
 #' @param run_id Run ID when `x` is a lake.
 #' @param asset Asset ID. Required with `release`; otherwise selects the latest
 #'   attempt. Supply at most one of `run_id` and `asset`.
@@ -136,9 +144,10 @@ metadata_filter <- function(lake, table, asset = NULL, run_id = NULL) {
 #' quality(validate(data.frame(id = c(1L, 1L)), contract))
 quality <- function(x, run_id = NULL, asset = NULL, release = NULL) {
   if (inherits(x, "tw_measurement_set")) {
-    abort(
-      "Measurement sets retain input quality summaries, not full checks. Use quality(lake, asset = ..., release = ...) for the exact input release."
-    )
+    return(measurement_quality(x))
+  }
+  if (is.data.frame(x) && is.list(attr(x, "tw_manifest"))) {
+    return(measurement_quality(list(x)))
   }
   if (inherits(x, "tw_lake")) {
     if (
@@ -165,10 +174,13 @@ quality <- function(x, run_id = NULL, asset = NULL, release = NULL) {
     }
     out <- metadata_filter(x, "quality_results", run_id = run_id)
   } else if (inherits(x, "tw_run_result")) {
+    x <- run_result_evidence(x)
     if (is.null(x$quality)) {
-      abort(
-        "This result has no in-memory checks; use quality(lake, run_id = ...)."
-      )
+      return(quality(quality_row(
+        "execution",
+        "not_checked",
+        message = "No retained quality evidence is available for this result."
+      )))
     }
     out <- x$quality
   } else if (inherits(x, "tw_dbt_result")) {
@@ -213,7 +225,9 @@ quality <- function(x, run_id = NULL, asset = NULL, release = NULL) {
   ) {
     out <- x
   } else {
-    abort("x must be quality results, a lake, a run result or a dbt result.")
+    abort(
+      "x must be quality results, a lake, a run result, a measurement or a dbt result."
+    )
   }
   out$failure_rate <- ifelse(
     is.finite(out$n_total) & out$n_total > 0,
@@ -247,7 +261,7 @@ releases <- function(lake, asset = NULL) {
 #' It does not infer column lineage or reconstruct a single historical DAG.
 #' Run results expose only recorded inputs for that exact execution, without
 #' querying the latest lake state or inferring unrecorded upstream edges.
-#' @param x Connected lake, run result, measurement set, dbt result or dbt
+#' @param x Connected lake, run result, measurement, measurement set, dbt result or dbt
 #'   artifact directory. Measurement edges describe the input release and
 #'   metric version; they have no execution run ID.
 #' @param asset Optional starting dataset ID (dbt unique ID for dbt inputs).
@@ -271,8 +285,8 @@ lineage <- function(
     edges <- registry(x, "lineage_edges")
   } else if (inherits(x, "tw_run_result")) {
     edges <- run_result_lineage(x)
-  } else if (inherits(x, "tw_measurement_set")) {
-    validate_measurement_set(x)
+  } else if (inherits(x, "tw_measurement_set") || is_measurement(x)) {
+    x <- diagnostic_measurements(x)
     edges <- unique(dplyr::bind_rows(lapply(x, function(value) {
       manifest <- attr(value, "tw_manifest")
       tibble::tibble(
@@ -369,4 +383,209 @@ run_result_lineage <- function(x) {
     to_version = rep(version(x$release_id, x$run_id), nrow(inputs)),
     relation = rep("consumed_from", nrow(inputs))
   ))
+}
+
+
+# Keep execution errors out of summaries: they may contain credentials or rows.
+run_result_message <- function(x) {
+  name <- x$asset %||% x$metadata$product %||% "This run"
+  state <- switch(
+    x$status,
+    completed = "completed; the result is ready to collect.",
+    published = "was published; the saved result is ready to collect.",
+    cached = "reused its published result; it is ready to collect.",
+    blocked = "is blocked; no successful output is available.",
+    missing = "is blocked because an input delivery is missing.",
+    error = "failed during execution; no successful output is available.",
+    failed = "failed during execution; no successful output is available.",
+    skipped = "was skipped; no successful output is available.",
+    "has no confirmed successful output."
+  )
+  message <- paste(name, state)
+  reason <- run_result_known_reason(x$error)
+  if (!is.null(reason)) {
+    message <- paste(message, reason)
+  }
+  checks <- x$quality
+  if (!is.data.frame(checks) || !nrow(checks)) {
+    upstream <- run_result_evidence(x)
+    if (
+      !identical(upstream, x) &&
+        is.data.frame(upstream$quality) &&
+        nrow(upstream$quality)
+    ) {
+      return(paste(message, "Upstream:", run_result_message(upstream)))
+    }
+    return(message)
+  }
+  blocked <- checks[!checks$status %in% c("passed", "warning"), , drop = FALSE]
+  if (nrow(blocked)) {
+    # Counts belong to each rule, not distinct rows across different checks.
+    detail <- vapply(
+      seq_len(min(3L, nrow(blocked))),
+      function(i) {
+        check <- blocked[i, ]
+        count <- if (is.finite(check$n_failed) && is.finite(check$n_total)) {
+          paste0(" (", check$n_failed, " of ", check$n_total, " checks failed)")
+        } else {
+          ""
+        }
+        paste0(check$rule, ": ", check$status, count)
+      },
+      character(1)
+    )
+    extra <- if (nrow(blocked) > 3L) {
+      paste0("; ", nrow(blocked) - 3L, " more")
+    } else {
+      ""
+    }
+    message <- paste(
+      message,
+      paste0(
+        nrow(blocked),
+        " check",
+        if (nrow(blocked) == 1L) "" else "s",
+        " requiring attention",
+        ": ",
+        paste(detail, collapse = "; "),
+        extra,
+        "."
+      )
+    )
+  } else if (any(checks$status == "warning")) {
+    message <- paste(
+      message,
+      "Quality warnings are available in quality(result)."
+    )
+  }
+  message
+}
+
+measurement_quality <- function(x) {
+  if (inherits(x, "tw_measurement_set")) {
+    validate_measurement_set(x)
+  }
+  out <- lapply(x, function(value) {
+    manifest <- attr(value, "tw_manifest")
+    reference <- attr(value, "tw_quality_reference")
+    unavailable <- function() {
+      quality_row(
+        "input_release",
+        "not_checked",
+        stage = "input",
+        message = "Exact input quality evidence is unavailable for this measurement."
+      )
+    }
+    checks <- if (
+      !identical(manifest$result_hash, fingerprint(as.data.frame(value))) ||
+        !is.list(reference) ||
+        !identical(reference$asset, manifest$product) ||
+        !identical(reference$release, manifest$release_id)
+    ) {
+      unavailable()
+    } else {
+      tryCatch(
+        {
+          borrowed <- inherits(reference$lake, "tw_lake") &&
+            DBI::dbIsValid(reference$lake$con)
+          if (borrowed) {
+            lake <- reference$lake
+            if (
+              !identical(
+                lake$config[c("backend", "catalog", "storage")],
+                reference$config[c("backend", "catalog", "storage")]
+              )
+            ) {
+              abort("The retained quality reference does not match the lake.")
+            }
+          } else {
+            lake <- connect_lake(reference$config, read_only = TRUE)
+            on.exit(disconnect_lake(lake), add = TRUE)
+          }
+          quality(lake, asset = reference$asset, release = reference$release)
+        },
+        error = function(e) unavailable()
+      )
+    }
+    if (!nrow(checks)) {
+      checks <- unavailable()
+    }
+    checks$.metric <- manifest$metric
+    checks$.asset <- manifest$product
+    checks$.release <- manifest$release_id
+    checks
+  })
+  quality(dplyr::bind_rows(out))
+}
+
+
+# Preserve the original condition on result$error, but never print its payload.
+run_result_parent <- function(x) {
+  if (is.null(x$error)) {
+    return(NULL)
+  }
+  rlang::error_cnd(
+    "tw_execution_cause",
+    message = "An execution error was retained in condition$result$error for local inspection."
+  )
+}
+
+
+is_measurement <- function(x) {
+  is.data.frame(x) && is.list(attr(x, "tw_manifest"))
+}
+
+diagnostic_measurements <- function(x) {
+  if (inherits(x, "tw_measurement_set")) {
+    validate_measurement_set(x)
+    return(x)
+  }
+  manifest <- attr(x, "tw_manifest")
+  if (!identical(manifest$result_hash, fingerprint(as.data.frame(x)))) {
+    abort("Metric result changed after calculation.")
+  }
+  list(x)
+}
+
+
+run_result_evidence <- function(x) {
+  # Traverse only structured result references, never exception text.
+  # A fixed bound also handles malformed cyclic adapter conditions.
+  for (i in seq_len(20L)) {
+    if (is.data.frame(x$quality) && nrow(x$quality)) {
+      return(x)
+    }
+    upstream <- x$error$result
+    if (!inherits(upstream, "tw_run_result")) {
+      return(x)
+    }
+    x <- upstream
+  }
+  x
+}
+
+
+run_result_known_reason <- function(error) {
+  # Only typed package conditions expose allowlisted metadata and fixed advice.
+  for (i in seq_len(20L)) {
+    if (!inherits(error, "condition")) {
+      return(NULL)
+    }
+    if (inherits(error, "tw_definition_changed")) {
+      return(paste0(
+        "Definition changed without a version bump: ",
+        error$definition_id,
+        " ",
+        error$definition_version,
+        ". Review the definition and give the changed definition a new version before publishing."
+      ))
+    }
+    if (inherits(error, "tw_read_only")) {
+      return(
+        "The target is read-only. Choose a writable target before publishing."
+      )
+    }
+    error <- error$parent
+  }
+  NULL
 }

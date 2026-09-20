@@ -1,12 +1,12 @@
 # tidyweave
 
-**Turn repeated data work into a small, reusable R workflow.**
+**Define your data work once. Check a delivery, publish it and reuse the same
+instructions for the next one.**
 
-You already know how to read a file, clean a table and calculate a result.
-tidyweave connects those steps with checks, publication and execution evidence.
-The next delivery follows the same instructions. A failed check is visible.
-When you choose a lake target, a correction creates a new version while earlier
-reports can keep reading the exact data they used.
+tidyweave brings ordinary R tables, dplyr transformations, quality checks and
+versioned results into one workflow. Start with a table. Add storage when you
+need history. Earlier published results and issued reports keep their original
+inputs when a correction arrives.
 
 ## Start with a table
 
@@ -19,195 +19,107 @@ remotes::install_github("JanWein/tidyweave")
 ```r
 library(tidyweave)
 
-orders <- product("orders", data.frame(id = 1:3, amount = c(25, 75, 50)))
-
-orders |> run() |> collect()
-```
-
-A **product** is a name and the instructions for producing a table. `run()`
-executes those instructions; `collect()` returns an ordinary tibble. This example
-needs no database, catalog, owner field or manual version number.
-
-## Add one capability at a time
-
-```r
-orders <- orders |>
+orders <- product("orders", data.frame(id = 1:3, amount = c(25, 75, 50))) |>
   dplyr::mutate(amount = round(amount, 2)) |>
-  add_contract(c(id = "integer", amount = "numeric")) |>
   add_quality(~ amount >= 0)
 
-result <- run(orders)
-quality(result)
+result <- orders |> run()
+collect(result)
 ```
 
-The dplyr call is deferred until execution and uses ordinary dplyr semantics.
-`add_transform()` still accepts ordinary R functions. Contracts describe the expected table.
-Quality rules decide whether its contents are acceptable. Checks do not silently
-remove bad rows. Printing a product shows its components; `explain(orders)`
-explains the plan. `validate(orders)` checks configuration without fetching data,
-and `run()` does this automatically.
+A **product** holds the instructions. `run()` executes them; `collect()` returns
+an ordinary tibble. The example needs no database, owner field or version number.
+Use familiar dplyr expressions to explore the collected table. Add an explicit
+contract when you know the required types, business key and meaning of a row.
 
-Use `add_lookup(customers, by = dplyr::join_by(customer_id))` for a checked
-many-to-one enrichment. Parent keys must be unique and non-missing; unmatched
-children fail by default. Choose optional engines once when executing:
+## Understand a failed delivery
 
 ```r
-# Optional packages: pointblank and dm
-execution <- execution_config(quality = "pointblank", relationships = "dm")
-result <- orders |> run(execution = execution)
-status(result)
-lineage(result)
+bad_delivery <- data.frame(id = 1:3, amount = c(-25, 75, 50))
+failed <- orders |> run(data = bad_delivery, stop_on_failure = FALSE)
+status(failed)
+quality_report(failed)
 ```
 
-Definitions retain their ordinary predicates and dplyr expressions. Engine
-defaults propagate through dependencies; explicit choices on individual steps
-win. Destination and publication-layer defaults apply only to the root product.
-Dependencies without a target stay in memory; existing dependency targets remain
-unchanged. The configuration is an ordinary value passed to execution, not mutable
-global state. Advanced agents and ordinary R functions remain available.
+Checks reject unacceptable data; they do not silently drop bad rows. The
+result carries its diagnostic evidence. `quality_report()` returns a table when
+no output path is supplied. `quality()` gives the underlying checks, and
+`lineage()` explains the inputs.
 
-Quality engine selection participates in the stored contract fingerprint.
-Switching engines for an already registered explicit contract can require a new
-contract version; it does not rewrite the immutable registered definition.
-
-Products and successful results can be inputs to another product. Lake results
-pin immutable releases. Other results reuse their retained submitted table or
-lazy query, with the original backend's mutability; a DBI append result reuses
-the submitted batch. Product definitions execute their instructions. `collect()`
-is explicit when an R-only algorithm needs data in memory. Lake publication
-materializes data for archival and validation.
-
-## Save data when you need to
+## Publish, then accept the next delivery
 
 ```r
-# Optional, for a local lake with release history:
+# Optional dependency for a local lake with release history:
 install.packages("duckdb")
-published <- orders |> publish(to = "reporting-lake")
-collect(published)
+first <- orders |> publish(to = "reporting-lake")
+
+corrected <- data.frame(id = 1:3, amount = c(30, 75, 50))
+second <- orders |> publish(data = corrected, to = "reporting-lake")
+collect(first)  # Original values remain available
+collect(second)
 ```
 
-`run()` without a target keeps the result in memory. `publish()` supplies a
-local lake target when none is configured. Publishing means writing checked
-data to the selected destination; **it does not make data public on the internet**.
-A lake keeps immutable releases and checks the complete candidate before making
-it current. Other targets have their own persistence guarantees.
+`run()` without a target is an in-memory trial. `publish()` writes checked data
+to the chosen destination, not to the public internet. The local lake keeps
+immutable releases and checks the complete candidate before making it current.
+These deliveries replace the complete table. Complete-month replacement is an
+explicit storage choice, not something inferred from a date column.
 
-| Need | Optional addition |
+For repeated work, keep optional engine and destination defaults in one ordinary
+value: `execution_config(to = "reporting-lake")`. Pass it as the product's
+`execution` argument. Step-specific choices remain explicit; defaults are not
+global settings. In workflows with several inputs, supply a named `sources` list
+at execution. Stable source names and nested product IDs identify what changed.
+
+## Calculate and keep a report
+
+```r
+metrics <- metric_set("orders",
+  total = sum(amount),
+  count = dplyr::n(),
+  code_version = "orders-v1", approved = TRUE)
+
+values <- second |> measure(metrics = metrics)
+collect(values)
+values |> report_release("orders-report-v1", code_version = "report-v1")
+report_read("reporting-lake", "orders-report-v1", values_only = TRUE)
+```
+
+Metric sets share their product, dimensions and time settings. For exploration,
+omit approval and code version; saving an issued report requires explicitly
+approved, versioned definitions. Approval records your decision, not an external
+authorization process. Report readback retrieves saved values without recalculating.
+
+## Follow one guide, then add what you need
+
+Start with [the everyday workflow](https://janwein.github.io/tidyweave/articles/everyday-workflows.html):
+define, try, publish, correct, compare, calculate and reopen a report.
+
+| When you need it | Guide |
 |---|---|
-| Query an existing database | `source_database(con, table = "orders")` |
-| Read Parquet or an API | `source_parquet(...)`, `source_api(...)` |
-| Write a database table, file or pin | `target_database(...)`, `target_parquet(...)`, `target_pins(...)` |
-| Use specialist checks or SQL builds | pointblank and dbt adapters |
-| Keep local run history | `run(orders, evidence = "runs")` |
-| Send lineage or catalog metadata | `catalog_openlineage(...)`, `catalog_openmetadata(...)` |
-| Manage a dependency graph or deployment | `as_targets(...)`, `init_project(...)` |
+| Several tables and checked lookups | [Compose products](https://janwein.github.io/tidyweave/articles/composing-products.html) |
+| Checked receipt data and SQL layers | [A layered data stack](https://janwein.github.io/tidyweave/articles/layered-data-stack.html) |
+| Full insurance workflow with dm, dbt and corrections | [Relational insurance reporting](https://janwein.github.io/tidyweave/articles/relational-insurance.html) |
+| Existing databases, files and specialist packages | [Optional integrations](https://janwein.github.io/tidyweave/articles/optional-integrations.html) |
+| Complete-month corrections and report history | [Monthly reporting](https://janwein.github.io/tidyweave/articles/getting-started.html) |
+| Implement another backend | [Write an adapter](https://janwein.github.io/tidyweave/articles/extending-tidyweave.html) |
 
-## Grow into a layered data stack
+The public API uses pipes, readable verbs and familiar R objects. Internally,
+specifications, validation and S3 adapters separate the requested work from its
+implementation, inspired structurally by tidymodels. DBI, Arrow, pointblank, dm
+and dbt retain their specialist jobs. Advanced receipt workflows use `ingest()`;
+low-level lake operations remain available in the integration reference.
 
-When several reports reuse the same deliveries, separate receiving data from
-preparing it and approving it for consumers. The optional lake/dbt workflow adds
-four explicit layers: **raw**, **staging**, **core** and **marts**.
+Lake and local evidence writes need one coordinated writer. Lake publication
+materializes a full candidate; lazy transformations depend on backend support.
+A dbt build and its final publication are separate steps, with no distributed
+transaction across the workflow. Scheduling, identity management, BI deployment
+and remote-storage verification remain outside the core package.
 
-```r
-config <- lake_config(path = "reporting-lake", backend = "duckdb",
-  layers = c("raw", "staging", "core", "marts"))
-
-accepted <- product("orders", "orders.csv") |>
-  add_quality(~ amount >= 0) |>
-  ingest(to = config)
-
-# With an existing SQL project whose models use source('inputs', 'orders'):
-approved <- dbt_project("analytics", lake = config,
-    sources = list(orders = accepted)) |>
-  run() |>
-  publish("customer_revenue")
-
-collect(approved)
-```
-
-`ingest()` checks the received data before RAW and retains receipt evidence when
-it rejects a delivery. The managed dbt project supplies its connection and exact
-source references. SQL models and dbt tests remain ordinary project files;
-`dbt_init()` provides an optional small starter. `publish()` takes a checked,
-immutable snapshot for consumers. Earlier dbt model writes are not rolled back
-when a later test fails. Without a contract, publication infers structure and
-does not invent business requirements.
-
-The [step-by-step layered guide](https://janwein.github.io/tidyweave/articles/layered-data-stack.html)
-starts with real R data, explains each layer and shows optional pointblank,
-DuckLake, OpenMetadata and report consumption. Shiny and Quarto use ordinary R
-tables. Power BI can consume an approved database or Parquet export through its
-existing connectors; deployment and refresh remain external responsibilities.
-
-For a complete worked example with several tables, the
-[relational insurance walkthrough](https://janwein.github.io/tidyweave/articles/relational-insurance.html)
-checks three deliveries, uses dm to enrich two independently contracted data
-products, builds dbt reporting models and preserves an issued report after a
-correction. It explains the meaning of each row and how to avoid counting
-premium due more than once when a policy has several payments.
-
-## Reuse definitions and consume results
-
-`contract_update()` derives an explicitly identified contract from an existing
-one. Added columns can reuse the original promises; changed grain requires an
-explicit new key and rule decision. `replace_sources()` updates a named input or
-nested product while retaining the rest of the workflow. The original definition
-and already issued results remain unchanged.
-
-```r
-# Given approved data and a named list of metric definitions:
-measurements <- measure(approved, metrics = metrics,
-  at = as.Date(c("2026-01-01", "2026-02-01")), period = "each")
-collect(measurements)
-report_release(config, "monthly-report.v1", measurements,
-  code_version = "report-v1")
-```
-
-Batch collection returns a tidy table with metric, selected period, unit and
-value, plus requested dimensions. Use `period = "aggregate"` explicitly to
-calculate across periods; stock metrics still require one date. Report issuance
-uses the original measurement set to preserve evidence and manages its own
-connection when given a configuration. The insurance walkthrough demonstrates
-corrections and verifies that the original report remains unchanged.
-
-## Learn by building
-
-1. [Why use it?](https://janwein.github.io/tidyweave/articles/why-tidyweave.html)
-   A concrete explanation of the problem and benefits.
-2. [Compose a product](https://janwein.github.io/tidyweave/articles/composing-products.html)
-   One table, checks, several inputs and optional storage.
-3. [Monthly reporting](https://janwein.github.io/tidyweave/articles/getting-started.html)
-   Accept a correction, reject a duplicate and reproduce an issued report.
-4. [A layered data stack](https://janwein.github.io/tidyweave/articles/layered-data-stack.html)
-   Receive checked RAW data, build SQL layers and approve outputs for consumers.
-5. [Relational insurance reporting](https://janwein.github.io/tidyweave/articles/relational-insurance.html)
-   Multiple inputs, real dm enrichment, reusable products, dbt and governed measures.
-6. [Architecture](https://janwein.github.io/tidyweave/articles/workflow-design.html)
-   How a simple API supports interchangeable components.
-7. [Write an adapter](https://janwein.github.io/tidyweave/articles/extending-tidyweave.html)
-   A complete source, target and quality extension.
+**0.12.0 is a development version.** APIs may change before the first stable
+release candidate; stored releases and issued-report evidence retain their
+integrity requirements.
 
 [Function reference](https://janwein.github.io/tidyweave/reference/index.html) ·
-[Architecture review](https://github.com/JanWein/tidyweave/blob/main/docs/REFACTOR_REVIEW.md) ·
-[Modern stack comparison](https://github.com/JanWein/tidyweave/blob/main/docs/MODERN_DATA_STACK.md) ·
-[Validation record](https://github.com/JanWein/tidyweave/blob/main/docs/VALIDATION.md)
-
-## Why this architecture
-
-The public API uses readable verbs, pipes and familiar R objects. Internally,
-normalization, specifications, preflight and S3 adapters separate the requested
-work from its implementation. Structural ideas from tidymodels support this
-modularity; users do not need machine-learning concepts or another object system.
-
-![A small product definition is normalized and validated, then executed with interchangeable components.](vignettes/figures/composition-architecture.svg)
-
-DBI, Arrow, pointblank, dbt and other specialist tools keep their own jobs.
-tidyweave supplies composition and evidence. It does not provide a scheduler,
-streaming engine, enterprise identity system or distributed transaction manager.
-Lake and local evidence writes require one coordinated writer. Lazy execution
-still depends on the operations supported by the selected backend.
-
-**0.11.0 is a development version, not a stable release candidate.** Public APIs
-may change without compatibility aliases. The package was previously named
-lakefold. See [CONTRIBUTING.md](CONTRIBUTING.md) for the English documentation,
-Posit skills, testing and package-development workflow. MIT licensed.
+[Validation record](https://github.com/JanWein/tidyweave/blob/main/docs/VALIDATION.md) ·
+[Contributing](CONTRIBUTING.md). MIT licensed.

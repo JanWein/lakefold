@@ -176,6 +176,7 @@ tw_execute.tw_dbt_project <- function(
   object,
   lake = NULL,
   execution = NULL,
+  sources = NULL,
   ...
 ) {
   if (!is.null(execution)) {
@@ -186,6 +187,7 @@ tw_execute.tw_dbt_project <- function(
   if (!is.null(lake)) {
     abort("dbt opens its own connections; omit lake.", "tw_dbt_invalid")
   }
+  object <- replace_execution_sources(object, sources = sources)
   dbt_build(object, ...)
 }
 

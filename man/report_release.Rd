@@ -4,11 +4,18 @@
 \alias{report_release}
 \title{Freeze metric results and input versions for a report}
 \usage{
-report_release(lake, id, results, code_version, params = list())
+report_release(
+  lake = NULL,
+  id,
+  results = NULL,
+  code_version,
+  params = list(),
+  to = NULL
+)
 }
 \arguments{
-\item{lake}{Connected lake, lake configuration or local lake folder.
-Supplied connections remain open; internally opened connections always close.}
+\item{lake}{For data-first use, the measurement results. Also accepts a
+connected lake, lake configuration or local lake folder for lake-first use.}
 
 \item{id}{Immutable report release id.}
 
@@ -17,13 +24,20 @@ Supplied connections remain open; internally opened connections always close.}
 \item{code_version}{Reporting code version.}
 
 \item{params}{Report parameters.}
+
+\item{to}{Report destination. When omitted in data-first use, inferred from
+matching saved lake references on every result.
+Supplied connections remain open; internally opened connections always close.}
 }
 \value{
 Report manifest including result values as data frames, both on
 initial save and an identical retry. Retries preserve original timestamps.
 }
 \description{
-Freeze metric results and input versions for a report
+Report JSON stores numeric values. Integer64 columns must stay within
+-2^53 to 2^53 inclusive so saved values can be read back exactly. Larger
+integers are rejected before writing; retain those individual results
+in a storage format with integer64 support.
 }
 \examples{
 \dontshow{if (requireNamespace("duckdb", quietly = TRUE)) withAutoprint(\{ # examplesIf}

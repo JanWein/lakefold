@@ -174,55 +174,29 @@ insurance_contracts <- function() {
 }
 
 insurance_metrics <- function() {
-  list(
-    active_policies = metric(
-      "insurance.active_policies",
-      "insurance.monthly_performance",
-      expr = sum(active_policies, na.rm = TRUE),
-      dimensions = c("company", "channel"),
-      time_column = "month",
-      time_behavior = "stock",
-      unit = "policies",
-      description = "Active policies in one monthly snapshot.",
-      approved = TRUE,
-      code_version = "insurance-example-v2"
+  metric_set(
+    "insurance.monthly_performance",
+    active_policies = sum(active_policies, na.rm = TRUE),
+    premium_due = sum(premium_due, na.rm = TRUE),
+    cash_collected = sum(cash_collected, na.rm = TRUE),
+    cash_to_due = sum(cash_collected, na.rm = TRUE) /
+      sum(premium_due, na.rm = TRUE),
+    dimensions = c("company", "channel"),
+    time_column = "month",
+    time_behavior = c(
+      active_policies = "stock",
+      premium_due = "flow",
+      cash_collected = "flow",
+      cash_to_due = "flow"
     ),
-    premium_due = metric(
-      "insurance.premium_due",
-      "insurance.monthly_performance",
-      expr = sum(premium_due, na.rm = TRUE),
-      dimensions = c("company", "channel"),
-      time_column = "month",
-      time_behavior = "flow",
-      unit = "EUR",
-      description = "Premium charges due during the selected months.",
-      approved = TRUE,
-      code_version = "insurance-example-v2"
+    units = c(
+      active_policies = "policies",
+      premium_due = "EUR",
+      cash_collected = "EUR",
+      cash_to_due = "ratio"
     ),
-    cash_collected = metric(
-      "insurance.cash_collected",
-      "insurance.monthly_performance",
-      expr = sum(cash_collected, na.rm = TRUE),
-      dimensions = c("company", "channel"),
-      time_column = "month",
-      time_behavior = "flow",
-      unit = "EUR",
-      description = "Cash received during the selected months.",
-      approved = TRUE,
-      code_version = "insurance-example-v2"
-    ),
-    cash_to_due = metric(
-      "insurance.cash_to_due",
-      "insurance.monthly_performance",
-      expr = sum(cash_collected, na.rm = TRUE) / sum(premium_due, na.rm = TRUE),
-      dimensions = c("company", "channel"),
-      time_column = "month",
-      time_behavior = "flow",
-      unit = "ratio",
-      description = "Synthetic cash-to-due ratio of sums; undefined if total due is zero. Not a regulatory arrears measure.",
-      approved = TRUE,
-      code_version = "insurance-example-v2"
-    )
+    approved = TRUE,
+    code_version = "insurance-example-v3"
   )
 }
 
@@ -267,27 +241,39 @@ run_relational_insurance <- function(
 
   contracts <- insurance_contracts()
 
-  raw <- list(
-    brokers = product("insurance.brokers", inputs$brokers) |>
+  deliveries <- list(
+    brokers = product(
+      "insurance.brokers",
+      inputs$brokers,
+      execution = execution
+    ) |>
       add_contract(contracts$brokers) |>
-      add_quality(~ channel %in% c("broker", "direct", "partner")) |>
-      ingest(execution = execution),
-    policy_months = product("insurance.policy_months", inputs$policy_months) |>
+      add_quality(~ channel %in% c("broker", "direct", "partner")),
+    policy_months = product(
+      "insurance.policy_months",
+      inputs$policy_months,
+      execution = execution
+    ) |>
       add_contract(contracts$policy_months) |>
       add_quality(
         ~ status %in% c("active", "pending", "lapsed") & premium_due >= 0
-      ) |>
-      ingest(execution = execution),
-    payments = product("insurance.payments", inputs$payments) |>
+      ),
+    payments = product(
+      "insurance.payments",
+      inputs$payments,
+      execution = execution
+    ) |>
       add_contract(contracts$payments) |>
-      add_quality(~ cash_amount > 0) |>
-      ingest(execution = execution)
+      add_quality(~ cash_amount > 0)
   )
+  raw <- lapply(deliveries, ingest)
   quality(raw$payments)
 
   policy_product <- product(
     "insurance.policy_months.enriched",
-    raw$policy_months
+    raw$policy_months,
+    source_name = "policy_months",
+    execution = execution
   ) |>
     add_lookup(raw$brokers, by = dplyr::join_by(broker_id)) |>
     add_contract(contracts$enriched_policy_months)
@@ -298,16 +284,19 @@ run_relational_insurance <- function(
   ) |>
     dplyr::select(policy_id, month, company, broker_id, policy_status = status)
 
-  payment_product <- product("insurance.payments.enriched", raw$payments) |>
+  payment_product <- product(
+    "insurance.payments.enriched",
+    raw$payments,
+    source_name = "payments",
+    execution = execution
+  ) |>
     add_lookup(policy_attributes, by = dplyr::join_by(policy_id, month)) |>
     add_lookup(raw$brokers, by = dplyr::join_by(broker_id)) |>
     add_contract(contracts$enriched_payments)
 
   published <- list(
-    policies = policy_product |>
-      publish(layer = "staging", execution = execution),
-    payments = payment_product |>
-      publish(layer = "staging", execution = execution)
+    policies = policy_product |> publish(layer = "staging"),
+    payments = payment_product |> publish(layer = "staging")
   )
   stopifnot(
     nrow(collect(published$policies)) == 12L,
@@ -382,9 +371,9 @@ run_relational_insurance <- function(
   collect(by_channel)
 
   report <- report_release(
-    config,
-    "insurance.report.initial",
     measures,
+    "insurance.report.initial",
+    to = config,
     code_version = "insurance-report-v1",
     params = list(currency = "EUR", months = c("2026-01", "2026-02"))
   )
@@ -411,8 +400,11 @@ run_relational_insurance <- function(
   orphan_policies <- inputs$policy_months
   orphan_policies$broker_id[1] <- "B404"
   orphan_run <- policy_product |>
-    add_source(orphan_policies, replace = TRUE) |>
-    publish(layer = "staging", execution = execution, stop_on_failure = FALSE)
+    publish(
+      sources = list(policy_months = orphan_policies),
+      layer = "staging",
+      stop_on_failure = FALSE
+    )
   stopifnot(status(orphan_run)$outcome == "failed")
   lake <- connect_lake(config, read_only = TRUE)
   current_policy_release <- releases(
@@ -447,21 +439,17 @@ run_relational_insurance <- function(
 
   corrected_inputs <- insurance_corrected_inputs(inputs)
   corrected_raw <- raw
-  corrected_raw$payments <- product(
-    "insurance.payments",
-    corrected_inputs$payments
-  ) |>
-    add_contract(contracts$payments) |>
-    add_quality(~ cash_amount > 0) |>
-    ingest(execution = execution)
+  corrected_delivery <- deliveries$payments |>
+    replace_sources(insurance.payments = corrected_inputs$payments)
+  corrected_raw$payments <- corrected_delivery |> ingest()
   corrected_products <- published
-  corrected_payment_product <- payment_product |>
-    replace_sources(source_1 = corrected_raw$payments)
-  corrected_products$payments <- corrected_payment_product |>
-    publish(layer = "staging", execution = execution)
-  corrected_project <- project |>
-    replace_sources(payments = corrected_products$payments)
-  rebuilt <- corrected_project |> run(echo = FALSE)
+  corrected_products$payments <- payment_product |>
+    publish(
+      sources = list(payments = corrected_raw$payments),
+      layer = "staging"
+    )
+  rebuilt <- project |>
+    run(sources = list(payments = corrected_products$payments), echo = FALSE)
   corrected_release <- rebuilt |>
     publish(
       "monthly_performance",
@@ -484,9 +472,9 @@ run_relational_insurance <- function(
   )
 
   corrected_report <- report_release(
-    config,
-    "insurance.report.corrected",
     corrected_measures,
+    "insurance.report.corrected",
+    to = config,
     code_version = "insurance-report-v1",
     params = list(currency = "EUR", months = c("2026-01", "2026-02"))
   )

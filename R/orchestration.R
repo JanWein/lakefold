@@ -48,6 +48,21 @@ as_targets <- function(x, cue = NULL, evidence = NULL) {
   if (!is.null(evidence)) {
     evidence <- absolute_path(evidence)
   }
+  # Each target executes independently. Resolve root defaults before separating
+  # dependencies, and do not reactivate their stored root-only destinations.
+  clear_defaults <- function(product) {
+    attr(product, "tw_execution_config") <- NULL
+    sources <- lapply(product_sources(product), function(source) {
+      if (inherits(source, "tw_product")) clear_defaults(source) else source
+    })
+    replace_product_sources(product, sources)
+  }
+  x <- lapply(x, function(product) {
+    clear_defaults(apply_execution_defaults(
+      product,
+      product_execution(product, NULL)
+    ))
+  })
   products <- list()
   visit <- function(product, stack = character()) {
     if (product$id %in% stack) {

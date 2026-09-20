@@ -32,7 +32,8 @@
 #' @param contract Optional contract, named type vector or prototype list.
 #' @param quality Optional input checks accepted by [add_quality()].
 #' @param reader Optional file reader. CSV, TSV, RDS and Excel have defaults.
-#' @param execution Optional [execution_config()] defaults. Its layer must be
+#' @param execution Optional [execution_config()] defaults, overriding defaults
+#'   stored on a product. Its layer must be
 #'   `NULL` or `"raw"`; an explicit `to` overrides its destination.
 #' @param ... Named execution options: `stop_on_failure` (default `TRUE`),
 #'   `business_date`, `notify`, `code_version`, and `cache` (default `FALSE`).
@@ -63,7 +64,7 @@ ingest <- function(
   ...
 ) {
   expression <- substitute(x)
-  execution <- validate_execution_config(execution)
+  execution <- product_execution(x, execution)
   if (!is.null(execution$layer) && execution$layer != "raw") {
     abort("Ingestion requires execution layer = 'raw' or NULL.")
   }
@@ -169,6 +170,9 @@ ingest <- function(
       abort(
         "This asset already publishes outside raw. Use a distinct ingestion name."
       )
+    }
+    if (!is.null(definition$contract)) {
+      register(con, definition$contract)
     }
     description <- inspect(definition)
     description$status <- NULL

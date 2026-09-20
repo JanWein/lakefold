@@ -414,10 +414,21 @@ publish_candidate <- function(
 #' [collect()] materializes lazy output when it is needed.
 #'
 #' Product execution options passed through `...` include:
-#' * `execution`: an optional [execution_config()] value. Engine defaults
+#' * `data`: a new delivery replacing the sole primary input while retaining
+#'   its name, transformations and checks. If the primary input is a product,
+#'   its single-primary-input chain is followed to the ordinary delivery,
+#'   retaining every intermediate product and gate. Ambiguous branches require
+#'   an explicit name through `sources`.
+#' * `sources`: a named list of replacements using [replace_sources()] names.
+#'   Use either `data` or `sources`. The original definition and unselected
+#'   pinned results remain unchanged. Both options replace whole inputs, not
+#'   individual rows; partition replacement requires an explicit target policy.
+#' * `execution`: an optional [execution_config()] value, overriding defaults
+#'   stored by `product(execution = )`. Engine defaults
 #'   propagate through dependencies; explicit step choices win. Destination and
 #'   layer defaults apply only to the root product. Untargeted dependencies stay
-#'   in memory, and existing dependency targets are preserved.
+#'   in memory, and existing dependency targets are preserved. Stored defaults
+#'   on nested products are not activated during dependency execution.
 #' * `stop_on_failure`: defaults to `TRUE`. Set `FALSE` to receive failed or
 #'   blocked run results for programmatic inspection.
 #' * `evidence`: an optional directory for durable run records. Defaults to
@@ -428,12 +439,15 @@ publish_candidate <- function(
 #' * `business_date` and `notify`: optional lake publication context and an
 #'   existing notification callback.
 #'
-#' Quality engine selection participates in a stored contract's fingerprint.
-#' Changing engines for an already registered explicit contract can require a
-#' new contract version; an immutable registered version is not rewritten.
+#' Selecting a quality engine through execution defaults preserves the declared
+#' contract's fingerprint. Execution evidence separately records the resolved
+#' checking engine. An explicit product code version still identifies its
+#' execution choices; a changed business promise needs a new contract version.
 #'
 #' Metrics and dbt project specifications also have execution methods; see
 #' [measure()] and [dbt_build()] for their operation-specific options/results.
+#' Managed dbt projects also accept `sources`, a named list of successful lake
+#' releases. Bindings are validated before the dbt command runs.
 #' @param pipeline Product to execute.
 #' @param lake Optional connected lake or lake configuration, overriding the
 #'   product's target for this run. Prefer [set_target()] in reusable definitions.
@@ -783,19 +797,28 @@ run.tw_pipeline <- function(
       x
     }
   )
+  result$asset <- result$asset %||% pub$asset
   if (stop_on_failure && !result$status %in% c("published", "cached")) {
     abort(
-      paste("Run", run, "ended with", result$status, "; metadata persisted."),
+      paste(
+        run_result_message(result),
+        "The condition retains this result in $result. Inspect quality(condition$result) for check details."
+      ),
       "tw_run_failed",
       result = result,
-      parent = result$error
+      parent = run_result_parent(result)
     )
   }
   result
 }
 #' @export
 print.tw_run_result <- function(x, ...) {
-  cat("<run>", x$run_id, "|", x$status, "| release:", x$release_id, "\n")
+  cat(run_result_message(x), "\n")
+  if (!x$status %in% c("completed", "published", "cached")) {
+    cat(
+      "Inspect quality(result) or quality_report(result) for check details.\n"
+    )
+  }
   invisible(x)
 }
 

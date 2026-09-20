@@ -213,3 +213,121 @@ test_that("execution destinations do not publish intermediate dependencies", {
   expect_null(resolved$sources[[1]]$target)
   expect_identical(resolved$target$layer, "staging")
 })
+
+test_that("engine defaults preserve declared contracts and immutable releases", {
+  skip_if_not_installed("duckdb")
+  skip_if_not_installed("pointblank")
+  lake <- open_lake(withr::local_tempdir())
+  withr::defer(close_lake(lake))
+  declaration <- contract(
+    "orders_schema",
+    columns = c(id = "integer"),
+    rules = list(quality_rule("positive", ~ id > 0))
+  )
+  definition <- product("orders", data.frame(id = 1:2), code_version = "v1") |>
+    add_contract(declaration)
+  first <- publish(definition, to = lake, cache = TRUE)
+  assets <- registry(lake, "assets")
+  declared <- assets[assets$id == declaration$id, ]
+  alternate <- execution_config(quality = "pointblank")
+  resolved <- apply_execution_defaults(definition, alternate)
+  expect_identical(resolved$contract, declaration)
+  second <- publish(definition, to = lake, execution = alternate, cache = TRUE)
+  expect_identical(second$status, "published")
+  expect_identical(
+    quality(first)$engine[quality(first)$rule == "positive"],
+    "r"
+  )
+  expect_identical(
+    quality(second)$engine[quality(second)$rule == "positive"],
+    "pointblank"
+  )
+  expect_identical(collect(first), collect(second))
+  assets <- registry(lake, "assets")
+  expect_identical(assets[assets$id == declaration$id, ], declared)
+  expect_identical(nrow(registry(lake, "releases")), 2L)
+  cached <- publish(definition, to = lake, execution = alternate, cache = TRUE)
+  expect_identical(cached$status, "cached")
+  expect_identical(cached$release_id, second$release_id)
+  changed <- declaration
+  changed$rules <- list(quality_rule("positive", ~ id > 1))
+  condition <- tryCatch(
+    publish(
+      add_contract(definition, changed),
+      to = lake,
+      execution = alternate
+    ),
+    error = identity
+  )
+  expect_match(
+    conditionMessage(condition),
+    "Definition changed without a version bump"
+  )
+  expect_identical(collect(first)$id, 1:2)
+  expect_identical(read_release(lake, "orders")$id, 1:2)
+})
+
+test_that("ingestion registers the declared contract before resolved checks", {
+  skip_if_not_installed("duckdb")
+  skip_if_not_installed("pointblank")
+  lake <- open_lake(withr::local_tempdir())
+  withr::defer(close_lake(lake))
+  declaration <- contract(
+    "delivery_schema",
+    columns = c(id = "integer"),
+    rules = list(quality_rule("positive", ~ id > 0))
+  )
+  definition <- product("delivery", data.frame(id = 1L)) |>
+    add_contract(declaration)
+  first <- ingest(definition, lake)
+  second <- ingest(
+    definition,
+    lake,
+    execution = execution_config(quality = "pointblank")
+  )
+  expect_identical(second$status, "published")
+  assets <- registry(lake, "assets")
+  expect_identical(
+    assets$fingerprint[assets$id == declaration$id],
+    fingerprint(declaration)
+  )
+  expect_identical(
+    quality(second)$engine[quality(second)$rule == "positive"],
+    "pointblank"
+  )
+  expect_identical(collect(first)$id, 1L)
+})
+
+test_that("explicit product versions still protect execution definitions", {
+  skip_if_not_installed("duckdb")
+  skip_if_not_installed("pointblank")
+  lake <- open_lake(withr::local_tempdir())
+  withr::defer(close_lake(lake))
+  definition <- product(
+    "orders",
+    data.frame(id = 1L),
+    version = "1",
+    code_version = "v1"
+  ) |>
+    add_contract(contract(
+      "orders_schema",
+      columns = c(id = "integer"),
+      rules = list(quality_rule("positive", ~ id > 0))
+    ))
+  first <- publish(definition, to = lake, cache = TRUE)
+  condition <- tryCatch(
+    publish(
+      definition,
+      to = lake,
+      cache = TRUE,
+      execution = execution_config(quality = "pointblank")
+    ),
+    error = identity
+  )
+  expect_match(
+    conditionMessage(condition),
+    "Definition changed without a version bump: orders 1"
+  )
+  expect_identical(collect(first)$id, 1L)
+  expect_identical(nrow(registry(lake, "releases")), 1L)
+})

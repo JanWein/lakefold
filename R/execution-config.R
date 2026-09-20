@@ -1,7 +1,9 @@
 #' Reuse explicit execution defaults
 #'
 #' Define execution choices once and pass the value to [run()], [publish()] or
-#' [ingest()]. Construction neither reads sources nor opens destinations.
+#' [ingest()], or store it once with `product(execution = )`. Construction
+#' neither reads sources nor opens destinations. Stored defaults require
+#' connection-free destinations and are used only for the root definition.
 #' Engine defaults apply recursively to dependencies without changing the
 #' original definitions. Explicit rule and lookup engines always win. Only
 #' ordinary formula rules inherit the quality default; custom functions and
@@ -103,7 +105,12 @@ apply_execution_defaults <- function(product, execution) {
     x <- editable_product(x)
     x$quality <- lapply(x$quality, resolve_rule)
     if (!is.null(x$contract)) {
-      x$contract$rules <- lapply(x$contract$rules, resolve_rule)
+      rules <- lapply(x$contract$rules, resolve_rule)
+      x$execution_contract_rules <- if (!identical(rules, x$contract$rules)) {
+        rules
+      } else {
+        NULL
+      }
     }
     for (name in names(x$transforms)) {
       step <- x$transforms[[name]]
@@ -138,4 +145,69 @@ apply_execution_defaults <- function(product, execution) {
     replace_product_sources(x, sources)
   }
   visit(product)
+}
+
+validate_stored_execution <- function(execution) {
+  execution <- validate_execution_config(execution)
+  has_connection <- function(x) {
+    if (inherits(x, c("tw_lake", "DBIConnection"))) {
+      return(TRUE)
+    }
+    if (is.list(x)) {
+      return(any(vapply(x, has_connection, logical(1))))
+    }
+    FALSE
+  }
+  if (has_connection(execution)) {
+    abort(
+      "Stored execution defaults cannot contain an open connection. Use a lake_config(), folder, or connection factory."
+    )
+  }
+  execution
+}
+
+product_execution <- function(x, execution) {
+  validate_execution_config(
+    execution %||% attr(x, "tw_execution_config", exact = TRUE)
+  )
+}
+
+replace_execution_sources <- function(x, data = NULL, sources = NULL) {
+  if (!is.null(data) && !is.null(sources)) {
+    abort(
+      "Use either data for one primary input or sources for named replacements, not both."
+    )
+  }
+  if (!is.null(data)) {
+    if (!inherits(x, "tw_product") || length(x$sources) != 1L) {
+      abort(
+        "data requires a product with exactly one primary input. Use sources = list(name = value) for named inputs."
+      )
+    }
+    replacement_graph(x)
+    leaf <- x
+    while (inherits(leaf$sources[[1L]], "tw_product")) {
+      leaf <- leaf$sources[[1L]]
+      if (length(leaf$sources) != 1L) {
+        abort(paste0(
+          "Replacing a product input requires exactly one primary source at `",
+          leaf$id,
+          "`. Use sources = list(name = value) to select an input."
+        ))
+      }
+    }
+    # Select the deepest product globally, so references from lookup branches
+    # receive the same delivery and retain one consistent definition per ID.
+    name <- if (identical(leaf$id, x$id)) names(x$sources)[[1L]] else leaf$id
+    sources <- stats::setNames(list(data), name)
+  }
+  if (!is.null(sources)) {
+    if (!is.list(sources) || is.data.frame(sources)) {
+      abort(
+        "sources must be a named list, for example sources = list(orders = new_orders)."
+      )
+    }
+    x <- replace_sources_list(x, sources)
+  }
+  x
 }

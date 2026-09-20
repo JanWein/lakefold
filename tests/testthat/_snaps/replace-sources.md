@@ -4,7 +4,7 @@
       replace_sources(root, orders = newer)
     Condition
       Error in `abort()`:
-      ! Unknown replacement source: orders
+      ! Unknown replacement source: orders. Available names: current, historical.
 
 # invalid and overlapping source selectors fail before execution
 
@@ -12,7 +12,7 @@
       replace_sources(root, missing = leaf)
     Condition
       Error in `abort()`:
-      ! Unknown replacement source: missing
+      ! Unknown replacement source: missing. Available names: branch, leaf.
 
 ---
 
@@ -84,7 +84,7 @@
       replace_sources(changed, unknown = corrected)
     Condition
       Error in `abort()`:
-      ! Unknown dbt source binding: unknown
+      ! Unknown dbt source binding: unknown. Available names: inputs.orders, inputs.customers, historical.orders.
 
 # correcting a product input retains its transformations and quality gates
 
@@ -92,5 +92,5 @@
       replace_sources(product("root", multiple), multiple = data.frame(id = 2L))
     Condition
       Error in `abort()`:
-      ! Replacing a product input requires exactly one primary source; supply an edited product definition: multiple
+      ! Replacing a product input requires exactly one primary source at `multiple`. Use sources = list(name = value) to select a deeper input or supply an edited product definition.
 
