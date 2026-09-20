@@ -1,12 +1,12 @@
-# Run after installing lakefold. Synthetic local workload; no external services.
-# Example: benchmark_lakefold(100000, "duckdb")
-benchmark_lakefold <- function(n = 100000L, backend = "duckdb") {
+# Run after installing tidyweave. Synthetic local workload; no external services.
+# Example: benchmark_tidyweave(100000, "duckdb")
+benchmark_tidyweave <- function(n = 100000L, backend = "duckdb") {
   stopifnot(length(n) == 1L, is.finite(n), n >= 10, n <= .Machine$integer.max)
   n <- as.integer(n)
-  root <- tempfile("lakefold-benchmark-")
-  lake <- lakefold::dl_open(root, backend = backend)
+  root <- tempfile("tidyweave-benchmark-")
+  lake <- tidyweave::open_lake(root, backend = backend)
   on.exit({
-    lakefold::dl_close(lake)
+    tidyweave::close_lake(lake)
     unlink(root, recursive = TRUE)
   })
   data <- data.frame(
@@ -15,21 +15,21 @@ benchmark_lakefold <- function(n = 100000L, backend = "duckdb") {
     amount = (seq_len(n) %% 1000) / 10
   )
   elapsed <- numeric()
-  elapsed[["first_write"]] <- system.time(lakefold::dl_write(
+  elapsed[["first_write"]] <- system.time(tidyweave::write_data(
     lake,
     data,
     "orders",
     partition_by = "month"
   ))[["elapsed"]]
   data$amount[seq_len(10)] <- data$amount[seq_len(10)] + 1
-  elapsed[["partition_correction"]] <- system.time(lakefold::dl_write(
+  elapsed[["partition_correction"]] <- system.time(tidyweave::write_data(
     lake,
     data,
     "orders",
     partition_by = "month"
   ))[["elapsed"]]
   elapsed[["comparison"]] <- system.time(
-    difference <- lakefold::dl_compare(lake, "orders", key = c("id", "month"))
+    difference <- tidyweave::compare(lake, "orders", key = c("id", "month"))
   )[["elapsed"]]
   stopifnot(difference$counts[["changed"]] == 10)
   files <- list.files(
