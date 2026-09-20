@@ -1,3 +1,30 @@
+# tidyweave 0.10.0
+
+* Products accept their primary data directly. Supported ordinary dplyr verbs
+  capture deferred operations on the existing product class, with real dplyr
+  evaluation at execution. Successful results are reusable sources; lake results
+  pin immutable releases, while other results retain their submitted table or query.
+* `add_lookup()` provides checked many-to-one enrichment with native or optional
+  dm validation. Simple logical quality predicates use the native engine or
+  optional Pointblank without changing their expression syntax.
+* `ingest()` is data-first, including one-source products with input checks.
+  `data |> ingest()` uses the local `tidyweave` folder; `to = "my-lake"` selects
+  another path without a configuration object. `lake_config(path = ...)` adds
+  explicit backend and layer choices without repetitive local path arguments.
+* `collect()`, `explain()` and `tbl()` reuse the actual dplyr generics, so package
+  attachment order no longer selects competing generics for those operations.
+* Managed `dbt_project()` specifications derive connection profiles and accepted
+  source bindings at execution. `run()` and `publish()` share the product grammar;
+  model SQL, dbt tests and final publication gates keep their own responsibilities.
+* `measure()` accepts an approved lake result and automatically pins its exact release.
+* The relational insurance tutorial uses direct product calls and real dbt SQL,
+  preserving grain, time, correction and issued-report examples. Its executable
+  script is extracted from the canonical vignette.
+
+This remains a development version. Breaking API changes have no compatibility
+aliases before the first stable release candidate. Stored releases and report
+integrity remain protected.
+
 # tidyweave 0.9.0
 
 * `catalog_openmetadata_dbt()` uses OpenMetadata's optional Python ingestion

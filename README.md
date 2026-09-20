@@ -19,8 +19,7 @@ remotes::install_github("JanWein/tidyweave")
 ```r
 library(tidyweave)
 
-orders <- product("orders") |>
-  add_source(data.frame(id = 1:3, amount = c(25, 75, 50)))
+orders <- product("orders", data.frame(id = 1:3, amount = c(25, 75, 50)))
 
 orders |> run() |> collect()
 ```
@@ -33,7 +32,7 @@ needs no database, catalog, owner field or manual version number.
 
 ```r
 orders <- orders |>
-  add_transform(function(data) transform(data, amount = round(amount, 2))) |>
+  dplyr::mutate(amount = round(amount, 2)) |>
   add_contract(c(id = "integer", amount = "numeric")) |>
   add_quality(~ amount >= 0)
 
@@ -41,15 +40,26 @@ result <- run(orders)
 quality(result)
 ```
 
-Functions remain ordinary R functions. Contracts describe the expected table.
+The dplyr call is deferred until execution and uses ordinary dplyr semantics.
+`add_transform()` still accepts ordinary R functions. Contracts describe the expected table.
 Quality rules decide whether its contents are acceptable. Checks do not silently
 remove bad rows. Printing a product shows its components; `explain(orders)`
 explains the plan. `validate(orders)` checks configuration without fetching data,
 and `run()` does this automatically.
 
-Multiple sources use names. Products can also be sources of other products.
-The same composition works with local tables or supported lazy DBI/Arrow inputs.
-Use `collect()` where an R-only algorithm needs data in memory.
+Use `add_lookup(customers, by = dplyr::join_by(customer_id))` for a checked
+many-to-one enrichment. Parent keys must be unique and non-missing; unmatched
+children fail by default. `engine = "dm"` selects optional dm validation.
+`add_quality(~ amount >= 0, engine = "pointblank")` changes the quality engine
+without changing the predicate. Advanced agents and arbitrary R functions remain
+available when a simple predicate is insufficient.
+
+Products and successful results can be inputs to another product. Lake results
+pin immutable releases. Other results reuse their retained submitted table or
+lazy query, with the original backend's mutability; a DBI append result reuses
+the submitted batch. Product definitions execute their instructions. `collect()`
+is explicit when an R-only algorithm needs data in memory. Lake publication
+materializes data for archival and validation.
 
 ## Save data when you need to
 
@@ -83,23 +93,29 @@ preparing it and approving it for consumers. The optional lake/dbt workflow adds
 four explicit layers: **raw**, **staging**, **core** and **marts**.
 
 ```r
-# After configuring a lake and providing orders.csv (see the guide below):
-accepted <- ingest(config, "orders.csv", name = "orders",
-  quality = ~ amount >= 0)
+config <- lake_config(path = "reporting-lake", backend = "duckdb",
+  layers = c("raw", "staging", "core", "marts"))
 
-project <- dbt_init("analytics", config, sources = list(orders = accepted))
-built <- dbt_build(project)
-approved <- dbt_publish(config, built, "customer_revenue")
+accepted <- product("orders", "orders.csv") |>
+  add_quality(~ amount >= 0) |>
+  ingest(to = config)
+
+# With an existing SQL project whose models use source('inputs', 'orders'):
+approved <- dbt_project("analytics", lake = config,
+    sources = list(orders = accepted)) |>
+  run() |>
+  publish("customer_revenue")
 
 collect(approved)
 ```
 
-`ingest()` checks a delivery before writing RAW and retains receipt evidence when
-it rejects one. dbt then builds `stg_orders`, `core_orders` and `customer_revenue`
-from the accepted release. `dbt_publish()` takes a checked, immutable snapshot for
-consumers. A dbt data-test failure can leave earlier model writes in place; it
-does not change an already published release. Without an explicit contract,
-publication infers structure and does not invent business rules.
+`ingest()` checks the received data before RAW and retains receipt evidence when
+it rejects a delivery. The managed dbt project supplies its connection and exact
+source references. SQL models and dbt tests remain ordinary project files;
+`dbt_init()` provides an optional small starter. `publish()` takes a checked,
+immutable snapshot for consumers. Earlier dbt model writes are not rolled back
+when a later test fails. Without a contract, publication infers structure and
+does not invent business requirements.
 
 The [step-by-step layered guide](https://janwein.github.io/tidyweave/articles/layered-data-stack.html)
 starts with real R data, explains each layer and shows optional pointblank,
@@ -151,7 +167,7 @@ streaming engine, enterprise identity system or distributed transaction manager.
 Lake and local evidence writes require one coordinated writer. Lazy execution
 still depends on the operations supported by the selected backend.
 
-**0.9.0 is a development version, not a stable release candidate.** Public APIs
+**0.10.0 is a development version, not a stable release candidate.** Public APIs
 may change without compatibility aliases. The package was previously named
 lakefold. See [CONTRIBUTING.md](CONTRIBUTING.md) for the English documentation,
 Posit skills, testing and package-development workflow. MIT licensed.

@@ -7,7 +7,7 @@ template:
   bootstrap: 5
 reference:
   - title: Start with a product
-    contents: [tidyweave-package, product, add_source, run, publish, collect, inspect, plan, validate]
+    contents: [tidyweave-package, product, product-dplyr, add_source, add_lookup, ingest, run, publish, collect, inspect, plan, validate]
   - title: Contracts and quality
     contents: [contract, contract_from, contract_confirm, contract_diff, quality_rule, quality_reference, quality, expect_quality, profile_data, quality_report, quality_errors, pointblank_report, contract_yaml]
   - title: Sources and transformations
@@ -19,7 +19,7 @@ reference:
   - title: Projects and orchestration
     contents: [init_project, as_targets]
   - title: Lake configuration and history
-    contents: [open_lake, lake_config, registry_duckdb, setup_lake, disconnect_lake, ingest, write_data, read_release, tbl, compare, releases, lineage, register, registry, freshness, check_delivery, interrupted, recover, cleanup]
+    contents: [open_lake, lake_config, registry_duckdb, setup_lake, disconnect_lake, write_data, read_release, tbl, compare, releases, lineage, register, registry, freshness, check_delivery, interrupted, recover, cleanup]
   - title: Metrics and issued reports
     contents: [model, metric, measure, report_release, report_read, commons_yaml]
   - title: Work with dbt
