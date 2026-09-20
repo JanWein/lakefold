@@ -2,12 +2,18 @@
 % Please edit documentation in R/execution.R
 \name{collect}
 \alias{collect}
+\alias{collect.tw_run_result}
 \title{Collect the output of a successful run}
 \usage{
-collect(x)
+collect(x, ...)
+
+\method{collect}{tw_run_result}(x, ...)
 }
 \arguments{
 \item{x}{Run result, data frame or lazy table.}
+
+\item{...}{Arguments passed to dplyr when collecting retained data. Lake
+results collect the complete pinned release and accept no extra arguments.}
 }
 \value{
 An ordinary tibble. Failed or blocked runs cannot be collected.

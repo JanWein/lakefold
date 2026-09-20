@@ -34,7 +34,8 @@ test_that("products and report metrics pin input versions", {
   )
   expect_error(measure(f$lake, metric, by = "forbidden"), "Unsupported")
   metric$approved <- FALSE
-  expect_error(measure(f$lake, metric), "not approved")
+  expect_equal(measure(f$lake, metric)$value, 300)
+  expect_error(measure(f$lake, metric, record = TRUE), "Exploratory")
 })
 
 test_that("stock metrics refuse summing multiple dates", {

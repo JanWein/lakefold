@@ -6,15 +6,21 @@
 \usage{
 product(
   id,
+  data = NULL,
   contract = NULL,
   version = "1.0.0",
   owner = NULL,
   description = NULL,
-  code_version = NULL
+  code_version = NULL,
+  source_name = NULL,
+  execution = NULL
 )
 }
 \arguments{
 \item{id}{Product identity, unique within a dependency graph.}
+
+\item{data}{Optional table, path, source adapter, product, or successful run.
+Successful lake runs are pinned to their exact published release.}
 
 \item{contract}{Optional contract, named type vector or prototype list.}
 
@@ -25,6 +31,13 @@ publication derives a technical version from the definition.}
 
 \item{code_version}{Optional code and dependency version. Required only when
 explicitly reusing a previously published lake release with \code{cache = TRUE}.}
+
+\item{source_name}{Optional name for \code{data}. Defaults to the product ID for
+ordinary inputs, or the upstream product ID for a nested product.}
+
+\item{execution}{Optional connection-free \code{\link[=execution_config]{execution_config()}} stored on this
+definition. Used when it is the root of \code{\link[=run]{run()}}, \code{\link[=publish]{publish()}} or \code{\link[=ingest]{ingest()}}.
+An explicit execution argument overrides these defaults.}
 }
 \value{
 A \code{tw_product}, ready for composition, inspection and execution.

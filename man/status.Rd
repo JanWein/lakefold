@@ -7,13 +7,17 @@
 status(x, asset = NULL)
 }
 \arguments{
-\item{x}{A connected lake, \code{\link[=run]{run()}} result or \code{\link[=dbt_build]{dbt_build()}} result.}
+\item{x}{A connected lake, \code{\link[=run]{run()}} result, \code{\link[=dbt_build]{dbt_build()}} result or a
+measurement or measurement set from \code{\link[=measure]{measure()}}.}
 
 \item{asset}{Optional asset ID when querying a lake.}
 }
 \value{
 A tibble with \code{engine}, \code{id}, \code{status}, \code{success}, \code{release_id},
-\code{asset} and \code{message}. A dbt process failure remains visible even when
+\code{asset}, \code{outcome} and \code{message}. \code{outcome} normalizes native statuses to
+\code{succeeded}, \code{blocked}, \code{failed} or \code{skipped} (unknown states are \code{NA}).
+Missing deliveries are \code{blocked} because no acceptable input is available.
+A dbt process failure remains visible even when
 individual nodes passed. No raw stdout or stderr is included.
 }
 \description{

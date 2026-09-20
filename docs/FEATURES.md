@@ -1,4 +1,4 @@
-# Capability index for tidyweave 0.8
+# Capability index for tidyweave 0.10.0
 
 Start with one named product and an ordinary R table. Add an integration only
 when it supplies a capability you need. The package is experimental; its public
@@ -6,15 +6,15 @@ API may change before the first stable release candidate.
 
 | Need | Available entry points | Guide |
 |---|---|---|
-| Compose and inspect a workflow | `product()`, `add_source()`, `add_transform()`, `validate()`, `inspect()`, `run()` | [Composition](https://janwein.github.io/tidyweave/articles/composing-products.html) |
-| Read ordinary or remote data | Tables, callbacks, files, `source_database()`, `source_parquet()`, `source_api()`, `source_pins()`, `source_release()` | [Integrations](INTEGRATIONS.md) |
-| Choose storage | `target_lake()`, `target_database()`, `target_parquet()`, `target_pins()` | [Integrations](INTEGRATIONS.md) |
+| Compose and inspect a workflow | `product(name, data)`, dplyr verbs, `add_lookup()`, `validate()`, `inspect()`, `run()` | [Composition](https://janwein.github.io/tidyweave/articles/composing-products.html) |
+| Read ordinary or remote data | Tables, callbacks, files, `source_database()`, `source_parquet()`, `source_api()`, `source_pins()`, `source_release()` | [Integrations](https://janwein.github.io/tidyweave/articles/optional-integrations.html) |
+| Choose storage | `target_lake()`, `target_database()`, `target_parquet()`, `target_pins()` | [Integrations](https://janwein.github.io/tidyweave/articles/optional-integrations.html) |
 | Define trustworthy data | `contract()`, `quality_rule()`, `quality_reference()`, `pointblank_checks()`, `profile_data()` | [Quality gates](https://janwein.github.io/tidyweave/articles/quality-gates.html) |
 | Preserve lake history | Immutable releases, full-candidate gates, complete partition replacement, original archives | [Everyday workflows](https://janwein.github.io/tidyweave/articles/everyday-workflows.html) |
 | Explain attempts and failures | `status()`, `quality()`, `run_history()`, `read_run()`, `incidents()`, quality reports | [Quality and history](https://janwein.github.io/tidyweave/articles/quality-history.html) |
 | Reproduce calculations | Pinned sources, `model()`, `metric()`, `measure()`, `report_release()`, `report_read()` | [Products and metrics](https://janwein.github.io/tidyweave/articles/products-metrics.html) |
-| Reuse ecosystem execution | `sql_transform()`, `transform_dbt()`, `as_targets()` | [Integrations](INTEGRATIONS.md) |
-| Publish catalog metadata | `catalog_openlineage()`, `catalog_openmetadata()`, retryable catalog delivery | [Integrations](INTEGRATIONS.md) |
+| Reuse ecosystem execution | `sql_transform()`, `transform_dbt()`, `as_targets()` | [Integrations](https://janwein.github.io/tidyweave/articles/optional-integrations.html) |
+| Publish catalog metadata | `catalog_openlineage()`, `catalog_openmetadata()`, retryable catalog delivery | [Integrations](https://janwein.github.io/tidyweave/articles/optional-integrations.html) |
 | Prepare a project | `init_project()`, optional renv and scheduling templates | [Getting started](https://janwein.github.io/tidyweave/articles/getting-started.html) |
 | Add an implementation | S3 adapters, preflight, capabilities and conformance checks | [Extension guide](https://janwein.github.io/tidyweave/articles/extending-tidyweave.html) |
 

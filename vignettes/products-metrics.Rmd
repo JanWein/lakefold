@@ -16,28 +16,24 @@ A product gives a useful result a name and a repeatable definition. A metric
 gives a business calculation explicit meaning. Add each only when you need
 it: an ordinary `dplyr::summarise()` remains useful for exploration.
 
-## Start with ordinary tables and functions
+## Start with one table and a checked lookup
 
-One source gives a transformation one table. Multiple named sources give it a
-named list. Both use the same product object and execution function:
+Keep the primary row grain explicit. A lookup adds descriptive attributes without
+multiplying rows; its parent key must be unique and non-missing.
 
 ```{r multiple-sources}
 orders <- data.frame(id = 1:3, customer_id = c("a", "a", "b"),
   amount = c(10, 20, 30))
 customers <- data.frame(customer_id = c("a", "b"), region = c("EU", "US"))
-regional <- product("regional_orders") |>
-  add_source(orders, name = "orders") |>
-  add_source(customers, name = "customers") |>
-  add_transform(function(inputs) {
-    dplyr::left_join(inputs$orders, inputs$customers, by = "customer_id")
-  }) |>
-  add_quality(~ !is.na(region))
+regional <- product("regional_orders", orders) |>
+  add_lookup(customers, by = dplyr::join_by(customer_id))
 collect(run(regional))
 ```
 
-The join remains ordinary R code. Review its cardinality and the meaning of one
-row. A product publishes one table; multiple sources do not imply an atomic
-multi-table publication. A product can also be the source of another product:
+The native lookup rejects unmatched child keys by default. Select `engine = "dm"`
+for the same promises using dm validation. General joins remain ordinary R code;
+review their cardinality and the meaning of one row. A product publishes one table;
+multiple sources do not imply an atomic multi-table publication. A product can also be the source of another product:
 shared dependencies run once within a single execution.
 
 ## Use governed releases as interchangeable sources
@@ -48,16 +44,10 @@ optional until you need a promise beyond the inferred structure:
 ```{r source-releases, eval=requireNamespace("duckdb", quietly = TRUE)}
 root <- tempfile("tidyweave-products-")
 lake <- open_lake(root)
-orders_release <- write_data(lake, orders, "orders")
-customers_release <- write_data(lake, customers, "customers")
-definition <- product("regional_orders") |>
-  add_source(source_release(lake, "orders", orders_release$release_id),
-    name = "orders") |>
-  add_source(source_release(lake, "customers", customers_release$release_id),
-    name = "customers") |>
-  add_transform(function(inputs) {
-    dplyr::left_join(inputs$orders, inputs$customers, by = "customer_id")
-  }) |>
+orders_release <- orders |> publish("orders", to = lake)
+customers_release <- customers |> publish("customers", to = lake)
+definition <- product("regional_orders", orders_release) |>
+  add_lookup(customers_release, by = dplyr::join_by(customer_id)) |>
   add_contract(contract(columns = c(id = "integer", customer_id = "character",
     amount = "numeric", region = "character"), key = "id")) |>
   set_target(lake)
@@ -66,11 +56,14 @@ read_release(lake, "regional_orders")
 lineage(lake, "regional_orders")
 ```
 
-The source implementation changed from R tables to pinned lazy tables; the
-transformation stayed the same. Explicit release IDs reproduce exact inputs.
-An omitted ID resolves the current release once during execution. Later source
-publication does not automatically rerun this product; use your scheduler or
-the optional targets integration when you need that automation.
+The inputs changed from ordinary R tables to pinned lake releases; the lookup
+stayed the same. Successful lake results preserve their exact release IDs.
+Their normalized configuration-based sources materialize the selected values.
+For lazy access through a caller-owned connection, use
+`source_release(lake, "orders", orders_release$release_id)` and keep the lake open.
+Omitting the release ID selects the current release once during execution.
+Later publication does not automatically rerun this product; use your scheduler
+or the optional targets integration when you need that automation.
 
 ## Add relationship exploration with dm
 
@@ -101,9 +94,9 @@ Approval and code identity are explicit because reports reuse this definition;
 owner, description and unit are optional:
 
 ```{r metric, eval=requireNamespace("duckdb", quietly = TRUE)}
-revenue <- metric("orders.revenue", "regional_orders", sum(amount),
+revenue <- metric("orders.revenue", "regional_orders", sum(amount, na.rm = TRUE),
   dimensions = "region", approved = TRUE, code_version = "revenue-v1")
-values <- measure(lake, revenue, by = "region", release = published$release_id)
+values <- measure(published, revenue, by = "region")
 values
 ```
 

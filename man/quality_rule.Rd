@@ -11,7 +11,8 @@ quality_rule(
   check,
   severity = c("error", "warning"),
   max_failure = 0,
-  description = ""
+  description = "",
+  engine = c("native", "pointblank")
 )
 
 quality_counts(n_failed, n_total)
@@ -40,6 +41,12 @@ for their own collection.}
 \item{max_failure}{Fraction of permitted failed test units.}
 
 \item{description}{Rule description.}
+
+\item{engine}{Formula evaluation engine: \code{"native"} (default) or optional
+\code{"pointblank"}. Both require logical row predicates and count missing
+values as failures. Pointblank interrogates a real agent against the
+normalized predicate, retaining its reports and check evidence. Ordinary
+functions use the native engine; use \code{\link[=pointblank_checks]{pointblank_checks()}} for custom agents.}
 
 \item{n_failed, n_total}{Failed and total test units.}
 

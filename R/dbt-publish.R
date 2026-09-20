@@ -75,6 +75,9 @@ dbt_publish <- function(
       "tw_dbt_invalid"
     )
   }
+  if (!is.null(result$artifact_hashes)) {
+    dbt_verified_result(result)
+  }
   model <- dbt_publication_model(result$manifest, model)
   node <- result$manifest$nodes[[model]]
   if (
@@ -384,4 +387,74 @@ dbt_publication_canonical <- function(x) {
     x <- x[order(names(x))]
   }
   lapply(x, dbt_publication_canonical)
+}
+
+#' @rdname publish
+#' @section Publishing a dbt model:
+#' Use `dbt_project(path, lake = config) |> run() |> publish("model")` to
+#' create an immutable, checked lake release. The destination is inferred from
+#' the managed project's configuration. A model name must identify exactly one
+#' materialized node that succeeded in this build. Artifact hashes and parsed
+#' objects are checked again before publication. Pass `contract`, `asset`,
+#' `layer` or other [dbt_publish()] options through `...`.
+#'
+#' Publication snapshots the current relation and checks that complete copy.
+#' Build provenance does not prove a mutable relation is unchanged since dbt
+#' finished. Coordinate writers between build and publication.
+#' @export
+publish.tw_dbt_result <- function(
+  x,
+  name = NULL,
+  to = NULL,
+  execution = NULL,
+  ...
+) {
+  if (!is.null(execution)) {
+    abort(
+      "Execution defaults apply to R products. Configure dbt through its project and publication arguments."
+    )
+  }
+  scalar(name, "model name")
+  if (!isTRUE(x$success) || !identical(x$command, "build")) {
+    abort(
+      "Publication requires a successful dbt build result.",
+      "tw_dbt_invalid"
+    )
+  }
+  config <- x$project$lake %||% x$project$source_config
+  lake <- to %||% config
+  if (is.null(lake)) {
+    abort(
+      "An externally configured dbt project needs publish(..., to = lake_config(...)).",
+      "tw_dbt_invalid"
+    )
+  }
+  actual <- if (inherits(lake, "tw_lake")) lake$config else lake
+  expected <- x$source_catalog %||%
+    if (!is.null(config)) dbt_catalog_fingerprint(config)
+  if (
+    !is.null(expected) && !identical(dbt_catalog_fingerprint(actual), expected)
+  ) {
+    abort(
+      "Publish to the same lake catalog used by this dbt build.",
+      "tw_dbt_invalid"
+    )
+  }
+  dbt_publish(lake, x, name, ...)
+}
+
+# Hashes protect on-disk artifacts; the parsed objects must describe them too.
+dbt_verified_result <- function(result) {
+  dbt_catalog_artifacts(result)
+  parsed <- dbt_read_artifacts(result$artifacts_dir)
+  if (
+    !identical(parsed$manifest, result$manifest) ||
+      !identical(parsed$results, result$results)
+  ) {
+    abort(
+      "The dbt result changed after execution; use the original build result.",
+      "tw_dbt_artifact_invalid"
+    )
+  }
+  invisible(TRUE)
 }

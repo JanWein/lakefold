@@ -43,16 +43,23 @@ The downloadable examples are extracted from the corresponding vignettes:
 | `monthly_reporting.R` | `getting-started.Rmd` |
 | `custom_target.R` | `extending-tidyweave.Rmd` |
 | `end_to_end.R` | Runs `composing_products.R` |
+| `relational-insurance.R` | `relational-insurance.Rmd` |
 
 Use `knitr::purl(..., documentation = 0)` after tutorial edits. Chunks requiring
 user files, credentials or optional services use `purl = FALSE`. Add
 `library(tidyweave)` only if the extracted chunks do not include it. The monthly
-script guards its optional DuckDB dependency. Execute the changed vignette and
+script guards its optional DuckDB dependency. The insurance vignette wraps its
+extracted workflow in `run_relational_insurance()`: its hidden opening/closing
+chunks use the knitr `tangle` option, and conditional execution chunks enable
+extraction without running the CLI. Do not replace the visible steps with helper
+wrappers or maintain a separate copy of the runner. Execute the changed vignette and
 its generated script; assertions in examples should test meaningful outcomes.
 
 ## Design discipline
 
-A new user should need only `product()`, `add_source()`, `run()` and `collect()`.
+A new user should need only `product(name, data)`, ordinary dplyr verbs,
+`run()` and `collect()`. Use `add_lookup()` for checked enrichment and optional
+quality engines through the same predicate grammar.
 Expose optional detail when it solves a real need. Use one product representation
 and ordinary R values. Add S3 interfaces when another implementation can use them;
 do not add classes merely for symmetry. Declare adapter limits and verify that a
@@ -63,3 +70,17 @@ aliases until the first stable release candidate. This does not excuse careless
 handling of stored data: immutable releases, complete-candidate checks and pinned
 report evidence remain integrity requirements. Document actual test coverage and
 production boundaries without claiming untested guarantees.
+
+## Unified grammar
+
+Definitions are connection-free. Supported dplyr methods capture genuine dplyr
+expressions and evaluate them only during execution. Do not implement a second
+expression language or silently collect a lazy table to make an unsupported
+operation pass. Document the supported verbs and use ordinary functions as the
+escape hatch. `ingest(x, to)` accepts receipt data before transformations;
+`publish(x, to, layer)` writes checked prepared data. Successful lake results
+are pinned release sources; other results reuse submitted data or a lazy query
+with its backend's mutability. `measure(lake_result, metric)` retains the lake
+release identity.
+Managed dbt projects own generated profiles and bindings, while normal SQL,
+contracts and tests stay in the project. See [the design plan](https://github.com/JanWein/tidyweave/blob/main/docs/UNIFIED_GRAMMAR_PLAN.md).

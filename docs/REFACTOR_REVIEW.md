@@ -1,68 +1,65 @@
-# Architecture review: lakefold 0.7 to tidyweave 0.8
+# Architecture review: tidyweave 0.10 to 0.11
 
-Baseline: commit `047f4cc`, reviewed on 20 September 2026. This is an experimental
-development release. Compatibility commitments begin with the first stable
-release candidate. The rename deliberately removes the old `dl_*` public API.
+The 0.11.0 refactor removes repeated decisions and transitions from the existing
+product grammar. It keeps genuine dplyr evaluation, optional infrastructure,
+immutable lake releases and explicit business promises. This page records design,
+not test results; see the [validation record](VALIDATION.md) for measured checks.
 
-## What was already strong
+## Changes in everyday work
 
-The existing package had valuable guarantees: original input archives, immutable
-lake releases, pinned report inputs, full-candidate quality checks and a release
-marker committed together with lineage and successful run status. Its pointblank
-integration preserved native thresholds and segmented evidence. DBI, dbplyr, dbt
-and ordinary R functions offered useful escape hatches. These capabilities are
-retained rather than replaced by a new storage engine.
-
-## What needed to change
-
-| Category | Previous weakness | Decision and practical effect |
+| Repetition in 0.10 | Result in 0.11 | Deliberate boundary |
 |---|---|---|
-| UX | A product constructor returned two different classes depending on its arguments. | One product class and named sources cover both direct and derived products. |
-| API consistency | Several public execution and build paths competed for attention. | `run()` is the execution verb; `publish()` is the immediate storage shortcut. Low-level lake machinery is internal. |
-| UX | Adding a source silently replaced the previous one. | Sources accumulate by name; replacing an existing name is explicit. |
-| Coupling | The simple product path materialized database sources immediately. | DBI sources and compatible transformations retain lazy tables; inspection reveals materialization boundaries. |
-| UX | Automatic contracts rejected factors; function predicates behaved differently from formulas. | Factor labels have character semantics without coercing the input object. Functions can return row-wise logical vectors. |
-| UX | Explicit contracts silently enabled a 48-hour freshness policy. | Freshness is opt-in. Business deadlines are never inferred. |
-| Architecture | Metadata delivery lived inside execution and was not recoverable independently. | Durable run evidence and a delivery outbox support retries without re-running data transformations. |
-| Extension | Adapters lacked comparable capability declarations. | S3 interfaces and explicit capabilities expose supported operations and limits. |
-| Integration | Useful ecosystem components required ad hoc callbacks. | Optional adapters cover DBI targets, Arrow/Parquet, pins, httr2, targets and metadata services. |
-| Documentation | Parallel Markdown and vignette guides drifted, and advanced machinery leaked into the introduction. | Executable English vignettes are canonical. The README starts with an ordinary table and a few verbs. |
+| Engine arguments on each predicate and lookup | One explicit `execution_config()` passed to execution | A local engine overrides the default; no global context |
+| Repeated target configuration | Optional execution destination/layer defaults | Defaults apply to the root only; untargeted dependencies stay in memory; receipt is always RAW |
+| Full enriched contract definitions | `contract_update()` reuses columns and expectations under an explicit identity | Changed grain, removed columns and type changes require reviewed promises |
+| One call per metric and month, then manual table assembly | Batch `measure()` and tidy `collect()` | Each-period and aggregate selection remain distinct; stocks still need one date |
+| Manual report connection management | Configuration or existing folder accepted by report functions | Caller-owned connections remain caller-owned; issuance remains explicit |
+| Reconstructed correction products and dbt projects | `replace_sources()` updates named inputs and nested product references | Pinned results are never implicitly refreshed |
+| Different status and lineage access paths | Common outcome column and result lineage accessor | Native statuses and actual execution evidence are retained |
+| All exported topics presented together | Everyday, integration and extension reference groups | Advanced adapter interfaces remain available |
 
-## Resulting model
+The canonical [insurance tutorial](https://janwein.github.io/tidyweave/articles/relational-insurance.html)
+now demonstrates these operations directly. Its downloadable runner is extracted
+from the vignette. Monthly measurements are long tables, corrections reuse the
+same definitions, and assertions compare the saved original report with its
+initial values after a new release is issued.
 
-The user describes a product: its sources, transformations, optional expectations
-and destination. Ordinary tables, paths and functions remain valid inputs.
-Internally, normalization establishes component semantics, validation checks the
-definition, execution resolves dependencies, and adapters perform the work.
+## Composition decisions
 
-There is one execution lifecycle but different storage guarantees. An R result,
-a replaceable database table, a pin and an immutable lake release are not
-interchangeable guarantees. `capabilities()` and the integration guide make those
-differences explicit. Selecting an adapter does not confer lake transactions on
-an unrelated backend.
+An execution configuration is a small value, not an engine registry or mutable
+platform. Selecting a quality engine through execution defaults leaves the
+declared contract fingerprint unchanged. Execution evidence records the resolved
+engine separately, while explicit product code identity reflects execution
+changes. Contract composition is an explicit change to a promise,
+not automatic semantic inference through arbitrary dplyr. Source replacement traverses the
+known dependency graph without executing it; it does not add a scheduler.
+Measurement sets hold the individual manifests needed for report integrity while
+collection produces ordinary data for analysis. Collected values alone cannot
+substitute for the original evidence when issuing a report.
 
-## Why this architecture
+No second product class, SQL language or expression evaluator is introduced.
+Specialist Pointblank agents, ordinary R functions, direct DBI and normal dbt SQL
+remain appropriate escape hatches. Native/Pointblank simple predicates share
+normalization; source and target adapters retain their existing responsibilities.
 
-The external API follows tidyverse principles: readable verbs, ordinary R
-objects, pipes and progressive configuration. Structural ideas from tidymodels
-inform the inside: inspectable specifications, reusable composition, lifecycle
-validation and replaceable implementations. Users do not need to understand
-these internal layers to prepare and check a table.
+## Remaining boundaries and tradeoffs
 
-The package coordinates mature tools. DBI provides connectivity, dbplyr pushes
-queries into databases, Arrow reads columnar data, dbt manages SQL models,
-pointblank evaluates specialist checks and targets manages dependency execution
-and caching. There is no separate plugin registry or mandatory class for an
-ordinary R function.
+* Contract columns are not automatically renamed or derived through arbitrary
+  transformations. Changed row grain and rules require a business decision.
+* Batch measurement handles named metric sets and common scope. `.period` is a
+  list column so both single and multiple selected dates remain unambiguous.
+* Receipt gates and lake archival materialize data. Compatible lazy operations
+  remain backend-dependent and do not imply streaming ingestion.
+* Lookups cover checked many-to-one equality relationships. Interval joins,
+  allocation and movement between unrelated backends require explicit design.
+* Managed dbt handles local DuckDB/DuckLake profiles and source bindings. Remote
+  adapters retain their credentials and deployment setup; dbt graph writes are
+  not one transaction.
+* Lake results and issued reports retain immutable references. Other results
+  reuse submitted data or queries with their backend's mutability.
+* Scheduling, authorization, remote catalog operations and coordinated writers
+  remain responsibilities of surrounding systems. An adapter is not proof of a
+  production deployment.
 
-## Remaining boundaries
-
-- A local lake and evidence directory require coordinated writers.
-- Native R functions can require memory even when their input was lazy.
-- Function closures and external services need explicit cache invalidation.
-- dbt staging/build side effects are outside the final product publication gate.
-- Metadata delivery is at least once and separate from data publication.
-- Remote deployments need their own permissions, operational controls and tests.
-
-See [modern-stack coverage](MODERN_DATA_STACK.md) for requirement-level boundaries
-and [validation evidence](VALIDATION.md) for the checks actually performed.
+Earlier reviews remain available in git history. Current implementation choices
+are tracked in [the coherent workflows plan](COHERENT_WORKFLOWS_PLAN.md).

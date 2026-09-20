@@ -1,3 +1,38 @@
+test_that("the insurance grammar preserves transaction grain without infrastructure", {
+  example <- new.env(parent = asNamespace("tidyweave"))
+  sys.source(
+    system.file(
+      "examples",
+      "relational-insurance.R",
+      package = "tidyweave",
+      mustWork = TRUE
+    ),
+    envir = example
+  )
+  inputs <- example$insurance_inputs()
+  contracts <- example$insurance_contracts()
+  attributes <- product("policy_attributes", inputs$policy_months) |>
+    dplyr::select(policy_id, month, company, broker_id, policy_status = status)
+  payments <- product("payments", inputs$payments) |>
+    add_lookup(attributes, by = dplyr::join_by(policy_id, month)) |>
+    add_lookup(inputs$brokers, by = dplyr::join_by(broker_id)) |>
+    add_contract(contracts$enriched_payments)
+  data <- collect(run(payments))
+  expect_equal(nrow(data), 10L)
+  expect_equal(intersect("premium_due", names(data)), character())
+  expect_equal(anyDuplicated(data$payment_id), 0L)
+  first <- data$policy_id == "P1" & data$month == as.Date("2026-01-01")
+  expect_equal(sum(first), 2L)
+  expect_equal(sum(data$cash_amount[first]), 100)
+  invalid <- inputs$payments
+  invalid$month[[1]] <- as.Date("2026-03-01")
+  failed <- payments |>
+    add_source(invalid, replace = TRUE) |>
+    run(stop_on_failure = FALSE)
+  expect_identical(failed$status, "error")
+  expect_s3_class(failed$error$parent, "tw_lookup_unmatched")
+})
+
 test_that("the insurance example preserves business grains and issued reports", {
   executable <- Sys.getenv("TIDYWEAVE_DBT_EXECUTABLE")
   skip_if(
@@ -68,14 +103,27 @@ test_that("the insurance example preserves business grains and issued reports", 
   }
 
   # Ratios aggregate the numerator and denominator, not individual percentages.
-  expect_equal(demo$initial$measures$ratio_total$value, 2280 / 2850)
+  expect_equal(
+    dplyr::filter(collect(demo$initial$totals), .metric == "cash_to_due")$value,
+    2280 / 2850
+  )
   expect_gt(
     abs(
-      demo$initial$measures$ratio_total$value - mean(c(980 / 1500, 1300 / 1350))
+      dplyr::filter(
+        collect(demo$initial$totals),
+        .metric == "cash_to_due"
+      )$value -
+        mean(c(980 / 1500, 1300 / 1350))
     ),
     0.001
   )
-  expect_equal(demo$corrected$measures$ratio_total$value, 2530 / 2850)
+  expect_equal(
+    dplyr::filter(
+      collect(demo$corrected$totals),
+      .metric == "cash_to_due"
+    )$value,
+    2530 / 2850
+  )
   expect_identical(demo$failures$pointblank$status, "blocked")
   expect_null(demo$failures$pointblank$outputs)
   expect_identical(unique(quality(demo$failures$pointblank)$stage), "ingest")
@@ -94,12 +142,18 @@ test_that("the insurance example preserves business grains and issued reports", 
   invalid <- collect(demo$corrected$raw$payments)
   invalid$month[[1]] <- as.Date("2026-03-01")
   failed <- demo$definitions$payments |>
-    add_source(invalid, name = "payments", replace = TRUE) |>
-    run(stop_on_failure = FALSE)
+    add_source(invalid, replace = TRUE) |>
+    run(
+      execution = execution_config(
+        quality = "pointblank",
+        relationships = "dm"
+      ),
+      stop_on_failure = FALSE
+    )
   expect_identical(failed$status, "error")
   expect_null(failed$outputs)
   expect_s3_class(failed$error, "tw_transform_failed")
-  expect_s3_class(failed$error$parent, "insurance_relationship_error")
+  expect_s3_class(failed$error$parent, "tw_lookup_unmatched")
 
   lake <- connect_lake(demo$context$config, read_only = TRUE)
   withr::defer(close_lake(lake))
@@ -114,7 +168,7 @@ test_that("the insurance example preserves business grains and issued reports", 
     expect_identical(built$success, TRUE)
     for (name in names(results)) {
       source <- built$manifest$sources[[
-        paste0("source.insurance.accepted_products.", name)
+        paste0("source.insurance.inputs.", name)
       ]]
       history <- releases(lake, results[[name]]$asset)
       reference <- history[history$release_id == results[[name]]$release_id, ]
@@ -166,17 +220,32 @@ test_that("the insurance example preserves business grains and issued reports", 
     expect_identical(unname(unique(pins)), demo[[phase]]$release$release_id)
   }
   saved <- report_read(lake, demo$initial$report$id, values_only = TRUE)
-  expect_equal(saved$cash_jan$value, 980)
-  expect_equal(saved$cash_feb$value, 1300)
-  expect_equal(saved$active_jan$value, 5L)
-  expect_equal(saved$active_feb$value, 5L)
-  expect_equal(saved$due_jan$value, 1500)
-  expect_equal(saved$due_feb$value, 1350)
+  expect_equal(saved, demo$initial$summary)
+  expect_equal(
+    dplyr::filter(saved, .metric == "cash_collected")$value,
+    c(980, 1300)
+  )
+  expect_equal(
+    dplyr::filter(saved, .metric == "active_policies")$value,
+    c(5, 5)
+  )
+  expect_equal(
+    dplyr::filter(saved, .metric == "premium_due")$value,
+    c(1500, 1350)
+  )
+  expect_equal(
+    dplyr::filter(saved, .metric == "cash_collected")$.period,
+    list(as.Date("2026-01-01"), as.Date("2026-02-01"))
+  )
+  expect_equal(collect(demo$initial$by_channel)$value, c(400, 280, 300))
+  expect_equal(
+    dplyr::filter(demo$corrected$summary, .metric == "cash_collected")$value,
+    c(1230, 1300)
+  )
   stock_error <- tryCatch(
     measure(
-      lake,
-      demo$initial$metrics$active_policies,
-      release = demo$initial$release$release_id
+      demo$initial$release,
+      demo$initial$metrics$active_policies
     ),
     error = identity
   )
@@ -187,11 +256,10 @@ test_that("the insurance example preserves business grains and issued reports", 
   )
   ratio_error <- tryCatch(
     measure(
-      lake,
+      demo$initial$release,
       demo$initial$metrics$cash_to_due,
       at = as.Date("2026-02-01"),
-      filters = list(channel = "direct"),
-      release = demo$initial$release$release_id
+      filters = list(channel = "direct")
     ),
     error = identity
   )

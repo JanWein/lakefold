@@ -1,0 +1,305 @@
+#' Enrich a product through a checked many-to-one lookup
+#'
+#' Add columns from a reference table while preserving the input row grain.
+#' The reference keys must be unique and non-missing. By default, every input
+#' key must match, including every component of a composite key. Missing input
+#' keys never match. With `unmatched = "keep"`, unmatched input rows remain
+#' and receive missing reference attributes.
+#'
+#' The native engine checks keys with dplyr. The optional dm engine constructs
+#' and examines real primary and foreign key constraints. Both engines use the
+#' same dplyr left join for consistent column naming and verify the row count.
+#' Lookup checks run at this transformation step, before subsequent transforms.
+#' Ordinary [add_quality()] checks still apply to the final candidate.
+#'
+#' The reference is an explicit execution dependency: products are validated
+#' and shared results are reused within a run. No source is read at definition
+#' time. Tables on the same database remain lazy; checks collect counts and,
+#' for dm, at most one diagnostic example per violated constraint. Those key
+#' values are not included in execution metadata. Cross-backend joins require
+#' the caller to collect or copy tables
+#' explicitly before using this step. This helper does not perform that transfer.
+#' @param x A product specification.
+#' @param source Reference data, a path, source adapter, product, or successful
+#'   result. Lake results pin exact immutable releases; other results reuse
+#'   their retained output.
+#' @param by Equality keys, supplied as a character vector, a named vector
+#'   mapping input to reference columns, or [dplyr::join_by()]. Inequality,
+#'   rolling and cross joins belong in ordinary dplyr transformations.
+#' @param engine Constraint validation engine: `"native"` or optional `"dm"`.
+#' @param unmatched Whether unmatched input rows cause an error or are retained
+#'   with missing reference values. Unused reference rows are always allowed.
+#' @param suffix Two suffixes for overlapping non-key column names, as in
+#'   [dplyr::left_join()].
+#' @returns An updated product specification.
+#' @export
+#' @examples
+#' customers <- data.frame(id = c("a", "b"), region = c("North", "South"))
+#' product("orders") |>
+#'   add_source(data.frame(customer_id = c("a", "a", "b"))) |>
+#'   add_lookup(customers, by = c(customer_id = "id")) |>
+#'   run() |>
+#'   collect()
+add_lookup <- function(
+  x,
+  source,
+  by,
+  engine = c("native", "dm"),
+  unmatched = c("error", "keep"),
+  suffix = c(".x", ".y")
+) {
+  x <- editable_product(x)
+  name <- paste0("lookup_", length(x$transforms) + 1L)
+  step <- structure(
+    list(
+      source = normalize_source(source, id = x$id, name = name),
+      by = lookup_keys(by),
+      engine = match.arg(engine),
+      engine_explicit = !missing(engine),
+      unmatched = match.arg(unmatched),
+      suffix = lookup_suffix(suffix)
+    ),
+    class = "tw_lookup_transform"
+  )
+  add_transform(x, step, name = name)
+}
+
+lookup_keys <- function(by) {
+  if (inherits(by, "dplyr_join_by")) {
+    if (
+      !length(by$x) || any(by$condition != "==") || any(by$filter != "none")
+    ) {
+      abort(
+        "A checked lookup needs equality keys. Use an ordinary dplyr join for other relationships.",
+        "tw_lookup_invalid"
+      )
+    }
+    by <- stats::setNames(by$y, by$x)
+  }
+  if (!is.character(by) || !length(by) || anyNA(by) || any(!nzchar(by))) {
+    abort("by must name one or more equality keys.", "tw_lookup_invalid")
+  }
+  if (is.null(names(by))) {
+    names(by) <- by
+  }
+  if (!anyNA(names(by))) {
+    names(by)[!nzchar(names(by))] <- by[!nzchar(names(by))]
+  }
+  if (
+    anyNA(names(by)) ||
+      any(!nzchar(names(by))) ||
+      anyDuplicated(names(by)) ||
+      anyDuplicated(unname(by))
+  ) {
+    abort(
+      "by must map unique input keys to unique reference keys.",
+      "tw_lookup_invalid"
+    )
+  }
+  by
+}
+
+lookup_suffix <- function(suffix) {
+  if (!is.character(suffix) || length(suffix) != 2L || anyNA(suffix)) {
+    abort("suffix must contain two character strings.", "tw_lookup_invalid")
+  }
+  suffix
+}
+
+#' @export
+component_sources.tw_lookup_transform <- function(x, ...) {
+  list(lookup = x$source)
+}
+
+#' @export
+replace_component_sources.tw_lookup_transform <- function(x, sources, ...) {
+  x$source <- sources$lookup
+  x
+}
+
+#' @export
+check_component.tw_lookup_transform <- function(x, ...) {
+  lookup_keys(x$by)
+  lookup_suffix(x$suffix)
+  match.arg(x$engine, c("native", "dm"))
+  match.arg(x$unmatched, c("error", "keep"))
+  if (x$engine == "dm") {
+    need("dm")
+  }
+  invisible(x)
+}
+
+#' @export
+inspect.tw_lookup_transform <- function(x, ...) {
+  source <- if (inherits(x$source, "tw_product")) {
+    list(type = "product", id = x$source$id, version = x$source$version)
+  } else {
+    inspect(x$source)
+  }
+  source$rows <- NULL
+  if (is.list(source$data)) {
+    source$data$rows <- NULL
+  }
+  list(
+    type = "checked lookup",
+    engine = x$engine,
+    by = x$by,
+    unmatched = x$unmatched,
+    suffix = x$suffix,
+    source = source
+  )
+}
+
+#' @export
+execute_transform.tw_lookup_transform <- function(
+  transform,
+  data,
+  ...,
+  sources = list()
+) {
+  check_component(transform)
+  reference <- sources$lookup
+  if (is.null(reference)) {
+    abort("A lookup reference must be resolved by run().", "tw_lookup_invalid")
+  }
+  data <- table_result(data, "Lookup input")
+  reference <- table_result(reference, "Lookup reference")
+  by <- transform$by
+  input_keys <- names(by)
+  parent_keys <- unname(by)
+  if (
+    !all(input_keys %in% names(table_prototype(data))) ||
+      !all(parent_keys %in% names(table_prototype(reference)))
+  ) {
+    abort(
+      "Lookup key columns are missing from the input or reference table.",
+      "tw_lookup_invalid"
+    )
+  }
+  same <- tryCatch(dplyr::same_src(data, reference), error = \(e) FALSE)
+  if (!isTRUE(same)) {
+    abort(
+      "Lookup tables are on different backends. Collect or copy them explicitly onto the same backend before joining.",
+      "tw_lookup_backend"
+    )
+  }
+  left <- dplyr::ungroup(data)
+  right <- dplyr::ungroup(reference)
+  dm_checks <- NULL
+  if (transform$engine == "dm") {
+    dm_checks <- lookup_dm_constraints(left, right, by, transform$unmatched)
+  } else {
+    count_name <- ".tw_lookup_count"
+    while (count_name %in% parent_keys) {
+      count_name <- paste0(count_name, "_")
+    }
+    duplicates <- dplyr::count(
+      right,
+      !!!rlang::syms(parent_keys),
+      name = count_name
+    )
+    duplicates <- dplyr::filter(duplicates, !!rlang::sym(count_name) > 1L)
+    if (
+      lookup_missing_keys(right, parent_keys) > 0 || count_rows(duplicates) > 0
+    ) {
+      lookup_parent_error()
+    }
+    if (transform$unmatched == "error") {
+      orphans <- dplyr::anti_join(left, right, by = by, na_matches = "never")
+      if (count_rows(orphans) > 0) lookup_unmatched_error()
+    }
+  }
+  joined <- dplyr::left_join(
+    data,
+    right,
+    by = by,
+    suffix = transform$suffix,
+    na_matches = "never"
+  )
+  input_rows <- count_rows(left)
+  output_rows <- count_rows(joined)
+  if (output_rows != input_rows) {
+    abort(
+      "The lookup changed the number of input rows. Check key types and concurrent changes to the reference table.",
+      "tw_lookup_cardinality"
+    )
+  }
+  evidence <- list(
+    type = "checked lookup",
+    engine = transform$engine,
+    keys = by,
+    unmatched = transform$unmatched,
+    input_rows = input_rows,
+    output_rows = output_rows,
+    row_preserved = TRUE,
+    constraints = list(
+      parent_unique = "passed",
+      parent_nonmissing = "passed",
+      input_keys = if (transform$unmatched == "error") {
+        "passed"
+      } else {
+        "not_required"
+      }
+    )
+  )
+  if (!is.null(dm_checks)) {
+    evidence$constraints$dm <- as.list(stats::setNames(
+      dm_checks$is_key,
+      dm_checks$kind
+    ))
+  }
+  attr(joined, "tw_transform_metadata") <- evidence
+  joined
+}
+
+lookup_missing_keys <- function(data, keys) {
+  missing <- dplyr::filter(data, dplyr::if_any(dplyr::all_of(keys), is.na))
+  count_rows(missing)
+}
+
+lookup_parent_error <- function() {
+  abort(
+    "Lookup reference keys must be unique and non-missing. Fix the reference table before enriching the input.",
+    "tw_lookup_parent_key"
+  )
+}
+
+lookup_unmatched_error <- function() {
+  abort(
+    "Some input lookup keys are missing or have no reference match. Correct the keys, or use unmatched = 'keep' to retain missing attributes explicitly.",
+    "tw_lookup_unmatched"
+  )
+}
+
+lookup_dm_constraints <- function(data, reference, by, unmatched) {
+  need("dm")
+  model <- dm::dm(input = data, reference = reference) |>
+    dm::dm_add_pk(reference, dplyr::all_of(!!unname(by))) |>
+    dm::dm_add_fk(
+      !!rlang::sym("input"),
+      dplyr::all_of(!!names(by)),
+      reference,
+      dplyr::all_of(!!unname(by))
+    )
+  checks <- dm::dm_examine_constraints(model, .max_value = 1L)
+  if (sum(checks$kind == "PK") != 1L || sum(checks$kind == "FK") != 1L) {
+    abort(
+      "The dm lookup did not return all declared constraint checks.",
+      "tw_lookup_constraints"
+    )
+  }
+  if (
+    !isTRUE(all(checks$is_key[checks$kind == "PK"])) ||
+      lookup_missing_keys(reference, unname(by)) > 0
+  ) {
+    lookup_parent_error()
+  }
+  if (
+    unmatched == "error" &&
+      (!all(checks$is_key[checks$kind == "FK"]) ||
+        lookup_missing_keys(data, names(by)) > 0)
+  ) {
+    lookup_unmatched_error()
+  }
+  invisible(checks)
+}

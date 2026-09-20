@@ -35,8 +35,7 @@ orders <- data.frame(
   amount = c(25, 75, 50)
 )
 
-checked <- product("orders") |>
-  add_source(orders) |>
+checked <- product("orders", orders) |>
   add_quality(~ amount >= 0) |>
   run()
 
@@ -79,9 +78,7 @@ starts in another process.
 
 ```{r configure}
 config <- lake_config(
-  registry_duckdb(file.path(root, "lake.duckdb")),
-  storage_local(file.path(root, "data")),
-  landing = file.path(root, "landing"),
+  path = file.path(root, "lake"),
   layers = c("raw", "staging", "core", "marts"),
   backend = "duckdb"
 )
@@ -110,7 +107,7 @@ layers; the starter does not silently migrate them.
 ## 2. Check the delivery before RAW
 
 ```{r accept-input, eval=requireNamespace("duckdb", quietly=TRUE)}
-accepted <- ingest(config, orders, quality = ~ amount >= 0)
+accepted <- ingest(orders, quality = ~ amount >= 0, to = config)
 collect(accepted)
 accepted$outputs
 ```
@@ -123,8 +120,8 @@ first accepted delivery establishes the structural schema for later deliveries.
 For example, the same operation can read a file:
 
 ```{r accept-file, eval=FALSE}
-accepted <- ingest(config, "deliveries/orders.csv",
-  name = "orders", quality = ~ amount >= 0)
+accepted <- ingest("deliveries/orders.csv",
+  name = "orders", quality = ~ amount >= 0, to = config)
 ```
 
 CSV, TSV and RDS have native readers; Excel uses optional readxl. Supply
@@ -148,30 +145,27 @@ Pass this as `contract = order_contract` to `ingest()`. It adds the declared sch
 and key checks before RAW persistence. Do not rely on inferred structure to
 discover a business key or a freshness deadline.
 
-Pointblank is another optional way to express the input gate. Replace the native
-predicate with a pointblank adapter when its richer checks are useful:
+The same simple predicate can use the optional Pointblank engine:
 
-```{r pointblank-input, eval=requireNamespace("pointblank", quietly=TRUE)}
-checks <- pointblank_checks("valid_amounts", function(data) {
-  pointblank::create_agent(tbl = data) |>
-    pointblank::col_vals_gte(columns = amount, value = 0)
-})
+```{r pointblank-input, eval=FALSE}
+accepted <- product("orders", orders) |>
+  add_contract(order_contract) |>
+  add_quality(~ amount >= 0, engine = "pointblank") |>
+  ingest(to = config)
 ```
 
-```{r use-pointblank-input, eval=FALSE}
-accepted <- ingest(config, orders, contract = order_contract, quality = checks)
-```
-
-Both engines run at the same input boundary. Additional business checks are
-optional; a malformed result or a blocking failure prevents acceptance.
+Omit `engine` for native checks. Both run at the same input boundary; missing
+predicate results fail. For richer Pointblank step types or action policies, pass
+`pointblank_checks()` to `add_quality()`. The optional adapter extends the simple
+grammar without forcing every workflow to build an agent.
 
 ## 3. Inspect a rejected delivery
 
 ```{r rejected-input, eval=requireNamespace("duckdb", quietly=TRUE)}
 bad_orders <- orders
 bad_orders$amount[1] <- -25
-rejected <- ingest(config, bad_orders, name = "orders",
-  quality = ~ amount >= 0, stop_on_failure = FALSE)
+rejected <- ingest(bad_orders, name = "orders",
+  quality = ~ amount >= 0, stop_on_failure = FALSE, to = config)
 
 rejected$status
 quality(rejected)
@@ -217,12 +211,13 @@ No seed replaces your accepted input when `sources` is supplied.
 On a later delivery, select the new accepted release explicitly:
 
 ```{r rebind-source, eval=FALSE}
-new_raw <- ingest(config, next_orders, name = "orders",
-  quality = ~ amount >= 0)
-dbt_sources(project, list(orders = new_raw))
+new_raw <- ingest(next_orders, name = "orders",
+  quality = ~ amount >= 0, to = config)
+project <- dbt_sources(project, list(orders = new_raw), name = "raw")
 ```
 
-Only the generated source binding changes; the SQL can keep using
+For the starter, keep its explicit `raw` group; managed existing projects default
+to `inputs`. Keep the returned project specification. Only the source binding changes; the SQL can keep using
 `source('raw', 'orders')`. Rejected inputs cannot replace that binding. Each dbt
 invocation retains artifacts describing the source version it actually used.
 
@@ -232,7 +227,7 @@ The following commands require the external CLI and are not executed when this
 vignette is built:
 
 ```{r build-layers, eval=FALSE}
-built <- dbt_build(project, echo = FALSE)
+built <- project |> run(echo = FALSE)
 dbt_status(built)
 dbt_lineage(built)
 ```
@@ -264,7 +259,7 @@ R freshness and empty-data policies still require R validation.
 ## 6. Publish an approved snapshot
 
 ```{r approve-mart, eval=FALSE}
-approved <- dbt_publish(config, built, "customer_revenue")
+approved <- publish(built, "customer_revenue", to = config)
 revenue <- collect(approved)
 revenue
 approved$outputs
@@ -288,7 +283,7 @@ revenue_contract <- contract(
   key = "customer_id",
   rules = list(quality_rule("non_negative_revenue", ~ revenue >= 0))
 )
-approved <- dbt_publish(config, built, "customer_revenue",
+approved <- publish(built, "customer_revenue", to = config,
   contract = revenue_contract)
 ```
 
@@ -337,8 +332,7 @@ For Power BI, export the approved data to a supported file location or a databas
 that Power BI already knows how to query. A Parquet export is a small local example:
 
 ```{r parquet-consumer, eval=FALSE}
-exported <- product("revenue_export") |>
-  add_source(source_release(config, approved$asset, approved$release_id)) |>
+exported <- product("revenue_export", approved) |>
   set_target(target_parquet("approved-revenue.parquet")) |>
   run()
 ```
@@ -359,10 +353,10 @@ A database export may be replaced on the next successful export; Parquet also
 has its adapter's file-write guarantees. Keep the original release reference when
 you need to prove which immutable snapshot a consumer received.
 
-`source_release()` preserves pinned release lineage in the export's execution
-metadata. With a configuration, it opens and closes its own read-only connection
-and returns an in-memory table. Use a caller-owned connected lake when the source
-should stay lazy. A simpler `add_source(collect(approved))` also works when only
+The successful result preserves pinned release lineage in the export's execution
+metadata. Configuration-owned lake results open and close a read connection and return
+an in-memory table. A caller-owned live lake supports lazy access while it stays
+open. These ownership differences remain visible through adapter inspection. A simpler `add_source(collect(approved))` also works when only
 the ordinary data is needed, but does not infer that release lineage.
 
 ## 8. Send metadata only when you need a catalog
@@ -391,7 +385,7 @@ catalog <- catalog_openmetadata_dbt(
   executable = "/path/to/metadata"
 )
 
-built <- dbt_build(project, catalog = catalog, echo = FALSE)
+built <- project |> run(catalog = catalog, echo = FALSE)
 built$success
 built$catalog_delivery
 ```

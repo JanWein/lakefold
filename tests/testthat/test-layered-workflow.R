@@ -98,8 +98,8 @@ test_that("CSV, Excel and API deliveries retain approved outputs across layered 
   csv <- file.path(directory, "orders.csv")
   utils::write.csv(first_data, csv, row.names = FALSE)
   first_raw <- ingest(
-    config,
     csv,
+    config,
     "orders",
     quality = list(nonnegative = ~ amount >= 0),
     business_date = as.Date("2026-09-01")
@@ -194,8 +194,8 @@ test_that("CSV, Excel and API deliveries retain approved outputs across layered 
       )
   }
   second_raw <- ingest(
-    config,
     workbook,
+    config,
     "orders",
     reader = prepared_excel,
     quality = list(nonnegative = ~ amount >= 0),
@@ -207,7 +207,7 @@ test_that("CSV, Excel and API deliveries retain approved outputs across layered 
     digest::digest(file = second_raw$inputs$landed_path[[1]], algo = "sha256"),
     digest::digest(file = workbook, algo = "sha256")
   )
-  dbt_sources(project, list(orders = second_raw))
+  dbt_sources(project, list(orders = second_raw), name = "raw")
   second_build <- dbt_build(project, echo = FALSE, stop_on_failure = FALSE)
   if (!layered_expect_build(second_build, second_raw)) {
     return(invisible(NULL))
@@ -228,15 +228,15 @@ test_that("CSV, Excel and API deliveries retain approved outputs across layered 
   invalid_csv <- file.path(directory, "invalid-orders.csv")
   utils::write.csv(invalid, invalid_csv, row.names = FALSE)
   native_rejected <- ingest(
-    config,
     invalid_csv,
+    config,
     "orders",
     quality = list(nonnegative = ~ amount >= 0),
     stop_on_failure = FALSE
   )
   pointblank_rejected <- ingest(
-    config,
     invalid,
+    config,
     "orders",
     quality = pointblank_checks("nonnegative", function(data) {
       pointblank::create_agent(data) |>
@@ -258,7 +258,10 @@ test_that("CSV, Excel and API deliveries retain approved outputs across layered 
     expect_null(rejected$outputs)
     expect_true(all(file.exists(rejected$inputs$landed_path)))
     expect_identical(unique(quality(rejected)$stage), "ingest")
-    expect_error(dbt_sources(project, list(orders = rejected)), "successful")
+    expect_error(
+      dbt_sources(project, list(orders = rejected), name = "raw"),
+      "successful"
+    )
     expect_equal(readLines(binding_file), binding_before)
   }
   expect_true(any(
@@ -297,8 +300,8 @@ test_that("CSV, Excel and API deliveries retain approved outputs across layered 
   withr::defer(server$stop())
   request <- httr2::request(paste0(sub("/$", "", server$url()), "/orders"))
   api_raw <- ingest(
-    config,
     source_api(request),
+    config,
     "orders",
     quality = list(nonnegative = ~ amount >= 0),
     business_date = as.Date("2026-09-03")
@@ -309,7 +312,7 @@ test_that("CSV, Excel and API deliveries retain approved outputs across layered 
     readRDS(api_raw$inputs$landed_path[[1]])$amount,
     collect(api_raw)$amount
   )
-  dbt_sources(project, list(orders = api_raw))
+  dbt_sources(project, list(orders = api_raw), name = "raw")
   failed <- dbt_build(project, echo = FALSE, stop_on_failure = FALSE)
   expect_false(failed$success)
   expect_true(any(failed$results$status == "fail"))

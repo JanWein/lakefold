@@ -109,6 +109,15 @@ capabilities.tw_release_source <- function(x, ...) {
   )
 }
 #' @export
+capabilities.tw_result_source <- function(x, ...) {
+  component_capabilities(
+    read = TRUE,
+    write = FALSE,
+    lazy = is_lazy_table(x$data),
+    immutable = FALSE
+  )
+}
+#' @export
 capabilities.tw_product <- function(x, ...) {
   component_capabilities(
     read = TRUE,

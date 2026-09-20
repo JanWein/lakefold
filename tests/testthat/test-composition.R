@@ -29,7 +29,7 @@ test_that("minimal and progressively composed workflows use ordinary R objects",
   )
   expect_equal(tail(result$lifecycle$state, 1), "completed")
   expect_equal(result$inputs$rows, 2L)
-  expect_equal(collect(data), tibble::as_tibble(data))
+  expect_identical(collect(data), dplyr::collect(data))
 })
 
 test_that("definition, inspection and validation never call user functions", {

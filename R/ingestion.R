@@ -20,14 +20,21 @@
 #' For data exceeding available memory, use a lazy product and database target.
 #' Connections opened from a configuration are closed before returning;
 #' [collect()] can reopen the exact accepted release when needed.
-#' @param lake Connected lake or [lake_config()] with a `raw` layer.
-#' @param data Data frame, lazy table, local file path, zero-argument function,
-#'   or source adapter accepted by [add_source()].
+#' @param x Data frame, lazy table, local file path, zero-argument function,
+#'   source adapter or product. A product must have one ordinary source and no
+#'   transformations, lookups, target or catalogs. Its contract, quality rules,
+#'   name and code version are retained. Use [publish()] for transformed products.
+#' @param to Local lake folder, connected lake or [lake_config()] with a `raw`
+#'   layer. Defaults to a local `"tidyweave"` folder, using the same configuration
+#'   and backend marker as [open_lake()].
 #' @param name Optional asset name. Defaults to a file basename, source asset
 #'   or ID, or the data variable name; expressions use `"data"`.
 #' @param contract Optional contract, named type vector or prototype list.
 #' @param quality Optional input checks accepted by [add_quality()].
 #' @param reader Optional file reader. CSV, TSV, RDS and Excel have defaults.
+#' @param execution Optional [execution_config()] defaults, overriding defaults
+#'   stored on a product. Its layer must be
+#'   `NULL` or `"raw"`; an explicit `to` overrides its destination.
 #' @param ... Named execution options: `stop_on_failure` (default `TRUE`),
 #'   `business_date`, `notify`, `code_version`, and `cache` (default `FALSE`).
 #'   Reusing a cached raw release requires an explicit `code_version`; live
@@ -40,35 +47,97 @@
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("raw-ingestion-")
-#' lake <- open_lake(root)
+#' config <- lake_config(path = root)
 #' orders <- data.frame(id = 1:2, amount = c(25, 75))
-#' accepted <- ingest(lake, orders, quality = ~ amount >= 0)
+#' accepted <- orders |> ingest(to = config, quality = ~ amount >= 0)
 #' collect(accepted)
 #' accepted$outputs
-#' close_lake(lake)
 #' unlink(root, recursive = TRUE)
 ingest <- function(
-  lake,
-  data,
+  x,
+  to = NULL,
   name = NULL,
   contract = NULL,
   quality = NULL,
   reader = NULL,
+  execution = NULL,
   ...
 ) {
-  expression <- substitute(data)
+  expression <- substitute(x)
+  execution <- product_execution(x, execution)
+  if (!is.null(execution$layer) && execution$layer != "raw") {
+    abort("Ingestion requires execution layer = 'raw' or NULL.")
+  }
+  if (is.null(to)) {
+    to <- execution$to %||% "tidyweave"
+    if (inherits(to, "tw_lake_target")) {
+      if (length(to$partition_by)) {
+        abort("Ingestion does not accept partitioned targets.")
+      }
+      to <- to$destination
+    }
+  }
   options <- ingestion_options(list(...))
-  name <- name %||% ingestion_name(data, expression)
-  asset_id(name)
-  definition <- product(name, code_version = options$code_version) |>
-    add_source(data, reader = reader)
-  if (!is.null(contract)) {
-    definition <- add_contract(definition, contract)
+  if (inherits(x, "tw_product")) {
+    if (
+      length(x$sources) != 1L ||
+        inherits(x$sources[[1L]], "tw_product") ||
+        length(x$transforms)
+    ) {
+      abort(
+        "Ingestion accepts one ordinary product source without transformations or lookups. Use publish() for a transformed product."
+      )
+    }
+    if (!is.null(x$target) || length(x$catalogs)) {
+      abort(
+        "Ingestion uses to as its RAW destination. Remove product targets and catalogs before ingesting."
+      )
+    }
+    if (!is.null(reader) || !is.null(contract)) {
+      abort(
+        "Configure a product's reader and contract with add_source() and add_contract() before ingestion."
+      )
+    }
+    if (!is.null(name) && !identical(name, x$id)) {
+      abort(
+        "A product supplies its own ingestion name. Omit name or use the product id."
+      )
+    }
+    definition <- x
+    name <- x$id
+    options$code_version <- options$code_version %||% x$code_version
+    definition$code_version <- options$code_version
+  } else {
+    name <- name %||% ingestion_name(x, expression)
+    asset_id(name)
+    definition <- product(name, code_version = options$code_version) |>
+      add_source(x, reader = reader)
+    if (!is.null(contract)) {
+      definition <- add_contract(definition, contract)
+    }
   }
   if (!is.null(quality)) {
     definition <- add_quality(definition, quality)
   }
+  quality_defaults <- execution
+  if (!is.null(quality_defaults)) {
+    quality_defaults[c("to", "layer")] <- list(NULL, NULL)
+    definition <- apply_execution_defaults(definition, quality_defaults)
+  }
   validate(definition)
+  if (is.character(to)) {
+    to <- lake_config(path = to)
+  }
+  if (!inherits(to, c("tw_lake", "tw_config"))) {
+    abort("to must be a local folder, connected lake or lake_config().")
+  }
+  config <- if (inherits(to, "tw_config")) to else to$config
+  if (isTRUE(config$read_only)) {
+    abort("Ingestion requires a writable destination.")
+  }
+  if (!"raw" %in% config$layers) {
+    abort("Ingestion requires a configured raw layer.")
+  }
   rules <- c(definition$contract$rules, definition$quality)
   if (options$cache && is.null(options$code_version)) {
     abort(
@@ -87,8 +156,8 @@ ingest <- function(
   ) {
     abort("Live reference checks require cache = FALSE.")
   }
-  owned <- inherits(lake, "tw_config")
-  with_execution_lake(lake, function(con) {
+  owned <- inherits(to, "tw_config")
+  with_execution_lake(to, function(con) {
     assert_writable(con)
     if (!"raw" %in% con$config$layers) {
       abort("Ingestion requires a configured raw layer.")
@@ -101,6 +170,9 @@ ingest <- function(
       abort(
         "This asset already publishes outside raw. Use a distinct ingestion name."
       )
+    }
+    if (!is.null(definition$contract)) {
+      register(con, definition$contract)
     }
     description <- inspect(definition)
     description$status <- NULL

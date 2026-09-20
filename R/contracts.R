@@ -16,7 +16,8 @@
 #'   List columns require a target that supports nested data.
 #' @param required Non-null columns.
 #' @param key Unique key columns.
-#' @param rules List of quality rules.
+#' @param rules A quality rule, one-sided formula, or list of rules/formulas.
+#'   List names label rules, with the same grammar as [add_quality()].
 #' @param producer Contact for failed deliveries.
 #' @param max_age_hours Maximum release age, or `NULL` to leave freshness
 #'   unmonitored.
@@ -112,9 +113,7 @@ contract <- function(
   ) {
     abort("max_age_hours must be positive and finite, or NULL.")
   }
-  if (!all(vapply(rules, inherits, logical(1), "tw_rule"))) {
-    abort("Use quality_rule() or pointblank_checks() for rules.")
-  }
+  rules <- normalize_quality_rules(rules)
   if (anyDuplicated(vapply(rules, `[[`, character(1), "name"))) {
     abort("Rule names must be unique.")
   }
@@ -170,6 +169,11 @@ contract <- function(
 #' @param severity error blocks publication; warning permits publication.
 #' @param max_failure Fraction of permitted failed test units.
 #' @param description Rule description.
+#' @param engine Formula evaluation engine: `"native"` (default) or optional
+#'   `"pointblank"`. Both require logical row predicates and count missing
+#'   values as failures. Pointblank interrogates a real agent against the
+#'   normalized predicate, retaining its reports and check evidence. Ordinary
+#'   functions use the native engine; use [pointblank_checks()] for custom agents.
 #' @param build Function creating a pointblank agent from a lazy table.
 #' @param policy `"rule"` preserves the explicit `severity` / `max_failure`
 #'   gate. `"agent"` uses pointblank's per-step action levels: warnings permit
@@ -191,14 +195,22 @@ quality_rule <- function(
   check,
   severity = c("error", "warning"),
   max_failure = 0,
-  description = ""
+  description = "",
+  engine = c("native", "pointblank")
 ) {
+  engine_explicit <- !missing(engine)
   scalar(name, "name")
   if (!is.function(check) && !inherits(check, "formula")) {
     abort("check must be a function or a one-sided formula.")
   }
   if (inherits(check, "formula") && length(check) != 2L) {
     abort("Use a one-sided quality formula, for example ~ amount >= 0.")
+  }
+  engine <- normalize_quality_engine(match.arg(engine))
+  if (engine == "pointblank" && !inherits(check, "formula")) {
+    abort(
+      "Pointblank formula rules need a one-sided formula. Use pointblank_checks() for an agent builder."
+    )
   }
   if (
     !is.numeric(max_failure) ||
@@ -216,7 +228,8 @@ quality_rule <- function(
       severity = match.arg(severity),
       max_failure = max_failure,
       description = description,
-      engine = "r"
+      engine = engine,
+      engine_explicit = engine_explicit
     ),
     class = "tw_rule"
   )
@@ -253,6 +266,7 @@ pointblank_checks <- function(
 ) {
   rule <- quality_rule(name, build, severity, max_failure)
   rule$engine <- "pointblank"
+  rule$engine_explicit <- TRUE
   policy <- match.arg(policy)
   if (policy != "rule") {
     rule$policy <- policy
@@ -316,7 +330,24 @@ from_counts <- function(
 }
 pointblank_results <- function(rule, data, keep_agent = FALSE) {
   need("pointblank")
-  agent <- rule$check(data)
+  formula <- inherits(rule$check, "formula")
+  if (formula) {
+    units <- quality_formula_units(data, rule$check)
+    if (!is.data.frame(units) && !inherits(units, "tbl_sql")) {
+      abort(
+        "Pointblank formula checks need a data frame or DBI table. Collect this table explicitly, or use engine = 'native'."
+      )
+    }
+    agent <- pointblank::create_agent(units) |>
+      pointblank::col_vals_equal(
+        columns = ".tw_pass",
+        value = TRUE,
+        na_pass = FALSE,
+        label = rule$name
+      )
+  } else {
+    agent <- rule$check(data)
+  }
   if (!inherits(agent, "ptblank_agent")) {
     abort("pointblank builder must return an agent.")
   }
@@ -338,7 +369,7 @@ pointblank_results <- function(rule, data, keep_agent = FALSE) {
   }
   results <- dplyr::bind_rows(lapply(seq_len(nrow(report)), function(i) {
     row <- report[i, ]
-    name <- paste(rule$name, row$i, sep = ":")
+    name <- if (formula) rule$name else paste(rule$name, row$i, sep = ":")
     if (!isTRUE(row$active[[1]])) {
       return(quality_row(
         name,
@@ -406,12 +437,16 @@ pointblank_results <- function(rule, data, keep_agent = FALSE) {
     }
     actions <- steps$actions[[i]]
     levels <- actions[setdiff(names(actions), "fns")]
-    results$details[[i]] <- jencode(list(
+    details <- list(
       assertion = report$type[[i]],
       columns = report$columns[[i]],
       policy = rule$policy %||% "rule",
       action_levels = levels
-    ))
+    )
+    if (formula) {
+      details$predicate <- paste(deparse(rule$check[[2]]), collapse = "\n")
+    }
+    results$details[[i]] <- jencode(details)
   }
   results$engine <- "pointblank"
   if (keep_agent) {
@@ -627,4 +662,53 @@ validate.tw_pipeline <- function(data, contract = NULL, ...) {
   assert_contract_ready(data$steps$validate)
   attr(data, "tw_validated") <- TRUE
   data
+}
+
+normalize_quality_rules <- function(
+  quality,
+  name = NULL,
+  engine = NULL,
+  existing = list()
+) {
+  if (!is.null(engine)) {
+    normalize_quality_engine(engine)
+  }
+  if (is.list(quality) && !inherits(quality, "tw_rule")) {
+    if (!is.null(name)) {
+      abort("Name individual rules in the quality list.")
+    }
+    for (i in seq_along(quality)) {
+      label <- names(quality)[i]
+      if (is.null(label) || is.na(label) || !nzchar(label)) {
+        label <- NULL
+      }
+      existing <- normalize_quality_rules(quality[[i]], label, engine, existing)
+    }
+    return(existing)
+  }
+  if (!inherits(quality, "tw_rule")) {
+    quality <- quality_rule(
+      name %||% paste0("quality_", length(existing) + 1L),
+      quality
+    )
+  } else if (!is.null(name)) {
+    quality$name <- scalar(name, "name")
+  }
+  if (!is.null(engine)) {
+    selected <- normalize_quality_engine(engine)
+    if (
+      !identical(quality$engine, selected) &&
+        !inherits(quality$check, "formula")
+    ) {
+      abort(
+        "Only formula rules can change engines. Keep custom functions native or use pointblank_checks() for an agent builder."
+      )
+    }
+    quality$engine <- selected
+    quality$engine_explicit <- TRUE
+  }
+  if (quality$name %in% vapply(existing, `[[`, character(1), "name")) {
+    abort("Quality rule names must be unique.")
+  }
+  c(existing, list(quality))
 }

@@ -2,15 +2,15 @@
 % Please edit documentation in R/dbt-sources.R
 \name{dbt_sources}
 \alias{dbt_sources}
-\title{Bind logical dbt sources to accepted RAW releases}
+\title{Bind logical dbt sources to exact published lake releases}
 \usage{
-dbt_sources(project, sources, name = "raw")
+dbt_sources(project, sources, name = "inputs")
 }
 \arguments{
 \item{project}{A \code{\link[=dbt_project]{dbt_project()}} specification.}
 
 \item{sources}{Named, non-empty list of successful \code{tw_run_result} objects
-returned by \code{\link[=ingest]{ingest()}}. Names are dbt identifiers such as \code{orders}.}
+returned by \code{\link[=ingest]{ingest()}} or \code{\link[=publish]{publish()}}. Names are dbt identifiers such as \code{orders}.}
 
 \item{name}{Logical dbt source name, used by \code{source(name, table)} in SQL.}
 }
@@ -18,22 +18,25 @@ returned by \code{\link[=ingest]{ingest()}}. Names are dbt identifiers such as \
 The project specification, invisibly, for use in a pipe.
 }
 \description{
-Write ordinary dbt source YAML pointing at immutable relations accepted by
-\code{\link[=ingest]{ingest()}}. Logical names stay the same when a later call explicitly selects
-a newer release. No data, views or dbt seeds are written.
+Use successful ingestion or product results from any lake layer as ordinary
+dbt sources. Each source group must use one physical schema. Bind additional
+groups with separate calls, for example \code{name = "raw"} and \code{name = "enriched"}.
+The registry supplies exact physical names and verifies the recorded run;
+editable result output descriptions are never used as relation authority.
 }
 \details{
-Every result must be successful, belong to the same catalog, and contain a
-qualified RAW output reference. The entire batch is validated before writing.
-Existing bindings with other logical names are retained. Only the generated
-\verb{models/tidyweave_sources_<name>.yml} file is replaced, using a temporary file
-in the same directory. An existing file without the ownership marker is
-never overwritten. Coordinate concurrent project writers yourself.
+For \code{dbt_project(lake = config)}, this function updates a deferred
+specification. No database is opened and no files are written. At execution,
+all groups are resolved and validated before one package-owned source YAML
+is replaced. Constructor \code{sources} uses the group name \code{inputs}.
 
-The profile must attach that catalog under the recorded database name
-(normally \code{lake}). Projects created with \code{\link[=dbt_init]{dbt_init()}} also check the catalog
-against their stored configuration. For externally configured projects,
-matching profile attachments remain the caller's responsibility.
+For an externally configured project, this is an explicit immediate YAML
+generator. It preserves other logical tables in the same generated group.
+Only a file with the package ownership marker can be replaced. Its profile
+must attach the same catalog as \code{lake}. Both modes use the first literal
+\code{model-paths} directory, defaulting to \code{models}, and never write data or views.
+Coordinate concurrent project writers and close caller-owned lake handles
+before dbt execution.
 }
 \examples{
 \dontshow{if (requireNamespace("duckdb", quietly = TRUE) && requireNamespace("yaml", quietly = TRUE)) withAutoprint(\{ # examplesIf}
@@ -44,12 +47,12 @@ config <- lake_config(
   landing = file.path(root, "landing"), backend = "duckdb",
   layers = c("raw", "staging", "core", "marts")
 )
-accepted <- ingest(config, data.frame(
+accepted <- ingest(data.frame(
   order_id = 1:2, customer_id = c(1L, 1L), amount = c(10, 20)
-), "orders")
+), name = "orders", to = config)
 project <- dbt_init(file.path(root, "dbt"), config,
   sources = list(orders = accepted))
-dbt_sources(project, list(orders = accepted))
+dbt_sources(project, list(orders = accepted), name = "raw")
 unlink(root, recursive = TRUE)
 \dontshow{\}) # examplesIf}
 }

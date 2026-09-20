@@ -137,7 +137,10 @@ close_lake <- function(lake) disconnect_lake(lake)
 #' @param ... Publication options, such as `business_date`,
 #'   `notify`, `layer` and `stop_on_failure`.
 #' @returns A `tw_run_result` with status, release ID and quality results.
-#'   [read_release()] returns the published data; [quality()] explains a failure.
+#'   Successful results retain their exact release and connection configuration
+#'   for [collect()], [product()], [add_lookup()] and [measure()], including
+#'   after the original connection closes. Caller-owned connections remain open.
+#'   [quality()] explains a failure.
 #' @seealso [open_lake()], [read_release()], [product()], [run()]
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
@@ -165,6 +168,7 @@ write_data <- function(
 ) {
   invisible(lapply(partition_by, column_name))
   expression <- substitute(data)
+  owned <- inherits(lake, "tw_config")
   if (is.function(data)) {
     if (is.null(name)) {
       abort("Supply name when writing from a source function.")
@@ -176,7 +180,7 @@ write_data <- function(
       if (!is.data.frame(received)) {
         abort("A source function must return a data frame.")
       }
-      write_data(
+      result <- write_data(
         con,
         received,
         name,
@@ -187,6 +191,10 @@ write_data <- function(
         partition_by = partition_by,
         ...
       )
+      if (owned) {
+        result$output_lake <- NULL
+      }
+      result
     }))
   }
   file_input <- is.character(data) && length(data) == 1L && !is.na(data)
@@ -294,7 +302,7 @@ write_data <- function(
         partition_by = partition_by
       ))
     )
-    if (file_input) {
+    result <- if (file_input) {
       source$version <- version
       tw_ingest(
         con,
@@ -322,6 +330,23 @@ write_data <- function(
         ...
       )
     }
+    if (result$status %in% c("published", "cached")) {
+      release <- resolve_release(con, name, result$release_id)
+      result$asset <- name
+      result$output_config <- con$config
+      if (!owned) {
+        result$output_lake <- con
+      }
+      result$outputs <- list(
+        type = "lake release",
+        database = "lake",
+        schema = release$schema_name[[1]],
+        table = release$table_name[[1]],
+        asset = name,
+        release_id = result$release_id
+      )
+    }
+    result
   })
 }
 

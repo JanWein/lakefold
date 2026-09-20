@@ -16,17 +16,54 @@ dbt_publication_fixture <- function(marts = FALSE) {
     "dbt-artifacts",
     package = "tidyweave"
   ))
+  artifacts <- file.path(f$root, "dbt-artifacts")
+  dir.create(artifacts)
+  file.copy(
+    list.files(
+      system.file("extdata", "dbt-artifacts", package = "tidyweave"),
+      full.names = TRUE
+    ),
+    artifacts
+  )
   f$dbt <- structure(
     list(
       success = TRUE,
       status = 0L,
       command = "build",
+      artifacts_dir = artifacts,
+      invocation_id = parsed$manifest$metadata$invocation_id,
+      artifact_hashes = dbt_artifact_hashes(artifacts),
       results = parsed$results,
       manifest = parsed$manifest
     ),
     class = "tw_dbt_result"
   )
   f
+}
+
+# Simulate another completed invocation with matching files and parsed objects.
+dbt_publication_new_artifacts <- function(result) {
+  path <- result$artifacts_dir
+  runs <- jsonlite::read_json(file.path(path, "run_results.json"))
+  runs$metadata$invocation_id <- result$manifest$metadata$invocation_id
+  jsonlite::write_json(
+    result$manifest,
+    file.path(path, "manifest.json"),
+    auto_unbox = TRUE,
+    null = "null"
+  )
+  jsonlite::write_json(
+    runs,
+    file.path(path, "run_results.json"),
+    auto_unbox = TRUE,
+    null = "null"
+  )
+  parsed <- dbt_read_artifacts(path)
+  result$manifest <- parsed$manifest
+  result$results <- parsed$results
+  result$invocation_id <- parsed$manifest$metadata$invocation_id
+  result$artifact_hashes <- dbt_artifact_hashes(path)
+  result
 }
 
 test_that("minimal dbt publication returns an exact collectable release", {
@@ -80,11 +117,13 @@ test_that("automatic versions track definitions but ignore invocation timestamps
   first <- dbt_publish(f$lake, f$dbt, "customer_revenue")
   f$dbt$manifest$metadata$invocation_id <- "another-successful-invocation"
   f$dbt$manifest$metadata$generated_at <- "2026-10-01T00:00:00Z"
+  f$dbt <- dbt_publication_new_artifacts(f$dbt)
   repeated <- dbt_publish(f$lake, f$dbt, "customer_revenue")
   expect_identical(repeated$metadata$code_version, first$metadata$code_version)
   expect_identical(repeated$metadata$version, first$metadata$version)
   f$dbt$manifest$nodes[["model.shop.customer_revenue"]]$compiled_code <-
     "SELECT customer_id, revenue FROM a_changed_input"
+  f$dbt <- dbt_publication_new_artifacts(f$dbt)
   changed <- dbt_publish(f$lake, f$dbt, "customer_revenue")
   expect_false(identical(
     changed$metadata$code_version,
@@ -124,13 +163,13 @@ test_that("invalid invocations and final contracts preserve the consumer release
   ]
   expect_error(
     dbt_publish(f$lake, absent, "customer_revenue"),
-    "succeeded in this build"
+    "result changed"
   )
   wrong <- f$dbt
   wrong$invocation_id <- "unrelated-invocation"
   expect_error(
     dbt_publish(f$lake, wrong, "customer_revenue"),
-    "same invocation"
+    "artifacts changed"
   )
   expect_error(
     dbt_publish(f$lake, f$dbt, "+customer_revenue"),
@@ -141,6 +180,10 @@ test_that("invalid invocations and final contracts preserve the consumer release
     ambiguous$manifest$nodes[["model.shop.customer_revenue"]]
   expect_error(
     dbt_publish(f$lake, ambiguous, "customer_revenue"),
+    "result changed"
+  )
+  expect_error(
+    dbt_publication_model(ambiguous$manifest, "customer_revenue"),
     "unambiguous"
   )
   DBI::dbExecute(

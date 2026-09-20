@@ -5,20 +5,25 @@
 \title{Check a delivery and publish an accepted raw release}
 \usage{
 ingest(
-  lake,
-  data,
+  x,
+  to = NULL,
   name = NULL,
   contract = NULL,
   quality = NULL,
   reader = NULL,
+  execution = NULL,
   ...
 )
 }
 \arguments{
-\item{lake}{Connected lake or \code{\link[=lake_config]{lake_config()}} with a \code{raw} layer.}
+\item{x}{Data frame, lazy table, local file path, zero-argument function,
+source adapter or product. A product must have one ordinary source and no
+transformations, lookups, target or catalogs. Its contract, quality rules,
+name and code version are retained. Use \code{\link[=publish]{publish()}} for transformed products.}
 
-\item{data}{Data frame, lazy table, local file path, zero-argument function,
-or source adapter accepted by \code{\link[=add_source]{add_source()}}.}
+\item{to}{Local lake folder, connected lake or \code{\link[=lake_config]{lake_config()}} with a \code{raw}
+layer. Defaults to a local \code{"tidyweave"} folder, using the same configuration
+and backend marker as \code{\link[=open_lake]{open_lake()}}.}
 
 \item{name}{Optional asset name. Defaults to a file basename, source asset
 or ID, or the data variable name; expressions use \code{"data"}.}
@@ -28,6 +33,10 @@ or ID, or the data variable name; expressions use \code{"data"}.}
 \item{quality}{Optional input checks accepted by \code{\link[=add_quality]{add_quality()}}.}
 
 \item{reader}{Optional file reader. CSV, TSV, RDS and Excel have defaults.}
+
+\item{execution}{Optional \code{\link[=execution_config]{execution_config()}} defaults, overriding defaults
+stored on a product. Its layer must be
+\code{NULL} or \code{"raw"}; an explicit \code{to} overrides its destination.}
 
 \item{...}{Named execution options: \code{stop_on_failure} (default \code{TRUE}),
 \code{business_date}, \code{notify}, \code{code_version}, and \code{cache} (default \code{FALSE}).
@@ -66,12 +75,11 @@ Connections opened from a configuration are closed before returning;
 \examples{
 \dontshow{if (requireNamespace("duckdb", quietly = TRUE)) withAutoprint(\{ # examplesIf}
 root <- tempfile("raw-ingestion-")
-lake <- open_lake(root)
+config <- lake_config(path = root)
 orders <- data.frame(id = 1:2, amount = c(25, 75))
-accepted <- ingest(lake, orders, quality = ~ amount >= 0)
+accepted <- orders |> ingest(to = config, quality = ~ amount >= 0)
 collect(accepted)
 accepted$outputs
-close_lake(lake)
 unlink(root, recursive = TRUE)
 \dontshow{\}) # examplesIf}
 }

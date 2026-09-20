@@ -51,7 +51,10 @@ partition replaces that partition; other partitions remain published.}
 }
 \value{
 A \code{tw_run_result} with status, release ID and quality results.
-\code{\link[=read_release]{read_release()}} returns the published data; \code{\link[=quality]{quality()}} explains a failure.
+Successful results retain their exact release and connection configuration
+for \code{\link[=collect]{collect()}}, \code{\link[=product]{product()}}, \code{\link[=add_lookup]{add_lookup()}} and \code{\link[=measure]{measure()}}, including
+after the original connection closes. Caller-owned connections remain open.
+\code{\link[=quality]{quality()}} explains a failure.
 }
 \description{
 Starts the normal landing, validation and publication workflow. Without a

@@ -2,11 +2,11 @@ with policy_input as (
   select month,
     sum(case when status = 'active' then 1 else 0 end) as active_policies,
     sum(premium_due) as premium_due
-  from {{ source('accepted_products', 'policies') }}
+  from {{ source('inputs', 'policies') }}
   group by month
 ), cash_input as (
   select month, count(*) as payment_count, sum(cash_amount) as cash_collected
-  from {{ source('accepted_products', 'payments') }}
+  from {{ source('inputs', 'payments') }}
   group by month
 ), reported as (
   select month, sum(active_policies) as active_policies, sum(premium_due) as premium_due,

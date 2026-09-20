@@ -2,7 +2,7 @@
 % Please edit documentation in R/metrics.R
 \name{metric}
 \alias{metric}
-\title{Define an approved metric}
+\title{Define a metric for exploration or approved reporting}
 \usage{
 metric(
   id,
@@ -19,7 +19,7 @@ metric(
   approved = FALSE,
   na_policy = "reject",
   empty_policy = "error",
-  code_version,
+  code_version = NULL,
   input_columns = NULL
 )
 }
@@ -50,7 +50,8 @@ span dates. Defaults to stock when \code{time_column} is supplied, otherwise flo
 
 \item{empty_policy}{Policy description.}
 
-\item{code_version}{Version of metric code and dependencies.}
+\item{code_version}{Version of metric code and dependencies. Required for
+approved definitions; exploratory definitions may omit it.}
 
 \item{input_columns}{Optional explicit input columns for dynamic expressions
 or custom functions. Known expression columns are always checked as well.}
@@ -59,7 +60,7 @@ or custom functions. Known expression columns are always checked as well.}
 Metric specification. Reports execute it directly without an LLM.
 }
 \description{
-Define an approved metric
+Define a metric for exploration or approved reporting
 }
 \examples{
 metric <- metric(

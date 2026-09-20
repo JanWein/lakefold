@@ -84,8 +84,13 @@ editable_product <- function(x) {
 add_source <- function(x, source, name = NULL, reader = NULL, replace = FALSE) {
   x <- editable_product(x)
   flag(replace, "replace")
-  if (!is.null(reader) && (!is.character(source) || !is.function(reader))) {
-    abort("reader is only used with a file path and must be a function.")
+  if (is.null(name) && replace) {
+    if (length(x$sources) != 1L) {
+      abort(
+        "Name the source to replace when the product does not have exactly one primary source."
+      )
+    }
+    name <- names(x$sources)[[1]]
   }
   name <- name %||%
     if (inherits(source, "tw_product")) {
@@ -101,6 +106,17 @@ add_source <- function(x, source, name = NULL, reader = NULL, replace = FALSE) {
       "` already exists. Use replace = TRUE to replace it."
     ))
   }
+  x$sources[[name]] <- normalize_source(source, x$id, name, reader)
+  x
+}
+
+normalize_source <- function(source, id, name, reader = NULL) {
+  if (!is.null(reader) && (!is.character(source) || !is.function(reader))) {
+    abort("reader is only used with a file path and must be a function.")
+  }
+  if (inherits(source, "tw_run_result")) {
+    source <- normalize_result_source(source)
+  }
   if (is.character(source)) {
     scalar(source, "source path")
     if (
@@ -111,7 +127,7 @@ add_source <- function(x, source, name = NULL, reader = NULL, replace = FALSE) {
     } else {
       source <- source_file(
         paste0(
-          x$id,
+          id,
           ".source.",
           substr(digest::digest(name, algo = "sha256"), 1L, 12L)
         ),
@@ -121,10 +137,11 @@ add_source <- function(x, source, name = NULL, reader = NULL, replace = FALSE) {
     }
   }
   if (!component_method("read_source", source)) {
-    abort("source must be a table, path, function, product or source adapter.")
+    abort(
+      "source must be a table, path, function, product, successful run or source adapter."
+    )
   }
-  x$sources[[name]] <- source
-  x
+  source
 }
 #' @rdname add_source
 #' @export
@@ -162,36 +179,20 @@ add_contract <- function(x, contract) {
   x
 }
 #' @rdname add_source
+#' @param engine Optional formula quality engine, `"native"` or
+#'   `"pointblank"`. Omit to preserve engines on existing rule specifications.
 #' @export
-add_quality <- function(x, quality, name = NULL) {
+add_quality <- function(x, quality, name = NULL, engine = NULL) {
   x <- editable_product(x)
-  if (is.list(quality) && !inherits(quality, "tw_rule")) {
-    if (!is.null(name)) {
-      abort("Name individual rules in the quality list.")
-    }
-    for (i in seq_along(quality)) {
-      label <- names(quality)[i]
-      if (is.null(label) || is.na(label) || !nzchar(label)) {
-        label <- NULL
-      }
-      x <- add_quality(x, quality[[i]], label)
-    }
-    return(x)
-  }
-  if (!inherits(quality, "tw_rule")) {
-    quality <- quality_rule(
-      name %||% paste0("quality_", length(x$quality) + 1L),
-      quality
-    )
-  } else if (!is.null(name)) {
-    quality$name <- scalar(name, "name")
-  }
-  if (quality$name %in% vapply(x$quality, `[[`, character(1), "name")) {
-    abort("Quality rule names must be unique.")
-  }
-  x$quality <- c(x$quality, list(quality))
+  x$quality <- normalize_quality_rules(
+    quality,
+    name,
+    engine,
+    existing = x$quality
+  )
   x
 }
+
 #' @rdname add_source
 #' @export
 set_target <- function(x, target) {
@@ -276,7 +277,7 @@ validate_product_graph <- function(product) {
     ) {
       abort("Product sources must have unique, non-empty names.")
     }
-    for (source in data$sources) {
+    for (source in product_sources(data)) {
       if (inherits(source, "tw_product")) {
         visit(source, c(stack, data$id))
       } else {
@@ -383,7 +384,7 @@ inspect.tw_product <- function(x, ...) {
     status = if (isTRUE(attr(x, "tw_validated"))) "validated" else "defined",
     sources = sources,
     transforms = lapply(x$transforms, inspect),
-    contract = canonical(x$contract),
+    contract = canonical(effective_product_contract(x)),
     quality = canonical(x$quality),
     target = inspect(x$target),
     catalogs = lapply(x$catalogs, inspect),
@@ -411,14 +412,25 @@ inspect.tw_run_result <- function(x, ...) {
   )]
 }
 #' @rdname inspect
+#' @importFrom dplyr explain
 #' @export
-explain <- function(x) {
-  if (!inherits(x, "tw_product")) {
-    abort("Use product() with explain().")
-  }
+dplyr::explain
+
+#' @rdname inspect
+#' @export
+explain.tw_product <- function(x, ...) {
+  rlang::check_dots_empty()
+  target <- product_display_target(x)
   text <- c(
     paste0("Product: ", x$id),
     paste0("Read: ", length(x$sources), " named source(s)."),
+    if (length(product_sources(x)) > length(x$sources)) {
+      paste0(
+        "Lookups: ",
+        length(product_sources(x)) - length(x$sources),
+        " auxiliary source(s), acquired once before transformations."
+      )
+    },
     if (length(x$sources) > 1L) {
       "The first transform receives a named list; combine it into one table."
     } else {
@@ -436,20 +448,21 @@ explain <- function(x) {
       length(x$quality),
       " additional rule(s)."
     ),
-    if (is.null(x$target)) {
+    if (is.null(target)) {
       "Return: checked data and run evidence. collect() materializes lazy output."
     } else {
       paste0(
         "Publish: ",
-        inspect(x$target)$type,
+        inspect(target)$type,
         ". Failed checks block publication."
       )
     },
-    if (identical(capabilities(x$target)$lazy, FALSE)) {
+    if (identical(capabilities(target)$lazy, FALSE)) {
       "Materialization: the target requires an ordinary table."
     } else {
       "Materialization: lazy tables remain lazy unless a component collects."
     },
+    product_display_defaults(x),
     "validate() checks configuration and dependency cycles; run() executes."
   )
   cat(paste(text, collapse = "\n"), "\n")
@@ -478,7 +491,16 @@ print.tw_product <- function(x, ...) {
     "\n"
   )
   cat("Quality:", length(x$quality) + length(x$contract$rules), "rules\n")
-  cat("Target:", inspect(x$target)$type, "\n")
+  target <- product_display_target(x)
+  target_label <- inspect(target)$type
+  if (inherits(target, "tw_lake_target")) {
+    target_label <- paste0(target_label, " (", target$layer, ")")
+  }
+  cat("Target:", target_label, "\n")
+  defaults <- product_display_defaults(x)
+  if (!is.null(defaults)) {
+    cat(defaults, "\n")
+  }
   cat(
     "Status:",
     if (isTRUE(attr(x, "tw_validated"))) {
@@ -491,9 +513,37 @@ print.tw_product <- function(x, ...) {
   invisible(x)
 }
 
+product_display_target <- function(x) {
+  execution <- attr(x, "tw_execution_config", exact = TRUE)
+  target <- x$target %||% execution$to
+  if (
+    inherits(target, "tw_lake_target") &&
+      !is.null(execution$layer) &&
+      (is.null(x$target) || is.null(target$layer))
+  ) {
+    target$layer <- execution$layer
+  }
+  target
+}
+
+product_display_defaults <- function(x) {
+  execution <- attr(x, "tw_execution_config", exact = TRUE)
+  if (is.null(execution)) {
+    return(NULL)
+  }
+  paste0(
+    "Stored execution (root only): quality = ",
+    execution$quality,
+    "; relationships = ",
+    execution$relationships,
+    ". Override with run(execution = )."
+  )
+}
+
 product_plan <- function(x, check = TRUE) {
+  sources <- product_sources(x)
   source_types <- vapply(
-    x$sources,
+    sources,
     function(source) {
       if (inherits(source, "tw_product")) {
         "product"
@@ -504,20 +554,20 @@ product_plan <- function(x, check = TRUE) {
     character(1)
   )
   steps <- c(
-    rep("read", length(x$sources)),
+    rep("read", length(sources)),
     rep("transform", length(x$transforms)),
     "validate",
     "publish",
     rep("catalog", length(x$catalogs))
   )
   ids <- c(
-    names(x$sources),
+    names(sources),
     names(x$transforms),
     x$contract$id %||% "automatic structure",
     x$id,
     if (length(x$catalogs)) names(normalize_catalogs(x$catalogs))
   )
-  components <- c(x$sources, x$transforms, list(NULL, x$target), x$catalogs)
+  components <- c(sources, x$transforms, list(NULL, x$target), x$catalogs)
   lazy <- vapply(
     components,
     function(component) capabilities(component)$lazy,

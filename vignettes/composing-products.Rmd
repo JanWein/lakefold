@@ -20,7 +20,7 @@ not a prerequisite. No service or database is needed for the first six steps.
 ```{r minimal}
 library(tidyweave)
 input <- data.frame(id = 1:3, amount = c(25, 75, 50))
-orders <- product("orders") |> add_source(input, name = "delivery")
+orders <- product("orders", input)
 result <- run(orders)
 collect(result)
 stopifnot(sum(collect(result)$amount) == 150)
@@ -37,15 +37,25 @@ readxl. Defining or printing a product does not fetch its data.
 
 ```{r transform-and-quality}
 orders <- orders |>
-  add_transform(function(data) transform(data, amount = round(amount, 2))) |>
+  dplyr::mutate(amount = round(amount, 2)) |>
   add_quality(~ amount >= 0, name = "nonnegative")
 quality(run(orders))
 ```
 
+Supported methods are `mutate()`, `filter()`, `select()`, `rename()`,
+`relocate()`, `arrange()`, `group_by()`, `ungroup()`, `summarise()`, `distinct()`
+and `count()`. They capture expressions without evaluating the source.
+At execution, they invoke real dplyr on the ordinary or lazy table. External
+bindings keep ordinary R semantics: changing a captured value can change a later
+run. Inject `!!value` to freeze a small value, and supply an explicit code version
+when enabling cached publication. Use qualified
+calls such as `dplyr::filter()` when another attached package has the same name.
+Unsupported verbs and R algorithms can be passed through `add_transform()`.
 Transformations run in addition order. A check happens after preparation and
 never silently drops bad rows. Formulas and functions can return a logical
-value per row; `NA` counts as failure. A function may also return one overall
-decision or `quality_counts(n_failed, n_total)` for an aggregate check.
+value per row; `NA` counts as failure. Use `engine = "pointblank"` for the same simple predicate with optional
+Pointblank validation. Advanced agents still use `pointblank_checks()`. A function
+may also return one overall decision or `quality_counts(n_failed, n_total)` for an aggregate check.
 
 For an R-only transform following a lazy source, collect explicitly:
 `add_transform(function(data) my_r_algorithm(collect(data)))`.
@@ -89,47 +99,40 @@ always performs preflight, so a separate call is optional.
 ```{r failed-attempt}
 bad_input <- data.frame(id = 1:2, amount = c(10, -1))
 bad_orders <- orders |>
-  add_source(bad_input, name = "delivery", replace = TRUE)
+  add_source(bad_input, replace = TRUE)
 blocked <- run(bad_orders, stop_on_failure = FALSE)
 incidents(blocked)
 stopifnot(blocked$status == "blocked")
 ```
 
 `add_source()` adds inputs. It does not silently replace an existing one.
-Use the same name and `replace = TRUE` when changing a delivery. By default a
+Use `replace = TRUE` to replace the sole primary source. With several primary
+sources, provide the source name explicitly. Lookup dependencies are separate. By default a
 failed run raises an error carrying `condition$result`; the option above lets
 this tutorial inspect its result directly.
 
-## 5. Combine several named sources
+## 5. Enrich a table with a checked lookup
 
-With one source, a transform receives a table. With several, the first transform
-receives a named list of tables and returns the one table being produced.
-
-```{r multiple-sources}
+```{r checked-lookup}
 customers <- data.frame(customer = c(1L, 2L), region = c("North", "South"))
 sales <- data.frame(customer = c(1L, 2L), amount = c(100, 250))
-regional <- product("regional_orders") |>
-  add_source(sales, name = "orders") |>
-  add_source(customers, name = "customers") |>
-  add_transform(function(inputs) {
-    dplyr::left_join(inputs$orders, inputs$customers, by = "customer")
-  }) |>
-  add_quality(~ !is.na(region))
+regional <- product("regional_orders", sales) |>
+  add_lookup(customers, by = dplyr::join_by(customer))
 collect(run(regional))
 ```
 
-The names make joins explicit. The framework does not guess which keys join
-which tables. Use `quality_reference()` for reusable relationship checks,
-or the optional dm integration for a declared relational model.
+The primary table remains a table. Parent keys must be unique and non-missing,
+and child keys must match by default. The join cannot silently multiply or lose
+orders. `engine = "dm"` selects optional dm checks with the same contract.
+Only equality lookups are supported; general joins remain ordinary R functions.
+Several explicitly named primary sources still support complex transformations:
+`add_transform()` receives their named list and returns one table.
 
 ## 6. Reuse a product as an input
 
 ```{r nested-product}
-summary <- product("regional_summary") |>
-  add_source(regional) |>
-  add_transform(function(data) {
-    dplyr::summarise(data, total = sum(amount))
-  })
+summary <- product("regional_summary", regional) |>
+  dplyr::summarise(total = sum(amount))
 summary_result <- run(summary)
 collect(summary_result)
 stopifnot(collect(summary_result)$total == 350)
@@ -138,8 +141,10 @@ stopifnot(collect(summary_result)$total == 350)
 There is one product class for both source preparation and derived tables.
 Within one execution, shared product dependencies run once. Preflight rejects
 cycles and conflicting definitions with the same product identity. A product
-definition is not a frozen input: use `source_release()` with a release ID when
-you need an exact previously published version.
+definition is not a frozen input. Pass a successful lake result directly when you
+need its exact immutable release: `product("export", published)`. Other successful
+results reuse their retained submitted table or lazy query. A live query keeps
+its backend's mutability; a DBI append result represents the submitted batch.
 
 ## 7. Choose a destination
 
@@ -178,7 +183,7 @@ local({
   DBI::dbWriteTable(con, "orders", input)
   remote <- product("large_orders") |>
     add_source(source_database(con, table = "orders")) |>
-    add_transform(function(data) dplyr::filter(data, amount >= 50)) |>
+    dplyr::filter(amount >= 50) |>
     add_quality(~ amount >= 0)
   result <- run(remote)
   collect(result)

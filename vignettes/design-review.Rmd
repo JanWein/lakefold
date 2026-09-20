@@ -7,10 +7,12 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
-The 0.8 development refactor simplifies the public framework to one product
-representation, named sources, ordinary functions and one execution verb.
-Sources, checks, targets and metadata destinations use documented extension
-interfaces. Infrastructure remains optional.
+The 0.11 development refactor keeps one product representation and ordinary
+dplyr expressions while removing repeated execution choices, contract fields,
+measurement calls and correction bookkeeping. Execution defaults, contract
+composition and source replacement are ordinary explicit operations. Batch
+measurements keep pinned evidence and expose tidy values. Infrastructure remains
+optional, and business keys, time semantics and report issuance remain explicit.
 
 Read the maintained documents for different questions:
 

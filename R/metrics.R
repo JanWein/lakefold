@@ -1,4 +1,4 @@
-#' Define an approved metric
+#' Define a metric for exploration or approved reporting
 #' @param id,version Identity and version.
 #' @param product Input asset id.
 #' @param expr Tidy evaluation summary expression, e.g. sum(reserve).
@@ -15,7 +15,8 @@
 #' @param approved Whether business review is complete.
 #' @param na_policy Policy description; must be consistent with the expression.
 #' @param empty_policy Policy description.
-#' @param code_version Version of metric code and dependencies.
+#' @param code_version Version of metric code and dependencies. Required for
+#'   approved definitions; exploratory definitions may omit it.
 #' @return Metric specification. Reports execute it directly without an LLM.
 #' @export
 #' @examples
@@ -40,13 +41,17 @@ metric <- function(
   approved = FALSE,
   na_policy = "reject",
   empty_policy = "error",
-  code_version,
+  code_version = NULL,
   input_columns = NULL
 ) {
   asset_id(id)
   asset_id(product)
   scalar(version, "version")
-  scalar(code_version, "code_version")
+  flag(approved, "approved")
+  if (approved || !is.null(code_version)) {
+    scalar(code_version, "code_version")
+    if (!nzchar(trimws(code_version))) abort("code_version must not be blank.")
+  }
   for (field in c("unit", "owner", "description")) {
     value <- get(field)
     if (!is.character(value) || length(value) != 1L || is.na(value)) {
@@ -102,17 +107,36 @@ metric <- function(
 }
 
 #' Calculate a metric on a pinned published release
-#' @param lake Connected lake.
-#' @param metric Metric definition.
+#'
+#' A successful publication result supplies its exact asset and release. Later
+#' publications do not change that input. Result-based measurement does not
+#' register definitions or write lineage; its manifest still contains all
+#' metric and input evidence needed by [report_release()]. A live caller-owned
+#' lake is borrowed when available. Otherwise the saved configuration opens an
+#' owned read-only connection that closes before returning, including on errors.
+#' @param x Connected lake or successful published `tw_run_result`.
+#' @param metric Single metric definition.
+#' @param metrics Nonempty list of metric definitions for a measurement set.
+#'   Optional unique names label metrics in the collected table. Supply either
+#'   `metric` or `metrics`.
+#' @param period For `metrics`, `"each"` calculates each selected date separately;
+#'   `"aggregate"` calculates across selected dates. Stock metrics still require
+#'   one date. With `at = NULL`, dates are not split automatically.
 #' @param by Grouping columns.
 #' @param at Business date, or a vector for flow metrics.
-#' @param release Optional explicit product release id.
+#' @param release Optional explicit product release id for a connected lake.
+#'   For a publication result it must be omitted or match that exact release.
 #' @param filters Named list of exact-match filters on permitted dimensions.
 #' @param params Parameters passed to custom compute functions.
 #' @param record Record definition and lineage. Defaults to `TRUE` on a writable
-#'   lake and `FALSE` on a read-only lake. Unrecorded results still carry their
-#'   complete metric definition and pinned release in the manifest.
-#' @return Tibble with a tw_manifest attribute for report reproducibility.
+#'   lake and `FALSE` on a read-only lake or publication result. Use a connected
+#'   writable lake for `record = TRUE`. Unrecorded results still carry their
+#'   complete metric definition and pinned release in the manifest. Exploratory
+#'   metrics always default to `record = FALSE` and cannot be saved in reports.
+#' @return For `metric`, a tibble with a tw_manifest attribute. For `metrics`,
+#'   a `tw_measurement_set` retaining each original result and manifest.
+#'   `collect()` returns an ordinary long tibble with grouping columns,
+#'   `.metric`, `.period` (a list column of selected dates), `.unit` and `value`.
 #'   Grouped results are ordered by the requested dimensions using C collation
 #'   so database row order does not change report identity.
 #' @export
@@ -139,29 +163,117 @@ metric <- function(
 #'   unit = "EUR", owner = "Analytics", description = "Total order value",
 #'   approved = TRUE, code_version = "v1"
 #' )
-#' measure(lake, metric)
+#' release |> measure(metric)
 #' disconnect_lake(lake)
 #' unlink(root, recursive = TRUE)
 measure <- function(
-  lake,
-  metric,
+  x,
+  metric = NULL,
   by = character(),
   at = NULL,
   release = NULL,
   filters = list(),
   params = list(),
-  record = !isTRUE(lake$config$read_only)
+  record = NULL,
+  metrics = NULL,
+  period = c("each", "aggregate")
 ) {
-  assert_lake(lake)
-  flag(record, "record")
-  if (record) {
-    assert_writable(lake)
+  if (!is.null(metrics)) {
+    if (!is.null(metric)) {
+      abort("Supply either metric or metrics, not both.")
+    }
+    return(measure_set(
+      x,
+      metrics,
+      by,
+      at,
+      release,
+      filters,
+      params,
+      record,
+      match.arg(period)
+    ))
+  }
+  if (!missing(period)) {
+    abort("period applies only when using metrics.")
   }
   if (!inherits(metric, "tw_metric")) {
     abort("metric must be a metric.")
   }
-  if (!metric$approved) {
-    abort("Metric definition is not approved.")
+  if (!isTRUE(metric$approved)) {
+    record <- record %||% FALSE
+    flag(record, "record")
+    if (record) {
+      abort("Exploratory metrics cannot be recorded. Use record = FALSE.")
+    }
+  }
+  if (inherits(x, "tw_run_result")) {
+    if (
+      !is.character(x$status) ||
+        length(x$status) != 1L ||
+        is.na(x$status) ||
+        !x$status %in% c("published", "cached") ||
+        !is.character(x$asset) ||
+        length(x$asset) != 1L ||
+        is.na(x$asset) ||
+        !nzchar(x$asset) ||
+        !is.character(x$release_id) ||
+        length(x$release_id) != 1L ||
+        is.na(x$release_id) ||
+        !nzchar(x$release_id)
+    ) {
+      abort(
+        "measure() needs a successful published result with an exact release."
+      )
+    }
+    if (!identical(metric$product, x$asset)) {
+      abort("The metric input asset does not match this publication result.")
+    }
+    if (!is.null(release) && !identical(release, x$release_id)) {
+      abort(
+        "A publication result is pinned. Omit release or use its exact release id."
+      )
+    }
+    record <- record %||% FALSE
+    flag(record, "record")
+    if (record) {
+      abort(
+        "Use a connected writable lake to record metric definitions and lineage."
+      )
+    }
+    source <- normalize_result_source(x)
+    if (!inherits(source, "tw_release_source")) {
+      abort("The publication result has no readable lake release reference.")
+    }
+    borrowed <- inherits(x$output_lake, "tw_lake") &&
+      DBI::dbIsValid(x$output_lake$con)
+    if (borrowed) {
+      lake <- x$output_lake
+      if (
+        inherits(source$lake, "tw_config") &&
+          !identical(
+            source$lake[c("backend", "catalog", "storage")],
+            lake$config[c("backend", "catalog", "storage")]
+          )
+      ) {
+        abort(
+          "The result's connection and saved configuration describe different lakes."
+        )
+      }
+    } else if (inherits(source$lake, "tw_config")) {
+      lake <- connect_lake(source$lake, read_only = TRUE)
+      on.exit(disconnect_lake(lake), add = TRUE)
+    } else {
+      lake <- source$lake
+      assert_lake(lake)
+    }
+    release <- x$release_id
+  } else {
+    lake <- x
+    assert_lake(lake)
+    record <- record %||% !isTRUE(lake$config$read_only)
+    flag(record, "record")
+    if (record) assert_writable(lake)
   }
   if (!all(by %in% metric$dimensions)) {
     abort("Unsupported metric dimensions.")
@@ -174,7 +286,7 @@ measure <- function(
   }
   if (record) {
     register(lake, metric)
-  } else {
+  } else if (isTRUE(metric$approved)) {
     old <- query(
       lake,
       paste(
@@ -296,6 +408,18 @@ measure <- function(
     result_hash = fingerprint(result)
   )
   attr(result, "tw_manifest") <- manifest
+  attr(result, "tw_quality_reference") <- list(
+    config = if (
+      inherits(x, "tw_run_result") && inherits(source$lake, "tw_config")
+    ) {
+      source$lake
+    } else {
+      lake$config
+    },
+    lake = lake,
+    asset = metric$product,
+    release = ref$release_id[[1]]
+  )
   if (
     record &&
       !query(
@@ -325,9 +449,18 @@ measure <- function(
 }
 
 #' Freeze metric results and input versions for a report
-#' @param lake Connected lake.
+#'
+#' Report JSON stores numeric values. Integer64 columns must stay within
+#' -2^53 to 2^53 inclusive so saved values can be read back exactly. Larger
+#' integers are rejected before writing; retain those individual results
+#' in a storage format with integer64 support.
+#' @param lake For data-first use, the measurement results. Also accepts a
+#'   connected lake, lake configuration or local lake folder for lake-first use.
+#' @param to Report destination. When omitted in data-first use, inferred from
+#'   matching saved lake references on every result.
+#'   Supplied connections remain open; internally opened connections always close.
 #' @param id Immutable report release id.
-#' @param results Named list of measure results.
+#' @param results Named list of measure results, or a measurement set.
 #' @param code_version Reporting code version.
 #' @param params Report parameters.
 #' @return Report manifest including result values as data frames, both on
@@ -361,13 +494,40 @@ measure <- function(
 #' disconnect_lake(lake)
 #' unlink(root, recursive = TRUE)
 report_release <- function(
-  lake,
+  lake = NULL,
   id,
-  results,
+  results = NULL,
   code_version,
-  params = list()
+  params = list(),
+  to = NULL
 ) {
-  assert_writable(lake)
+  if (
+    inherits(lake, "tw_measurement_set") ||
+      is.data.frame(lake) ||
+      (is.list(lake) && !inherits(lake, c("tw_lake", "tw_config")))
+  ) {
+    if (!is.null(results)) {
+      abort("Supply results only once.")
+    }
+    results <- lake
+    lake <- NULL
+  }
+  if (!is.null(to)) {
+    if (!is.null(lake)) {
+      abort("Supply either lake or to, not both.")
+    }
+    lake <- to
+  }
+  if (is.data.frame(results)) {
+    label <- attr(results, "tw_manifest")$metric %||% "value"
+    results <- stats::setNames(list(results), label)
+  }
+  set_metadata <- NULL
+  if (inherits(results, "tw_measurement_set")) {
+    validate_measurement_set(results)
+    set_metadata <- attr(results, "tw_set_metadata")
+    results <- unclass(results)
+  }
   scalar(id, "id")
   scalar(code_version, "code_version")
   if (
@@ -385,20 +545,62 @@ report_release <- function(
     if (is.null(m)) {
       abort("Every result must come from measure().")
     }
+    if (!isTRUE(m$metric_definition$approved)) {
+      abort(
+        "Exploratory metrics cannot be saved in reports. Approve and recalculate first."
+      )
+    }
+    if (
+      !identical(m$metric_hash, fingerprint(m$metric_definition)) ||
+        !identical(m$metric, m$metric_definition$id) ||
+        !identical(m$metric_version, m$metric_definition$version) ||
+        !identical(m$product, m$metric_definition$product) ||
+        !identical(m$code_version, m$metric_definition$code_version)
+    ) {
+      abort(
+        "Metric definition changed after calculation. Recalculate before reporting."
+      )
+    }
+    scalar(m$code_version, "metric code_version")
     if (!identical(m$result_hash, fingerprint(as.data.frame(x)))) {
       # Tibbles and data.frames have the same canonical JSON representation.
       abort("Metric result changed after calculation.")
     }
+    for (column in x) {
+      if (inherits(column, "integer64")) {
+        need("bit64")
+        limit <- bit64::as.integer64("9007199254740992")
+        if (any(column > limit | column < -limit, na.rm = TRUE)) {
+          abort(paste(
+            "Report storage cannot preserve these integers exactly.",
+            "Integer64 report columns must be within -2^53 to 2^53.",
+            "Keep larger values in a storage format with integer64 support."
+          ))
+        }
+      }
+    }
     values <- as.data.frame(x)
     attr(values, "tw_manifest") <- NULL
+    attr(values, "tw_quality_reference") <- NULL
     list(manifest = m, values = values)
   })
+  if (is.null(lake)) {
+    lake <- measurement_report_destination(results)
+  }
+  if (!inherits(lake, "tw_lake")) {
+    lake <- report_connection(lake, read_only = FALSE)
+    on.exit(disconnect_lake(lake), add = TRUE)
+  }
+  assert_writable(lake)
   manifest <- list(
     id = id,
     code_version = code_version,
     params = params,
     measures = measures
   )
+  if (!is.null(set_metadata)) {
+    manifest$measurement_set <- set_metadata
+  }
   old <- query(
     lake,
     paste("SELECT manifest FROM", meta(lake, "reports"), "WHERE id=?"),
@@ -504,16 +706,24 @@ report_identity <- function(json) {
 #' Reads the saved manifest without recalculating any metric. It preserves the
 #' original calculation times. Works on read-only lakes, including reports
 #' created before version 0.6.0. Values use the JSON representation stored in
-#' the report; dates are ISO strings. Use `values_only` for named result tibbles.
-#' @param lake Connected lake.
+#' the report; dates are ISO strings. With `values_only`, ordinary reports return
+#' named result tibbles; batch reports return the long measurement table, with
+#' Date selections restored in the `.period` list column.
+#' @param lake Connected lake, lake configuration or local lake folder.
+#'   Supplied connections remain open; internally opened connections always close.
 #' @param id Report release ID.
 #' @param values_only Return only the named result tables.
-#' @returns A manifest list, or a named list of tibbles.
+#' @returns A manifest list; with `values_only`, a named list of tibbles for
+#'   ordinary reports or a long tibble for batch reports.
 #' @export
 #' @examples
 #' # After saving report.v1 with report_release():
 #' # report_read(lake, "report.v1", values_only = TRUE)
 report_read <- function(lake, id, values_only = FALSE) {
+  if (!inherits(lake, "tw_lake")) {
+    lake <- report_connection(lake, read_only = TRUE)
+    on.exit(disconnect_lake(lake), add = TRUE)
+  }
   assert_lake(lake)
   scalar(id, "id")
   flag(values_only, "values_only")
@@ -529,7 +739,7 @@ report_read <- function(lake, id, values_only = FALSE) {
   if (!values_only) {
     return(manifest)
   }
-  lapply(manifest$measures, function(x) {
+  values <- lapply(manifest$measures, function(x) {
     tibble::as_tibble(lapply(x$values, function(column) {
       if (is.null(column)) {
         return(NA)
@@ -543,4 +753,20 @@ report_read <- function(lake, id, values_only = FALSE) {
       column
     }))
   })
+  if (is.null(manifest$measurement_set)) {
+    return(values)
+  }
+  metadata <- lapply(manifest$measurement_set, function(x) {
+    x["period"] <- list(unlist(x[["period"]], use.names = FALSE))
+    if ("Date" %in% unlist(x$period_class)) {
+      x$period <- as.Date(x$period)
+    }
+    x
+  })
+  for (i in seq_along(values)) {
+    attr(values[[i]], "tw_manifest") <- manifest$measures[[i]]$manifest
+    attr(values[[i]], "tw_manifest")$by <-
+      unlist(manifest$measures[[i]]$manifest$by, use.names = FALSE)
+  }
+  measurement_set_table(values, metadata)
 }

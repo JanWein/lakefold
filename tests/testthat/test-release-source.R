@@ -68,10 +68,10 @@ test_that("config source pins remain unchanged after later publications", {
   lake <- open_lake(withr::local_tempdir())
   withr::defer(close_lake(lake))
   config <- lake$config
-  first <- ingest(lake, data.frame(id = 1L), "orders")
+  first <- ingest(data.frame(id = 1L), lake, "orders")
   pinned <- source_release(config, "orders", first$release_id)
   close_lake(lake)
-  later <- ingest(config, data.frame(id = 2L), "orders")
+  later <- ingest(data.frame(id = 2L), config, "orders")
   data <- read_source(pinned)
   expect_equal(data$id, 1L)
   expect_equal(attr(data, "tw_input_reference")$release_id, first$release_id)
@@ -84,7 +84,7 @@ test_that("config source pins remain unchanged after later publications", {
 test_that("latest is resolved once and records that release on both source forms", {
   lake <- open_lake(withr::local_tempdir())
   withr::defer(close_lake(lake))
-  accepted <- ingest(lake, data.frame(id = 1L), "orders")
+  accepted <- ingest(data.frame(id = 1L), lake, "orders")
   connected <- source_release(lake, "orders")
   config <- lake$config
   actual_resolver <- resolve_release
@@ -118,7 +118,7 @@ test_that("config source provenance survives publication into a different lake",
   root <- withr::local_tempdir()
   original <- open_lake(file.path(root, "source"))
   withr::defer(close_lake(original))
-  first <- ingest(original, data.frame(id = 1L), "original")
+  first <- ingest(data.frame(id = 1L), original, "original")
   config <- original$config
   close_lake(original)
   destination <- open_lake(file.path(root, "destination"))
@@ -193,7 +193,7 @@ test_that("read-only failures preserve existing files and release handles close"
   expect_false(dir.exists(config$storage$path))
   lake <- open_lake(file.path(root, "initialized"))
   withr::defer(close_lake(lake))
-  accepted <- ingest(lake, data.frame(id = 1L), "orders")
+  accepted <- ingest(data.frame(id = 1L), lake, "orders")
   config <- lake$config
   source <- source_release(lake, "orders")
   close_lake(lake)
@@ -216,7 +216,7 @@ test_that("config sources reuse the same publication lake without a second attac
   lake <- open_lake(withr::local_tempdir())
   withr::defer(close_lake(lake))
   config <- lake$config
-  original <- ingest(lake, data.frame(id = 1L), "original")
+  original <- ingest(data.frame(id = 1L), lake, "original")
   source_config <- config
   source_config$read_only <- TRUE
   source <- source_release(source_config, "original", original$release_id)
@@ -232,7 +232,7 @@ test_that("config sources reuse the same publication lake without a second attac
     set_target(config) |>
     run()
   expect_equal(collect(from_config)$id, 1L)
-  ingested <- ingest(config, source, "raw_copy")
+  ingested <- ingest(source, config, "raw_copy")
   expect_equal(collect(ingested)$id, 1L)
   expect_equal(
     ingested$inputs$source_version[
@@ -269,7 +269,7 @@ test_that("release-source subclasses keep their custom read method", {
     run()
   expect_equal(collect(result)$id, 42L)
   expect_equal(calls, 1L)
-  result <- ingest(lake, source, "custom_raw")
+  result <- ingest(source, lake, "custom_raw")
   expect_equal(collect(result)$id, 42L)
   expect_equal(calls, 2L)
 })

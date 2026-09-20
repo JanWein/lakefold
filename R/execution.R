@@ -91,12 +91,19 @@ publish_metadata.default <- function(catalog, metadata, ...) {
 #' string uses DuckDB; [target_lake()] accepts other lake configurations.
 #' Both automatically validate the definition before source acquisition.
 #' Use [collect()] to obtain the output as an ordinary tibble.
-#' @param x Composed product, or a data frame for immediate publication.
-#' @param name Product name; required for a data-frame expression.
+#' @param x Composed product, data frame, or successful dbt build.
+#' @param name Product name for a data frame, or an exact or unambiguous model
+#'   name for a dbt build. Omit it for an already named product.
 #' @param to Optional target, replacing an already configured target. Defaults
 #'   to the `tidyweave` folder in the working directory when the product has none.
-#' @param ... Execution options, including `stop_on_failure` and, for lake
-#'   targets, `business_date`, `notify` and `cache`.
+#'   For dbt builds it defaults to the project's configured lake.
+#' @param layer Optional publication layer for a lake target.
+#' @param execution Optional [execution_config()] defaults for products,
+#'   overriding defaults stored by `product(execution = )`.
+#' @param ... Execution options, including `data` or `sources` for new deliveries
+#'   as described in [run()], `stop_on_failure` and, for lake
+#'   targets, `business_date`, `notify` and `cache`. dbt builds accept
+#'   [dbt_publish()] options such as `contract`, `asset` and `layer`.
 #' @returns A run result. An exception on failure includes `condition$result`.
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
@@ -107,24 +114,58 @@ publish_metadata.default <- function(catalog, metadata, ...) {
 #' collect(result)
 #' unlink(root, recursive = TRUE)
 publish <- function(x, name = NULL, to = NULL, ...) {
-  if (is.data.frame(x)) {
-    if (is.null(name)) {
-      abort("Supply name when publishing a data frame, for example 'orders'.")
-    }
-    x <- product(name) |> add_source(x)
-  } else if (!is.null(name)) {
+  UseMethod("publish")
+}
+#' @rdname publish
+#' @export
+publish.data.frame <- function(x, name = NULL, to = NULL, ...) {
+  if (is.null(name)) {
+    abort("Supply name when publishing a data frame, for example 'orders'.")
+  }
+  publish(product(name, x), to = to, ...)
+}
+#' @rdname publish
+#' @export
+publish.tw_product <- function(
+  x,
+  name = NULL,
+  to = NULL,
+  layer = NULL,
+  execution = NULL,
+  ...
+) {
+  if (!is.null(name)) {
     abort(
       "The product already has a name. Omit name or create product(name)."
     )
   }
+  execution <- product_execution(x, execution)
   x <- editable_product(x)
   if (!is.null(to)) {
     x <- set_target(x, to)
+    if (
+      is.null(layer) &&
+        !is.null(execution$layer) &&
+        !inherits(to, "tw_lake_target")
+    ) {
+      layer <- execution$layer
+    }
   }
   if (is.null(x$target)) {
-    x <- set_target(x, "tidyweave")
+    x <- set_target(x, execution$to %||% "tidyweave")
+    layer <- layer %||% execution$layer
   }
-  run(x, ...)
+  if (!is.null(layer)) {
+    if (!inherits(x$target, "tw_lake_target")) {
+      abort("layer is available only for lake publication targets.")
+    }
+    x$target$layer <- ident(layer)
+  }
+  run(x, execution = execution, ...)
+}
+#' @export
+publish.default <- function(x, name = NULL, to = NULL, ...) {
+  abort("Publish a product, data frame or successful dbt build.")
 }
 
 #' Collect the output of a successful run
@@ -137,29 +178,32 @@ publish <- function(x, name = NULL, to = NULL, ...) {
 #' distinguishes `submitted_rows` from output `rows`; candidate quality may
 #' describe the complete destination including previously stored rows.
 #' @param x Run result, data frame or lazy table.
+#' @param ... Arguments passed to dplyr when collecting retained data. Lake
+#'   results collect the complete pinned release and accept no extra arguments.
 #' @returns An ordinary tibble. Failed or blocked runs cannot be collected.
+#' @name collect
+#' @importFrom dplyr collect
 #' @export
 #' @examples
 #' product("orders") |> add_source(data.frame(id = 1:2)) |>
 #'   run() |> collect()
-collect <- function(x) {
-  if (is.data.frame(x)) {
-    return(tibble::as_tibble(x))
-  }
-  if (is_lazy_table(x)) {
-    return(dplyr::collect(x))
-  }
-  if (!inherits(x, "tw_run_result")) {
-    abort("Use a run result, data frame or lazy table.")
-  }
+dplyr::collect
+
+#' @rdname collect
+#' @export
+collect.tw_run_result <- function(x, ...) {
   if (!x$status %in% c("completed", "published", "cached")) {
     abort(
-      "This run has no successful output. Inspect status() and quality()."
+      paste(
+        run_result_message(x),
+        "Inspect quality(result) or quality_report(result) for check details."
+      )
     )
   }
   if (!is.null(x$data)) {
-    return(collect(x$data))
+    return(tibble::as_tibble(dplyr::collect(x$data, ...)))
   }
+  rlang::check_dots_empty()
   if (!is.null(x$output_lake) && DBI::dbIsValid(x$output_lake$con)) {
     return(read_release(x$output_lake, x$asset, x$release_id))
   }
@@ -182,9 +226,17 @@ run.tw_product <- function(
   stop_on_failure = TRUE,
   evidence = getOption("tidyweave.evidence"),
   .context = NULL,
+  execution = NULL,
+  data = NULL,
+  sources = NULL,
   ...
 ) {
-  object <- pipeline
+  object <- replace_execution_sources(pipeline, data, sources)
+  execution <- if (is.null(.context)) {
+    product_execution(object, execution)
+  } else {
+    execution
+  }
   if (!is.null(evidence)) {
     scalar(evidence, "evidence")
   }
@@ -192,6 +244,7 @@ run.tw_product <- function(
   if (!is.null(lake)) {
     object <- set_target(object, lake)
   }
+  object <- apply_execution_defaults(object, execution)
   object <- validate(object)
   context <- .context %||% new_product_context(evidence)
   if (exists(object$id, context$results, inherits = FALSE)) {
@@ -294,16 +347,13 @@ run.tw_product <- function(
     stop_on_failure && !result$status %in% c("completed", "published", "cached")
   ) {
     abort(
-      paste0(
-        "Product `",
-        object$id,
-        "` ended with ",
-        result$status,
-        ". Inspect condition$result for execution evidence."
+      paste(
+        run_result_message(result),
+        "The condition retains this result in $result. Inspect quality(condition$result) for check details."
       ),
       "tw_run_failed",
       result = result,
-      parent = result$error
+      parent = run_result_parent(result)
     )
   }
   result
@@ -324,9 +374,17 @@ tw_execute_target.default <- function(target, product, ...) {
       data <- acquired$data
       input <- acquired$inputs
       for (name in names(product$transforms)) {
-        data <- apply_product_transform(product$transforms[[name]], data, name)
+        data <- apply_product_transform(
+          product$transforms[[name]],
+          data,
+          name,
+          sources = acquired$transform_sources[[name]]
+        )
         details <- attr(data, "tw_transform_metadata")
-        if (!is.null(details)) transform_metadata[[name]] <- details
+        if (!is.null(details)) {
+          transform_metadata[[name]] <- details
+        }
+        attr(data, "tw_transform_metadata") <- NULL
       }
       data <- table_result(data, "The final transformation")
       contract <- product_contract(product, data)
@@ -403,10 +461,10 @@ tw_execute_target.default <- function(target, product, ...) {
   out
 }
 
-apply_product_transform <- function(transform, data, name) {
+apply_product_transform <- function(transform, data, name, sources = list()) {
   tryCatch(
     table_result(
-      execute_transform(transform, data),
+      execute_transform(transform, data, sources = sources),
       paste0("Transformation `", name, "`")
     ),
     error = function(e) {
@@ -419,8 +477,27 @@ apply_product_transform <- function(transform, data, name) {
   )
 }
 
+effective_product_contract <- function(product) {
+  contract <- product$contract
+  rules <- product$execution_contract_rules
+  if (is.null(contract) || is.null(rules)) {
+    return(contract)
+  }
+  # Keep the user's registered declaration immutable. A resolved execution is
+  # a separate, content-addressed check definition, including its actual engine.
+  contract$declared_contract <- list(
+    id = contract$id,
+    version = contract$version,
+    fingerprint = fingerprint(contract)
+  )
+  contract$rules <- rules
+  contract$id <- paste0(contract$id, ".execution")
+  contract$version <- paste0("checks-", fingerprint(contract))
+  contract
+}
+
 product_contract <- function(product, data) {
-  contract <- product$contract %||%
+  contract <- effective_product_contract(product) %||%
     automatic_schema(product$id, automatic_types(infer_column_types(data)))
   combine_quality(contract, product$quality)
 }
@@ -457,13 +534,14 @@ result_data <- function(result) {
 
 read_product_sources <- function(product, lake = NULL, on_input = NULL) {
   context <- attr(product, "tw_run_context") %||% new_product_context()
-  tables <- vector("list", length(product$sources))
-  names(tables) <- names(product$sources)
+  sources <- product_sources(product)
+  tables <- vector("list", length(sources))
+  names(tables) <- names(sources)
   inputs <- vector("list", length(tables))
   archives <- list()
-  for (i in seq_along(product$sources)) {
-    name <- names(product$sources)[[i]]
-    source <- product$sources[[i]]
+  for (i in seq_along(sources)) {
+    name <- names(sources)[[i]]
+    source <- sources[[i]]
     reference <- NULL
     reported <- FALSE
     if (inherits(source, "tw_product")) {
@@ -596,8 +674,14 @@ read_product_sources <- function(product, lake = NULL, on_input = NULL) {
     )
     tables[[i]] <- data
   }
+  primary <- tables[names(product$sources)]
+  auxiliary <- lapply(names(product$transforms), function(step) {
+    refs <- component_sources(product$transforms[[step]])
+    stats::setNames(tables[transform_source_names(step, refs)], names(refs))
+  })
   list(
-    data = if (length(tables) == 1L) tables[[1]] else tables,
+    data = if (length(primary) == 1L) primary[[1]] else primary,
+    transform_sources = stats::setNames(auxiliary, names(product$transforms)),
     inputs = dplyr::bind_rows(inputs),
     archives = archives
   )

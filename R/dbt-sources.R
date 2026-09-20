@@ -1,24 +1,27 @@
-#' Bind logical dbt sources to accepted RAW releases
+#' Bind logical dbt sources to exact published lake releases
 #'
-#' Write ordinary dbt source YAML pointing at immutable relations accepted by
-#' [ingest()]. Logical names stay the same when a later call explicitly selects
-#' a newer release. No data, views or dbt seeds are written.
+#' Use successful ingestion or product results from any lake layer as ordinary
+#' dbt sources. Each source group must use one physical schema. Bind additional
+#' groups with separate calls, for example `name = "raw"` and `name = "enriched"`.
+#' The registry supplies exact physical names and verifies the recorded run;
+#' editable result output descriptions are never used as relation authority.
 #'
-#' Every result must be successful, belong to the same catalog, and contain a
-#' qualified RAW output reference. The entire batch is validated before writing.
-#' Existing bindings with other logical names are retained. Only the generated
-#' `models/tidyweave_sources_<name>.yml` file is replaced, using a temporary file
-#' in the same directory. An existing file without the ownership marker is
-#' never overwritten. Coordinate concurrent project writers yourself.
+#' For `dbt_project(lake = config)`, this function updates a deferred
+#' specification. No database is opened and no files are written. At execution,
+#' all groups are resolved and validated before one package-owned source YAML
+#' is replaced. Constructor `sources` uses the group name `inputs`.
 #'
-#' The profile must attach that catalog under the recorded database name
-#' (normally `lake`). Projects created with [dbt_init()] also check the catalog
-#' against their stored configuration. For externally configured projects,
-#' matching profile attachments remain the caller's responsibility.
+#' For an externally configured project, this is an explicit immediate YAML
+#' generator. It preserves other logical tables in the same generated group.
+#' Only a file with the package ownership marker can be replaced. Its profile
+#' must attach the same catalog as `lake`. Both modes use the first literal
+#' `model-paths` directory, defaulting to `models`, and never write data or views.
+#' Coordinate concurrent project writers and close caller-owned lake handles
+#' before dbt execution.
 #'
 #' @param project A [dbt_project()] specification.
 #' @param sources Named, non-empty list of successful `tw_run_result` objects
-#'   returned by [ingest()]. Names are dbt identifiers such as `orders`.
+#'   returned by [ingest()] or [publish()]. Names are dbt identifiers such as `orders`.
 #' @param name Logical dbt source name, used by `source(name, table)` in SQL.
 #' @returns The project specification, invisibly, for use in a pipe.
 #' @seealso [dbt_init()], [dbt_contract()]
@@ -30,21 +33,32 @@
 #'   landing = file.path(root, "landing"), backend = "duckdb",
 #'   layers = c("raw", "staging", "core", "marts")
 #' )
-#' accepted <- ingest(config, data.frame(
+#' accepted <- ingest(data.frame(
 #'   order_id = 1:2, customer_id = c(1L, 1L), amount = c(10, 20)
-#' ), "orders")
+#' ), name = "orders", to = config)
 #' project <- dbt_init(file.path(root, "dbt"), config,
 #'   sources = list(orders = accepted))
-#' dbt_sources(project, list(orders = accepted))
+#' dbt_sources(project, list(orders = accepted), name = "raw")
 #' unlink(root, recursive = TRUE)
 #' @export
-dbt_sources <- function(project, sources, name = "raw") {
-  need("yaml")
+dbt_sources <- function(project, sources, name = "inputs") {
   if (!inherits(project, "tw_dbt_project")) {
     abort("Use dbt_project() or dbt_init() first.", "tw_dbt_invalid")
   }
   ident(name)
-  binding <- dbt_source_binding(sources, name)
+  references <- dbt_source_references(sources)
+  expected <- project$lake %||% project$source_config
+  dbt_source_catalog(references, expected)
+  if (!is.null(project$lake)) {
+    previous <- project$source_groups[[name]] %||% list()
+    project$source_groups[[name]] <- c(
+      previous[!names(previous) %in% names(references)],
+      references
+    )
+    return(invisible(project))
+  }
+  need("yaml")
+  binding <- dbt_source_binding(sources, name, expected)
   if (!file.exists(file.path(project$path, "dbt_project.yml"))) {
     abort("No dbt_project.yml found in the project.", "tw_dbt_invalid")
   }
@@ -52,12 +66,12 @@ dbt_sources <- function(project, sources, name = "raw") {
     expected <- dbt_catalog_fingerprint(project$source_config)
     if (!identical(binding$config$meta$tidyweave$catalog, expected)) {
       abort(
-        "RAW sources belong to a different project catalog.",
+        "Sources belong to a different project catalog.",
         "tw_dbt_invalid"
       )
     }
   }
-  directory <- file.path(project$path, "models")
+  directory <- dbt_models_directory(project)
   destination <- file.path(
     directory,
     paste0("tidyweave_sources_", name, ".yml")
@@ -144,7 +158,10 @@ dbt_sources <- function(project, sources, name = "raw") {
 
 dbt_catalog_fingerprint <- function(config) {
   if (!inherits(config, "tw_config")) {
-    abort("A RAW release must retain its lake configuration.", "tw_dbt_invalid")
+    abort(
+      "A published release must retain its lake configuration.",
+      "tw_dbt_invalid"
+    )
   }
   fingerprint(list(
     backend = config$backend,
@@ -157,7 +174,8 @@ dbt_catalog_fingerprint <- function(config) {
   ))
 }
 
-dbt_source_binding <- function(sources, name = "raw") {
+# Normalize only identity and connection-free configuration, never input rows.
+dbt_source_references <- function(sources) {
   if (
     !is.list(sources) ||
       !length(sources) ||
@@ -167,95 +185,140 @@ dbt_source_binding <- function(sources, name = "raw") {
       any(!nzchar(names(sources)))
   ) {
     abort(
-      "sources must be a named, non-empty list of accepted RAW results.",
+      "sources must be a named, non-empty list of published lake results.",
       "tw_dbt_invalid"
     )
   }
   invisible(lapply(names(sources), ident))
-  catalog <- database <- NULL
-  tables <- lapply(seq_along(sources), function(index) {
-    result <- sources[[index]]
-    label <- names(sources)[[index]]
-    invalid <- function() {
+  lapply(sources, function(result) {
+    valid_scalar <- function(x) {
+      is.character(x) && length(x) == 1L && !is.na(x) && nzchar(x)
+    }
+    fields <- c("asset", "release_id", "run_id", "status")
+    if (
+      !inherits(result, "tw_run_result") ||
+        !all(vapply(result[fields], valid_scalar, logical(1))) ||
+        !result$status %in% c("published", "cached") ||
+        !inherits(result$output_config, "tw_config")
+    ) {
       abort(
-        paste0(
-          "Source `",
-          label,
-          "` needs a successful, qualified immutable RAW release from ingest()."
-        ),
+        "Each source needs a successful immutable lake release, with its asset, release, run and configuration.",
         "tw_dbt_invalid"
       )
     }
-    if (
-      !inherits(result, "tw_run_result") ||
-        !is.character(result$status) ||
-        length(result$status) != 1L ||
-        is.na(result$status) ||
-        !result$status %in% c("published", "cached") ||
-        !is.list(result$outputs)
-    ) {
-      invalid()
-    }
-    reference <- result$outputs
-    fields <- c("database", "schema", "table", "asset", "release_id")
-    valid <- vapply(
-      reference[fields],
-      function(value) {
-        is.character(value) &&
-          length(value) == 1L &&
-          !is.na(value) &&
-          nzchar(value)
-      },
-      logical(1)
+    c(result[fields], list(config = result$output_config))
+  })
+}
+
+dbt_source_catalog <- function(references, config = NULL) {
+  catalogs <- vapply(
+    references,
+    function(x) dbt_catalog_fingerprint(x$config),
+    character(1)
+  )
+  if (length(unique(catalogs)) != 1L) {
+    abort(
+      "All source bindings must belong to the same catalog.",
+      "tw_dbt_invalid"
     )
+  }
+  if (
+    !is.null(config) &&
+      !identical(unname(catalogs[[1L]]), dbt_catalog_fingerprint(config))
+  ) {
+    abort("Sources belong to a different project catalog.", "tw_dbt_invalid")
+  }
+  unname(catalogs[[1L]])
+}
+
+dbt_resolve_references <- function(references, lake) {
+  lapply(references, function(reference) {
+    records <- releases(lake, reference$asset)
+    record <- records[
+      records$release_id == reference$release_id,
+      ,
+      drop = FALSE
+    ]
+    runs <- metadata_filter(lake, "runs", run_id = reference$run_id)
     if (
-      !all(valid) ||
-        !identical(reference$type, "lake release") ||
-        !identical(reference$schema, "raw") ||
-        !identical(reference$asset, result$asset) ||
-        !identical(reference$release_id, result$release_id) ||
-        !is.character(result$run_id) ||
-        length(result$run_id) != 1L ||
-        is.na(result$run_id) ||
-        !nzchar(result$run_id)
-    ) {
-      invalid()
-    }
-    current <- dbt_catalog_fingerprint(result$output_config)
-    if (is.null(catalog)) {
-      catalog <<- current
-      database <<- reference$database
-    }
-    if (
-      !identical(catalog, current) || !identical(database, reference$database)
+      nrow(record) != 1L ||
+        nrow(runs) != 1L ||
+        !identical(runs$asset[[1L]], reference$asset) ||
+        !identical(runs$release_id[[1L]], reference$release_id) ||
+        !identical(runs$status[[1L]], reference$status) ||
+        !runs$status[[1L]] %in% c("published", "cached")
     ) {
       abort(
-        "All source bindings must belong to the same catalog and database.",
+        "A source does not match a successful run and exact release in the lake registry.",
+        "tw_dbt_invalid"
+      )
+    }
+    relation <- DBI::Id(
+      catalog = "lake",
+      schema = record$schema_name[[1L]],
+      table = record$table_name[[1L]]
+    )
+    if (!DBI::dbExistsTable(lake$con, relation)) {
+      abort(
+        "A pinned source release is no longer available in the lake.",
         "tw_dbt_invalid"
       )
     }
     list(
-      name = label,
-      identifier = reference$table,
-      description = paste("Accepted RAW release of", reference$asset),
+      asset = reference$asset,
+      release_id = reference$release_id,
+      run_id = reference$run_id,
+      published_run_id = record$run_id[[1L]],
+      status = reference$status,
+      database = "lake",
+      schema = record$schema_name[[1L]],
+      table = record$table_name[[1L]]
+    )
+  })
+}
+
+dbt_binding_yaml <- function(resolved, name, catalog) {
+  schemas <- vapply(resolved, `[[`, character(1), "schema")
+  if (length(unique(schemas)) != 1L) {
+    abort(
+      "Each dbt source group needs one physical schema. Use dbt_sources(..., name = ...) to declare separate groups for different layers.",
+      "tw_dbt_invalid"
+    )
+  }
+  tables <- lapply(seq_along(resolved), function(i) {
+    ref <- resolved[[i]]
+    list(
+      name = names(resolved)[[i]],
+      identifier = ref$table,
+      description = paste("Published release of", ref$asset),
       config = list(
         meta = list(
-          tidyweave = list(
-            asset = reference$asset,
-            release_id = reference$release_id,
-            run_id = result$run_id,
-            status = result$status
-          )
+          tidyweave = ref[c(
+            "asset",
+            "release_id",
+            "run_id",
+            "published_run_id",
+            "status"
+          )]
         )
       )
     )
   })
   list(
     name = name,
-    database = database,
-    schema = "raw",
+    database = "lake",
+    schema = unname(schemas[[1L]]),
     quoting = list(database = TRUE, schema = TRUE, identifier = TRUE),
     config = list(meta = list(tidyweave = list(catalog = catalog))),
     tables = tables
   )
+}
+
+dbt_source_binding <- function(sources, name = "raw", config = NULL) {
+  references <- dbt_source_references(sources)
+  catalog <- dbt_source_catalog(references, config)
+  lake <- connect_lake(config %||% references[[1L]]$config, read_only = TRUE)
+  on.exit(close_lake(lake), add = TRUE)
+  resolved <- dbt_resolve_references(references, lake)
+  dbt_binding_yaml(resolved, name, catalog)
 }
