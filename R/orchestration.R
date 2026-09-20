@@ -63,7 +63,7 @@ as_targets <- function(x, cue = NULL, evidence = NULL) {
       return(invisible(NULL))
     }
     targets_serializable(product)
-    for (source in product$sources) {
+    for (source in product_sources(product)) {
       if (inherits(source, "tw_product")) visit(source, c(stack, product$id))
     }
     products[[product$id]] <<- product
@@ -81,8 +81,9 @@ as_targets <- function(x, cue = NULL, evidence = NULL) {
   for (product in products) {
     dependencies <- list()
     files <- list()
-    for (alias in names(product$sources)) {
-      source <- product$sources[[alias]]
+    sources <- product_sources(product)
+    for (alias in names(sources)) {
+      source <- sources[[alias]]
       if (inherits(source, "tw_product")) {
         dependencies[[alias]] <- as.name(target_names[[source$id]])
       } else if (
@@ -142,6 +143,7 @@ targets_run_product <- function(
   evidence,
   code_signature = NULL
 ) {
+  sources <- product_sources(product)
   for (alias in names(dependencies)) {
     result <- dependencies[[alias]]
     if (
@@ -150,15 +152,15 @@ targets_run_product <- function(
     ) {
       abort(paste("Upstream product did not complete successfully:", alias))
     }
-    product$sources[[alias]] <- structure(
+    sources[[alias]] <- structure(
       list(
         data = result$data %||% collect(result),
         descriptor = list(
           type = "product",
-          id = product$sources[[alias]]$id,
-          version = product$sources[[alias]]$version
+          id = sources[[alias]]$id,
+          version = sources[[alias]]$version
         ),
-        capabilities = capabilities(product$sources[[alias]]),
+        capabilities = capabilities(sources[[alias]]),
         reference = list(
           asset = result$asset,
           run_id = result$run_id,
@@ -169,8 +171,9 @@ targets_run_product <- function(
     )
   }
   for (alias in names(files)) {
-    product$sources[[alias]]$path <- files[[alias]]
+    sources[[alias]]$path <- files[[alias]]
   }
+  product <- replace_product_sources(product, sources)
   result <- run(product, evidence = evidence)
   # Never serialize a live lazy-table connection into the targets store.
   if (!is.null(result$data) && !is.data.frame(result$data)) {
@@ -183,7 +186,14 @@ targets_run_product <- function(
 targets_product_code <- function(product) {
   dependencies <- character()
   seen <- list()
-  capture <- function(x) {
+  capture <- function(x, environment_names = character()) {
+    if (rlang::is_quosure(x)) {
+      expression <- rlang::get_expr(x)
+      return(capture(
+        rlang::new_function(list(), expression, rlang::get_env(x)),
+        targets_environment_names(expression)
+      ))
+    }
     if (is.function(x)) {
       if (
         is.primitive(x) ||
@@ -197,8 +207,7 @@ targets_product_code <- function(product) {
       }
       seen[[length(seen) + 1L]] <<- x
       expression <- as.call(list(as.name("function"), formals(x), body(x)))
-      names <- targets::tar_deps_raw(expression)
-      dependencies <<- union(dependencies, names)
+      names <- union(targets::tar_deps_raw(expression), environment_names)
       values <- list()
       for (name in names) {
         if (!exists(name, environment(x), inherits = TRUE)) {
@@ -208,6 +217,7 @@ targets_product_code <- function(product) {
         if (is.environment(value) || typeof(value) == "externalptr") {
           next
         }
+        dependencies <<- union(dependencies, name)
         targets_serializable(value)
         values[[name]] <- capture(value)
       }
@@ -223,6 +233,41 @@ targets_product_code <- function(product) {
   }
   captures <- capture(product)
   list(dependencies = dependencies, captures = captures)
+}
+
+# Explicit, static .env references are ordinary captured values. Dynamic
+# indexing still needs a caller-supplied cue; never evaluate an index here.
+targets_environment_names <- function(expression) {
+  if (rlang::is_missing(expression)) {
+    return(character())
+  }
+  if (!is.call(expression)) {
+    return(character())
+  }
+  name <- character()
+  if (
+    length(expression) == 3L &&
+      identical(expression[[2]], as.name(".env"))
+  ) {
+    if (
+      identical(expression[[1]], as.name("$")) && is.symbol(expression[[3]])
+    ) {
+      name <- as.character(expression[[3]])
+    } else if (
+      identical(expression[[1]], as.name("[[")) &&
+        is.character(expression[[3]]) &&
+        length(expression[[3]]) == 1L
+    ) {
+      name <- expression[[3]]
+    }
+  }
+  unique(c(
+    name,
+    unlist(
+      lapply(as.list(expression)[-1], targets_environment_names),
+      use.names = FALSE
+    )
+  ))
 }
 
 #' @export

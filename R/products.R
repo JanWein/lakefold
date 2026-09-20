@@ -4,6 +4,8 @@
 #' a target. Nothing executes until [run()] or [publish()]. Products can be
 #' sources of other products; shared dependencies run once per execution.
 #' @param id Product identity, unique within a dependency graph.
+#' @param data Optional table, path, source adapter, product, or successful run.
+#'   Successful lake runs are pinned to their exact published release.
 #' @param contract Optional contract, named type vector or prototype list.
 #' @param version Optional immutable definition version. When omitted, lake
 #'   publication derives a technical version from the definition.
@@ -21,13 +23,14 @@
 #'   collect()
 product <- function(
   id,
+  data = NULL,
   contract = NULL,
   version = "1.0.0",
   owner = NULL,
   description = NULL,
   code_version = NULL
 ) {
-  new_product(
+  x <- new_product(
     id,
     contract,
     version,
@@ -36,6 +39,10 @@ product <- function(
     owner = owner,
     description = description
   )
+  if (!is.null(data)) {
+    x <- add_source(x, data)
+  }
+  x
 }
 
 #' Create and validate a relational dm model from pinned releases

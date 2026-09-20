@@ -11,6 +11,14 @@
 #' @param target Optional character scalar naming a target in the dbt profile.
 #' @param executable Character scalar giving a dbt executable name or path.
 #'   It is passed to [processx::run()] without a shell.
+#' @param lake Optional connection-free [lake_config()] for local DuckDB or
+#'   DuckLake. At execution, tidyweave writes a private profile for this catalog.
+#'   Omit `profiles_dir` when using `lake`. SQL and handwritten project files
+#'   stay unchanged. Close any caller-owned connections before running dbt.
+#' @param sources Optional named list of successful published lake results.
+#'   They become the `inputs` source group. Use [dbt_sources()] to add groups
+#'   from other physical schemas. Definitions retain exact release IDs;
+#'   registry resolution and YAML generation happen only at execution.
 #' @returns A serializable `dbt_project` specification. It contains no
 #'   database connection or resolved environment credentials.
 #' @seealso [dbt_init()], [dbt_status()], [dbt_model()]
@@ -22,13 +30,24 @@ dbt_project <- function(
   path = "dbt",
   profiles_dir = NULL,
   target = NULL,
-  executable = "dbt"
+  executable = "dbt",
+  lake = NULL,
+  sources = NULL
 ) {
   scalar(executable, "executable")
   if (!is.null(target)) {
     scalar(target, "target")
   }
-  structure(
+  if (!is.null(lake)) {
+    dbt_managed_config(lake)
+    if (!is.null(profiles_dir)) {
+      abort(
+        "Choose lake for a managed profile or profiles_dir for an external profile, not both.",
+        "tw_dbt_invalid"
+      )
+    }
+  }
+  project <- structure(
     list(
       path = absolute_path(path),
       profiles_dir = if (is.null(profiles_dir)) {
@@ -37,10 +56,22 @@ dbt_project <- function(
         absolute_path(profiles_dir)
       },
       target = target,
-      executable = executable
+      executable = executable,
+      lake = lake,
+      source_groups = list()
     ),
     class = "tw_dbt_project"
   )
+  if (!is.null(sources)) {
+    if (is.null(lake)) {
+      abort(
+        "Constructor sources require lake. For an external project use dbt_sources() explicitly.",
+        "tw_dbt_invalid"
+      )
+    }
+    project <- dbt_sources(project, sources, name = "inputs")
+  }
+  project
 }
 
 #' Build or test SQL models with dbt
@@ -79,7 +110,8 @@ dbt_project <- function(
 #' @returns A `tw_dbt_result` list with `status` (integer exit code), `success`
 #'   (logical), `command`, `results` (node tibble), parsed `manifest`,
 #'   `artifacts_dir`, `stdout`, `stderr`, `artifact_error`, `invocation_id`,
-#'   `artifact_hashes` and optional `catalog_delivery`. Warnings reported
+#'   `artifact_hashes`, original `project`, resolved `source_bindings`,
+#'   `source_catalog` and optional `catalog_delivery`. Warnings reported
 #'   by dbt are retained and do not by themselves count as failure.
 #' @seealso [dbt_status()], [dbt_lineage()], [dbt_model()]
 #' @examplesIf nzchar(Sys.getenv("TIDYWEAVE_DBT_EXAMPLE_PROJECT"))
@@ -245,9 +277,27 @@ dbt_run <- function(
       "tw_dbt_unavailable"
     )
   }
+  executable <- if (nzchar(executable)) {
+    unname(executable)
+  } else {
+    absolute_path(project$executable)
+  }
+  prepared <- dbt_prepare_managed(project)
+  if (!is.null(prepared) && !length(project$source_groups)) {
+    # Initialize even a source-free project through the lake lifecycle. dbt must
+    # not create an unmarked catalog that publication later cannot recognize.
+    owned <- connect_lake(project$lake)
+    close_lake(owned)
+  }
   artifacts <- file.path(project$path, ".tidyweave", "runs", uid())
   if (!dir.create(artifacts, recursive = TRUE)) {
     abort("Could not create the dbt artifact directory.", "tw_dbt_io")
+  }
+  profiles_dir <- project$profiles_dir
+  target <- project$target
+  if (!is.null(prepared)) {
+    profiles_dir <- dbt_write_managed(prepared, artifacts)
+    target <- prepared$target
   }
   args <- c(
     command,
@@ -259,11 +309,14 @@ dbt_run <- function(
     file.path(artifacts, "logs"),
     selectors
   )
-  if (!is.null(project$profiles_dir)) {
-    args <- c(args, "--profiles-dir", project$profiles_dir)
+  if (!is.null(profiles_dir)) {
+    args <- c(args, "--profiles-dir", profiles_dir)
   }
-  if (!is.null(project$target)) {
-    args <- c(args, "--target", project$target)
+  if (!is.null(prepared)) {
+    args <- c(args, "--profile", prepared$profile)
+  }
+  if (!is.null(target)) {
+    args <- c(args, "--target", target)
   }
   if (full_refresh) {
     args <- c(args, "--full-refresh")
@@ -276,7 +329,7 @@ dbt_run <- function(
     )
   }
   process <- tryCatch(
-    dbt_process(project$executable, args, project$path, echo, timeout),
+    dbt_process(executable, args, project$path, echo, timeout),
     error = function(e) {
       abort(
         "dbt could not complete. Check the executable, timeout and project logs.",
@@ -288,6 +341,9 @@ dbt_run <- function(
   )
   result <- structure(
     list(
+      project = project,
+      source_bindings = prepared$source_bindings %||% list(),
+      source_catalog = prepared$catalog,
       command = command,
       status = as.integer(process$status),
       success = FALSE,
@@ -664,8 +720,12 @@ print.tw_dbt_project <- function(x, ...) {
   cat(
     "<dbt_project>\nProject:",
     x$path,
+    "\nProfile:",
+    if (is.null(x$lake)) "external" else paste("managed", x$lake$backend),
+    "\nSource groups:",
+    length(x$source_groups %||% list()),
     "\nTarget:",
-    x$target %||% "profile default",
+    x$target %||% if (is.null(x$lake)) "profile default" else "tidyweave",
     "\n"
   )
   invisible(x)

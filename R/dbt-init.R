@@ -169,20 +169,7 @@ dbt_init <- function(
       showWarnings = FALSE
     )
   }
-  attach <- list(path = config$catalog$path, alias = "lake")
-  profile <- list(
-    type = "duckdb",
-    path = ":memory:",
-    database = "lake",
-    schema = schemas[["staging"]],
-    threads = 1L
-  )
-  if (config$backend == "ducklake") {
-    attach$path <- paste0("ducklake:", config$catalog$path)
-    attach$options <- list(DATA_PATH = paste0(config$storage$path, "/"))
-    profile$extensions <- list("ducklake")
-  }
-  profile$attach <- list(attach)
+  profile <- dbt_profile_output(config, schemas[["staging"]])
   yaml::write_yaml(
     stats::setNames(
       list(list(target = "dev", outputs = list(dev = profile))),
@@ -220,7 +207,7 @@ dbt_init <- function(
   }
   yaml::write_yaml(definition, file.path(path, "dbt_project.yml"))
   if (!is.null(sources)) {
-    dbt_sources(project, sources)
+    dbt_sources(project, sources, name = "raw")
   }
   for (source_name in names(source_types)) {
     columns <- source_types[[source_name]]
@@ -327,7 +314,7 @@ dbt_init <- function(
       if (is.null(sources)) {
         "For real ingestion, create a new project with dbt_init(..., sources = list(orders = accepted_raw))."
       } else {
-        "This project has no dbt seeds. Rebind a newer accepted release explicitly with dbt_sources(project, list(orders = accepted_raw))."
+        "This project has no dbt seeds. Rebind a newer accepted release explicitly with dbt_sources(project, list(orders = accepted_raw), name = 'raw')."
       },
       "stg_orders casts source types; core_orders names order_amount and derives is_positive_order.",
       "customer_revenue aggregates the core model by customer_id.",

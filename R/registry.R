@@ -209,10 +209,13 @@ resolve_release <- function(lake, asset, release = NULL) {
 }
 
 #' Query a published immutable data release
-#' @param lake Connected lake.
+#' @param src Connected lake.
 #' @param asset Asset id.
 #' @param release Release id; NULL selects latest.
+#' @param ... Reserved for extensions.
 #' @return A lazy dbplyr table.
+#' @name tbl
+#' @importFrom dplyr tbl
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("tidyweave-example-")
@@ -235,7 +238,13 @@ resolve_release <- function(lake, asset, release = NULL) {
 #' tbl(lake, "orders", release$release_id) |> dplyr::collect()
 #' disconnect_lake(lake)
 #' unlink(root, recursive = TRUE)
-tbl <- function(lake, asset, release = NULL) {
+dplyr::tbl
+
+#' @rdname tbl
+#' @export
+tbl.tw_lake <- function(src, asset, release = NULL, ...) {
+  rlang::check_dots_empty()
+  lake <- src
   r <- resolve_release(lake, asset_id(asset), release)
   dplyr::tbl(lake$con, table_id(r$schema_name[[1]], r$table_name[[1]]))
 }

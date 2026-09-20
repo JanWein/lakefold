@@ -177,7 +177,12 @@ tw_execute_target.tw_lake_target <- function(
       source <- if (single) product$sources[[1]] else NULL
       transforms <- product$transforms
       transform_metadata <- list()
-      if (!single || !inherits(source, "tw_source")) {
+      auxiliary <- any(vapply(
+        transforms,
+        function(step) length(component_sources(step)) > 0L,
+        logical(1)
+      ))
+      if (!single || !inherits(source, "tw_source") || auxiliary) {
         acquired <- read_product_sources(
           product,
           lake = lake,
@@ -187,11 +192,19 @@ tw_execute_target.tw_lake_target <- function(
         # Multiple inputs must be combined before they enter one publication.
         # The lake adapter is an explicit materialization boundary; native and
         # database targets preserve lazy tables through their transformations.
-        if (!single) {
+        if (!single || auxiliary) {
           for (name in names(transforms)) {
-            data <- apply_product_transform(transforms[[name]], data, name)
+            data <- apply_product_transform(
+              transforms[[name]],
+              data,
+              name,
+              sources = acquired$transform_sources[[name]]
+            )
             details <- attr(data, "tw_transform_metadata")
-            if (!is.null(details)) transform_metadata[[name]] <- details
+            if (!is.null(details)) {
+              transform_metadata[[name]] <- details
+            }
+            attr(data, "tw_transform_metadata") <- NULL
           }
           data <- table_result(data, "The final transformation")
           transforms <- list()
@@ -247,12 +260,19 @@ tw_execute_target.tw_lake_target <- function(
         step <- local({
           implementation <- transforms[[name]]
           label <- name
+          inputs <- acquired$transform_sources[[name]] %||% list()
           function(data) {
-            out <- apply_product_transform(implementation, collect(data), label)
+            out <- apply_product_transform(
+              implementation,
+              collect(data),
+              label,
+              sources = inputs
+            )
             details <- attr(out, "tw_transform_metadata")
             if (!is.null(details)) {
               transform_metadata[[label]] <<- details
             }
+            attr(out, "tw_transform_metadata") <- NULL
             out
           }
         })

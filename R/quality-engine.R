@@ -14,6 +14,39 @@
 #'   data.frame(amount = c(10, -1, NA)))
 run_quality <- function(rule, data, ...) UseMethod("run_quality")
 
+normalize_quality_engine <- function(engine) {
+  engine <- match.arg(engine, c("native", "pointblank"))
+  if (engine == "native") "r" else engine
+}
+
+quality_formula_units <- function(data, predicate) {
+  if (!inherits(predicate, "formula") || length(predicate) != 2L) {
+    abort("Use a one-sided quality formula, for example ~ amount >= 0.")
+  }
+  if (is_lazy_table(data)) {
+    expression <- rlang::as_quosure(predicate)
+    units <- dplyr::transmute(dplyr::ungroup(data), .tw_pass = !!expression)
+    value <- table_prototype(units)$.tw_pass
+  } else {
+    value <- rlang::eval_tidy(
+      predicate[[2]],
+      data,
+      env = environment(predicate)
+    )
+    if (!length(value) %in% c(1L, nrow(data))) {
+      abort("Quality formulas must return one logical value or one per row.")
+    }
+    units <- NULL
+  }
+  if (!is.logical(value) || !is.null(dim(value))) {
+    abort("Quality formulas must return one logical value or one per row.")
+  }
+  if (is.null(units)) {
+    units <- tibble::tibble(.tw_pass = rep(value, length.out = nrow(data)))
+  }
+  units
+}
+
 #' @export
 run_quality.tw_rule <- function(rule, data, ...) {
   if (identical(rule$engine, "pointblank")) {
@@ -23,13 +56,8 @@ run_quality.tw_rule <- function(rule, data, ...) {
     abort("This quality engine needs a run_quality() method.")
   }
   if (inherits(rule$check, "formula")) {
-    if (is_lazy_table(data)) {
-      predicate <- rlang::new_quosure(rule$check[[2]], environment(rule$check))
-      units <- dplyr::transmute(dplyr::ungroup(data), .tw_pass = !!predicate)
-      proto <- dplyr::collect(utils::head(units, 0))
-      if (!is.logical(proto$.tw_pass)) {
-        abort("Quality formulas must return logical values.")
-      }
+    units <- quality_formula_units(data, rule$check)
+    if (is_lazy_table(units)) {
       .tw_pass <- NULL
       counts <- dplyr::collect(dplyr::summarise(
         units,
@@ -41,19 +69,7 @@ run_quality.tw_rule <- function(rule, data, ...) {
         counts$total
       )
     } else {
-      value <- rlang::eval_tidy(
-        rule$check[[2]],
-        data,
-        env = environment(rule$check)
-      )
-      if (
-        !is.logical(value) ||
-          !is.null(dim(value)) ||
-          !length(value) %in% c(1L, nrow(data))
-      ) {
-        abort("Quality formulas must return one logical value or one per row.")
-      }
-      value <- rep(value, length.out = nrow(data))
+      value <- units$.tw_pass
       value <- quality_counts(sum(is.na(value) | !value), length(value))
     }
   } else {

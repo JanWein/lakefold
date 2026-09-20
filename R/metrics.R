@@ -102,15 +102,24 @@ metric <- function(
 }
 
 #' Calculate a metric on a pinned published release
-#' @param lake Connected lake.
+#'
+#' A successful publication result supplies its exact asset and release. Later
+#' publications do not change that input. Result-based measurement does not
+#' register definitions or write lineage; its manifest still contains all
+#' metric and input evidence needed by [report_release()]. A live caller-owned
+#' lake is borrowed when available. Otherwise the saved configuration opens an
+#' owned read-only connection that closes before returning, including on errors.
+#' @param x Connected lake or successful published `tw_run_result`.
 #' @param metric Metric definition.
 #' @param by Grouping columns.
 #' @param at Business date, or a vector for flow metrics.
-#' @param release Optional explicit product release id.
+#' @param release Optional explicit product release id for a connected lake.
+#'   For a publication result it must be omitted or match that exact release.
 #' @param filters Named list of exact-match filters on permitted dimensions.
 #' @param params Parameters passed to custom compute functions.
 #' @param record Record definition and lineage. Defaults to `TRUE` on a writable
-#'   lake and `FALSE` on a read-only lake. Unrecorded results still carry their
+#'   lake and `FALSE` on a read-only lake or publication result. Use a connected
+#'   writable lake for `record = TRUE`. Unrecorded results still carry their
 #'   complete metric definition and pinned release in the manifest.
 #' @return Tibble with a tw_manifest attribute for report reproducibility.
 #'   Grouped results are ordered by the requested dimensions using C collation
@@ -139,29 +148,92 @@ metric <- function(
 #'   unit = "EUR", owner = "Analytics", description = "Total order value",
 #'   approved = TRUE, code_version = "v1"
 #' )
-#' measure(lake, metric)
+#' release |> measure(metric)
 #' disconnect_lake(lake)
 #' unlink(root, recursive = TRUE)
 measure <- function(
-  lake,
+  x,
   metric,
   by = character(),
   at = NULL,
   release = NULL,
   filters = list(),
   params = list(),
-  record = !isTRUE(lake$config$read_only)
+  record = NULL
 ) {
-  assert_lake(lake)
-  flag(record, "record")
-  if (record) {
-    assert_writable(lake)
-  }
   if (!inherits(metric, "tw_metric")) {
     abort("metric must be a metric.")
   }
   if (!metric$approved) {
     abort("Metric definition is not approved.")
+  }
+  if (inherits(x, "tw_run_result")) {
+    if (
+      !is.character(x$status) ||
+        length(x$status) != 1L ||
+        is.na(x$status) ||
+        !x$status %in% c("published", "cached") ||
+        !is.character(x$asset) ||
+        length(x$asset) != 1L ||
+        is.na(x$asset) ||
+        !nzchar(x$asset) ||
+        !is.character(x$release_id) ||
+        length(x$release_id) != 1L ||
+        is.na(x$release_id) ||
+        !nzchar(x$release_id)
+    ) {
+      abort(
+        "measure() needs a successful published result with an exact release."
+      )
+    }
+    if (!identical(metric$product, x$asset)) {
+      abort("The metric input asset does not match this publication result.")
+    }
+    if (!is.null(release) && !identical(release, x$release_id)) {
+      abort(
+        "A publication result is pinned. Omit release or use its exact release id."
+      )
+    }
+    record <- record %||% FALSE
+    flag(record, "record")
+    if (record) {
+      abort(
+        "Use a connected writable lake to record metric definitions and lineage."
+      )
+    }
+    source <- normalize_result_source(x)
+    if (!inherits(source, "tw_release_source")) {
+      abort("The publication result has no readable lake release reference.")
+    }
+    borrowed <- inherits(x$output_lake, "tw_lake") &&
+      DBI::dbIsValid(x$output_lake$con)
+    if (borrowed) {
+      lake <- x$output_lake
+      if (
+        inherits(source$lake, "tw_config") &&
+          !identical(
+            source$lake[c("backend", "catalog", "storage")],
+            lake$config[c("backend", "catalog", "storage")]
+          )
+      ) {
+        abort(
+          "The result's connection and saved configuration describe different lakes."
+        )
+      }
+    } else if (inherits(source$lake, "tw_config")) {
+      lake <- connect_lake(source$lake, read_only = TRUE)
+      on.exit(disconnect_lake(lake), add = TRUE)
+    } else {
+      lake <- source$lake
+      assert_lake(lake)
+    }
+    release <- x$release_id
+  } else {
+    lake <- x
+    assert_lake(lake)
+    record <- record %||% !isTRUE(lake$config$read_only)
+    flag(record, "record")
+    if (record) assert_writable(lake)
   }
   if (!all(by %in% metric$dimensions)) {
     abort("Unsupported metric dimensions.")

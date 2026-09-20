@@ -111,13 +111,25 @@ setup_lake <- function(
 #'
 #' This constructor validates configuration and resolves paths, but does not
 #' create directories, install extensions, connect to databases or read secrets.
+#' With `path`, it may read an existing `tidyweave.json` to preserve the saved
+#' backend. It never creates or writes files. A new shorthand lake defaults to
+#' DuckDB; other calls retain the usual DuckLake default. The local layout and
+#' backend marker are shared with [open_lake()]. Unknown non-empty folders are
+#' refused rather than interpreted as a new lake.
 #' Pass its result to [connect_lake()] or [target_lake()] when ready to execute.
 #' @inheritParams setup_lake
+#' @param path Optional local lake folder. Derives `metadata.duckdb`, `data`
+#'   and `landing` within that folder. Supply either `path` or explicit
+#'   `catalog`, `storage` and `landing`, not both. An explicit backend must
+#'   agree with a folder's saved backend. Default layers are unchanged;
+#'   select `layers = c("raw", "staging", "core", "marts")` when needed.
 #' @return A connection-free `lake_config` specification.
 #' @export
 #' @examples
 #' config <- lake_config(backend = "duckdb")
 #' print(config)
+#' local <- lake_config(path = file.path(tempdir(), "my-data-lake"))
+#' print(local)
 lake_config <- function(
   catalog = registry_duckdb("metadata.ducklake"),
   storage = storage_local("data"),
@@ -125,10 +137,28 @@ lake_config <- function(
   landing = "landing",
   backend = c("ducklake", "duckdb"),
   install_extensions = TRUE,
-  read_only = FALSE
+  read_only = FALSE,
+  path = NULL
 ) {
   flag(read_only, "read_only")
-  backend <- match.arg(backend)
+  if (!is.null(path)) {
+    if (!missing(catalog) || !missing(storage) || !missing(landing)) {
+      abort(
+        "Supply path or explicit catalog, storage and landing settings, not both."
+      )
+    }
+    path <- absolute_path(path)
+    local <- local_lake_settings(
+      path,
+      if (missing(backend)) NULL else match.arg(backend)
+    )
+    backend <- local$backend
+    catalog <- registry_duckdb(file.path(path, "metadata.duckdb"))
+    storage <- storage_local(file.path(path, "data"))
+    landing <- file.path(path, "landing")
+  } else {
+    backend <- match.arg(backend)
+  }
   if (
     !inherits(catalog, "tw_catalog_spec") ||
       !inherits(storage, "tw_storage_spec")
@@ -144,7 +174,7 @@ lake_config <- function(
   ) {
     abort("The DuckDB backend only supports local storage and catalog.")
   }
-  structure(
+  out <- structure(
     list(
       catalog = catalog,
       storage = storage,
@@ -156,6 +186,68 @@ lake_config <- function(
     ),
     class = "tw_config"
   )
+  if (!is.null(path)) {
+    attr(out, "tw_local_path") <- path
+  }
+  out
+}
+
+local_lake_settings <- function(path, backend = NULL) {
+  if (file.exists(path) && !dir.exists(path)) {
+    abort("The local lake path is a file. Choose a folder.")
+  }
+  manifest <- file.path(path, "tidyweave.json")
+  if (file.exists(manifest)) {
+    saved <- tryCatch(
+      jdecode(paste(readLines(manifest, warn = FALSE), collapse = "\n")),
+      error = function(e) NULL
+    )
+    if (
+      !is.list(saved) ||
+        !identical(saved$format, 1L) ||
+        !is.character(saved$backend) ||
+        length(saved$backend) != 1L ||
+        is.na(saved$backend) ||
+        !saved$backend %in% c("duckdb", "ducklake")
+    ) {
+      abort(
+        "Invalid tidyweave.json. Restore the folder's original configuration."
+      )
+    }
+    if (!is.null(backend) && !identical(backend, saved$backend)) {
+      abort(
+        "This folder uses a different backend. Omit backend or choose a new folder."
+      )
+    }
+    return(list(backend = saved$backend))
+  }
+  if (
+    dir.exists(path) &&
+      length(list.files(path, all.files = TRUE, no.. = TRUE))
+  ) {
+    abort(
+      "This folder is not empty and has no tidyweave.json. Use its original lake_config() or choose an empty folder."
+    )
+  }
+  list(backend = backend %||% "duckdb")
+}
+
+save_local_lake_settings <- function(config) {
+  path <- attr(config, "tw_local_path")
+  if (is.null(path)) {
+    return(invisible(NULL))
+  }
+  manifest <- file.path(path, "tidyweave.json")
+  if (file.exists(manifest)) {
+    return(invisible(NULL))
+  }
+  temporary <- tempfile(".local-config-", tmpdir = path)
+  on.exit(unlink(temporary), add = TRUE)
+  writeLines(jencode(list(format = 1L, backend = config$backend)), temporary)
+  if (!suppressWarnings(file.rename(temporary, manifest))) {
+    abort("Unable to save tidyweave.json for the local lake.")
+  }
+  invisible(NULL)
 }
 
 #' @rdname setup_lake
@@ -167,6 +259,10 @@ connect_lake <- function(config, read_only = config$read_only %||% FALSE) {
   }
   flag(read_only, "read_only")
   config$read_only <- read_only
+  local_path <- attr(config, "tw_local_path")
+  if (!is.null(local_path)) {
+    local_lake_settings(local_path, config$backend)
+  }
   if (
     read_only &&
       config$catalog$type == "duckdb" &&
@@ -174,8 +270,15 @@ connect_lake <- function(config, read_only = config$read_only %||% FALSE) {
   ) {
     abort("A read-only catalog must already exist.")
   }
+  if (!is.null(local_path) && !read_only) {
+    dir.create(local_path, recursive = TRUE, showWarnings = FALSE)
+    if (!dir.exists(local_path)) {
+      abort("Unable to create the local lake folder.")
+    }
+    save_local_lake_settings(config)
+  }
   con <- DBI::dbConnect(
-    duckdb::duckdb(),
+    suppressMessages(duckdb::duckdb()),
     dbdir = ":memory:",
     bigint = "integer64"
   )

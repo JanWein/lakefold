@@ -138,6 +138,111 @@ execute_transform.default <- function(transform, data, ...) {
   )
 }
 
+# Auxiliary inputs belong to their transformation, not to the primary table.
+component_sources <- function(x, ...) UseMethod("component_sources")
+#' @export
+component_sources.default <- function(x, ...) list()
+
+replace_component_sources <- function(x, sources, ...) {
+  UseMethod("replace_component_sources")
+}
+#' @export
+replace_component_sources.default <- function(x, sources, ...) {
+  if (length(sources)) {
+    abort("This component cannot replace its dependencies.")
+  }
+  x
+}
+
+transform_source_names <- function(step, sources) {
+  if (!length(sources)) {
+    return(character())
+  }
+  if (
+    is.null(names(sources)) ||
+      anyNA(names(sources)) ||
+      any(!nzchar(names(sources))) ||
+      anyDuplicated(names(sources))
+  ) {
+    abort("Transformation dependencies must have unique, non-empty names.")
+  }
+  paste0("transform:", step, ":", names(sources))
+}
+
+product_sources <- function(product) {
+  sources <- product$sources
+  for (step in names(product$transforms)) {
+    auxiliary <- component_sources(product$transforms[[step]])
+    labels <- transform_source_names(step, auxiliary)
+    if (any(labels %in% names(sources))) {
+      abort("A source name conflicts with a transformation dependency.")
+    }
+    sources <- c(sources, stats::setNames(auxiliary, labels))
+  }
+  sources
+}
+
+replace_product_sources <- function(product, sources) {
+  product$sources <- sources[names(product$sources)]
+  for (step in names(product$transforms)) {
+    auxiliary <- component_sources(product$transforms[[step]])
+    if (!length(auxiliary)) {
+      next
+    }
+    labels <- transform_source_names(step, auxiliary)
+    product$transforms[[step]] <- replace_component_sources(
+      product$transforms[[step]],
+      stats::setNames(sources[labels], names(auxiliary))
+    )
+  }
+  product
+}
+
+normalize_result_source <- function(result) {
+  if (!result$status %in% c("completed", "published", "cached")) {
+    abort("Use a successful run as a source. This run has no approved output.")
+  }
+  pinned <- length(result$release_id) == 1L &&
+    !is.na(result$release_id) &&
+    nzchar(result$release_id)
+  destination <- result$output_config %||% result$output_lake
+  if (pinned && !is.null(destination)) {
+    source <- source_release(destination, result$asset, result$release_id)
+    source$run_id <- result$run_id
+    return(source)
+  }
+  if (is.null(result$data)) {
+    abort(
+      "This successful run has neither submitted data nor a readable release reference."
+    )
+  }
+  structure(
+    list(data = result$data, asset = result$asset, run_id = result$run_id),
+    class = "tw_result_source"
+  )
+}
+
+#' @export
+read_source.tw_result_source <- function(source, ...) {
+  data <- source$data
+  attr(data, "tw_input_reference") <- list(
+    asset = source$asset,
+    run_id = source$run_id
+  )
+  data
+}
+#' @export
+check_component.tw_result_source <- function(x, ...) {
+  assert_component(x$data, "read_source")
+  invisible(x)
+}
+#' @export
+inspect.tw_result_source <- function(x, ...) {
+  data <- inspect(x$data)
+  data$rows <- NULL
+  list(type = "accepted run", asset = x$asset, data = data)
+}
+
 #' Apply a DuckDB SQL query to a data frame
 #'
 #' The input is available as `data` in a private, temporary DuckDB connection.
@@ -229,6 +334,9 @@ check_component.tw_rule <- function(x, ...) {
   }
   if (!is.function(x$check) && !inherits(x$check, "formula")) {
     abort("The quality rule needs a function or formula.")
+  }
+  if (inherits(x$check, "formula") && length(x$check) != 2L) {
+    abort("Use a one-sided quality formula, for example ~ amount >= 0.")
   }
   invisible(x)
 }
@@ -424,7 +532,8 @@ read_release_source <- function(source, execution_lake = NULL) {
   attr(data, "tw_input_reference") <- list(
     asset = source$asset,
     release_id = ref$release_id[[1]],
-    hash = ref$input_hash[[1]]
+    hash = ref$input_hash[[1]],
+    run_id = source$run_id %||% NULL
   )
   data
 }
