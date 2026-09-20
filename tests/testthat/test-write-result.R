@@ -2,6 +2,12 @@ test_that("write results are pinned product and lookup inputs", {
   skip_if_not_installed("duckdb")
   lake <- open_lake(withr::local_tempdir())
   withr::defer(close_lake(lake))
+  connections <- 0L
+  connect <- connect_lake
+  local_mocked_bindings(connect_lake = function(...) {
+    connections <<- connections + 1L
+    connect(...)
+  })
   orders <- data.frame(id = 1:2, amount = c(10, 20))
   written <- write_data(lake, orders, "orders")
   reference <- write_data(
@@ -35,6 +41,7 @@ test_that("write results are pinned product and lookup inputs", {
     ignore_attr = TRUE
   )
   expect_true(DBI::dbIsValid(lake$con))
+  expect_identical(connections, 0L)
   close_lake(lake)
   expect_equal(collect(written), tibble::as_tibble(orders))
   expect_equal(
@@ -43,6 +50,7 @@ test_that("write results are pinned product and lookup inputs", {
     ignore_attr = TRUE
   )
   expect_false(DBI::dbIsValid(lake$con))
+  expect_gt(connections, 0L)
 })
 
 test_that("owned file and function writes retain recoverable cached references", {

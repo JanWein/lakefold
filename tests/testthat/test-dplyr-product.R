@@ -1,4 +1,5 @@
 test_that("dplyr product verbs defer data and expressions until execution", {
+  expect_identical(filter, dplyr::filter)
   calls <- 0L
   x <- product("orders", function() {
     calls <<- calls + 1L

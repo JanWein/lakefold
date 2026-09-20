@@ -55,6 +55,7 @@ add_lookup <- function(
       source = normalize_source(source, id = x$id, name = name),
       by = lookup_keys(by),
       engine = match.arg(engine),
+      engine_explicit = !missing(engine),
       unmatched = match.arg(unmatched),
       suffix = lookup_suffix(suffix)
     ),

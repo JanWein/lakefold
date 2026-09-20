@@ -7,7 +7,10 @@
 quality(x, run_id = NULL, asset = NULL, release = NULL)
 }
 \arguments{
-\item{x}{A lake, run result, dbt result or quality tibble.}
+\item{x}{A lake, run result, measurement, measurement set, dbt result or
+quality tibble.
+Measurement sets resolve their exact input releases using retained
+references. Unavailable references return explicit \code{not_checked} evidence.}
 
 \item{run_id}{Run ID when \code{x} is a lake.}
 

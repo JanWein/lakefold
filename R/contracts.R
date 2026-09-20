@@ -16,7 +16,8 @@
 #'   List columns require a target that supports nested data.
 #' @param required Non-null columns.
 #' @param key Unique key columns.
-#' @param rules List of quality rules.
+#' @param rules A quality rule, one-sided formula, or list of rules/formulas.
+#'   List names label rules, with the same grammar as [add_quality()].
 #' @param producer Contact for failed deliveries.
 #' @param max_age_hours Maximum release age, or `NULL` to leave freshness
 #'   unmonitored.
@@ -112,9 +113,7 @@ contract <- function(
   ) {
     abort("max_age_hours must be positive and finite, or NULL.")
   }
-  if (!all(vapply(rules, inherits, logical(1), "tw_rule"))) {
-    abort("Use quality_rule() or pointblank_checks() for rules.")
-  }
+  rules <- normalize_quality_rules(rules)
   if (anyDuplicated(vapply(rules, `[[`, character(1), "name"))) {
     abort("Rule names must be unique.")
   }
@@ -199,6 +198,7 @@ quality_rule <- function(
   description = "",
   engine = c("native", "pointblank")
 ) {
+  engine_explicit <- !missing(engine)
   scalar(name, "name")
   if (!is.function(check) && !inherits(check, "formula")) {
     abort("check must be a function or a one-sided formula.")
@@ -228,7 +228,8 @@ quality_rule <- function(
       severity = match.arg(severity),
       max_failure = max_failure,
       description = description,
-      engine = engine
+      engine = engine,
+      engine_explicit = engine_explicit
     ),
     class = "tw_rule"
   )
@@ -265,6 +266,7 @@ pointblank_checks <- function(
 ) {
   rule <- quality_rule(name, build, severity, max_failure)
   rule$engine <- "pointblank"
+  rule$engine_explicit <- TRUE
   policy <- match.arg(policy)
   if (policy != "rule") {
     rule$policy <- policy
@@ -660,4 +662,53 @@ validate.tw_pipeline <- function(data, contract = NULL, ...) {
   assert_contract_ready(data$steps$validate)
   attr(data, "tw_validated") <- TRUE
   data
+}
+
+normalize_quality_rules <- function(
+  quality,
+  name = NULL,
+  engine = NULL,
+  existing = list()
+) {
+  if (!is.null(engine)) {
+    normalize_quality_engine(engine)
+  }
+  if (is.list(quality) && !inherits(quality, "tw_rule")) {
+    if (!is.null(name)) {
+      abort("Name individual rules in the quality list.")
+    }
+    for (i in seq_along(quality)) {
+      label <- names(quality)[i]
+      if (is.null(label) || is.na(label) || !nzchar(label)) {
+        label <- NULL
+      }
+      existing <- normalize_quality_rules(quality[[i]], label, engine, existing)
+    }
+    return(existing)
+  }
+  if (!inherits(quality, "tw_rule")) {
+    quality <- quality_rule(
+      name %||% paste0("quality_", length(existing) + 1L),
+      quality
+    )
+  } else if (!is.null(name)) {
+    quality$name <- scalar(name, "name")
+  }
+  if (!is.null(engine)) {
+    selected <- normalize_quality_engine(engine)
+    if (
+      !identical(quality$engine, selected) &&
+        !inherits(quality$check, "formula")
+    ) {
+      abort(
+        "Only formula rules can change engines. Keep custom functions native or use pointblank_checks() for an agent builder."
+      )
+    }
+    quality$engine <- selected
+    quality$engine_explicit <- TRUE
+  }
+  if (quality$name %in% vapply(existing, `[[`, character(1), "name")) {
+    abort("Quality rule names must be unique.")
+  }
+  c(existing, list(quality))
 }

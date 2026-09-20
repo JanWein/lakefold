@@ -36,7 +36,7 @@
       collect(result)
     Condition
       Error in `abort()`:
-      ! This run has no successful output. Inspect status() and quality().
+      ! orders failed during execution; no successful output is available. Inspect quality(result) or quality_report(result) for check details.
 
 # contract prototypes, anonymous contracts and rule names normalize consistently
 

@@ -6,11 +6,12 @@
 \usage{
 ingest(
   x,
-  to = "tidyweave",
+  to = NULL,
   name = NULL,
   contract = NULL,
   quality = NULL,
   reader = NULL,
+  execution = NULL,
   ...
 )
 }
@@ -32,6 +33,10 @@ or ID, or the data variable name; expressions use \code{"data"}.}
 \item{quality}{Optional input checks accepted by \code{\link[=add_quality]{add_quality()}}.}
 
 \item{reader}{Optional file reader. CSV, TSV, RDS and Excel have defaults.}
+
+\item{execution}{Optional \code{\link[=execution_config]{execution_config()}} defaults, overriding defaults
+stored on a product. Its layer must be
+\code{NULL} or \code{"raw"}; an explicit \code{to} overrides its destination.}
 
 \item{...}{Named execution options: \code{stop_on_failure} (default \code{TRUE}),
 \code{business_date}, \code{notify}, \code{code_version}, and \code{cache} (default \code{FALSE}).

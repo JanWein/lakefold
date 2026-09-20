@@ -98,7 +98,10 @@ publish_metadata.default <- function(catalog, metadata, ...) {
 #'   to the `tidyweave` folder in the working directory when the product has none.
 #'   For dbt builds it defaults to the project's configured lake.
 #' @param layer Optional publication layer for a lake target.
-#' @param ... Execution options, including `stop_on_failure` and, for lake
+#' @param execution Optional [execution_config()] defaults for products,
+#'   overriding defaults stored by `product(execution = )`.
+#' @param ... Execution options, including `data` or `sources` for new deliveries
+#'   as described in [run()], `stop_on_failure` and, for lake
 #'   targets, `business_date`, `notify` and `cache`. dbt builds accept
 #'   [dbt_publish()] options such as `contract`, `asset` and `layer`.
 #' @returns A run result. An exception on failure includes `condition$result`.
@@ -123,18 +126,34 @@ publish.data.frame <- function(x, name = NULL, to = NULL, ...) {
 }
 #' @rdname publish
 #' @export
-publish.tw_product <- function(x, name = NULL, to = NULL, layer = NULL, ...) {
+publish.tw_product <- function(
+  x,
+  name = NULL,
+  to = NULL,
+  layer = NULL,
+  execution = NULL,
+  ...
+) {
   if (!is.null(name)) {
     abort(
       "The product already has a name. Omit name or create product(name)."
     )
   }
+  execution <- product_execution(x, execution)
   x <- editable_product(x)
   if (!is.null(to)) {
     x <- set_target(x, to)
+    if (
+      is.null(layer) &&
+        !is.null(execution$layer) &&
+        !inherits(to, "tw_lake_target")
+    ) {
+      layer <- execution$layer
+    }
   }
   if (is.null(x$target)) {
-    x <- set_target(x, "tidyweave")
+    x <- set_target(x, execution$to %||% "tidyweave")
+    layer <- layer %||% execution$layer
   }
   if (!is.null(layer)) {
     if (!inherits(x$target, "tw_lake_target")) {
@@ -142,7 +161,7 @@ publish.tw_product <- function(x, name = NULL, to = NULL, layer = NULL, ...) {
     }
     x$target$layer <- ident(layer)
   }
-  run(x, ...)
+  run(x, execution = execution, ...)
 }
 #' @export
 publish.default <- function(x, name = NULL, to = NULL, ...) {
@@ -175,7 +194,10 @@ dplyr::collect
 collect.tw_run_result <- function(x, ...) {
   if (!x$status %in% c("completed", "published", "cached")) {
     abort(
-      "This run has no successful output. Inspect status() and quality()."
+      paste(
+        run_result_message(x),
+        "Inspect quality(result) or quality_report(result) for check details."
+      )
     )
   }
   if (!is.null(x$data)) {
@@ -204,9 +226,17 @@ run.tw_product <- function(
   stop_on_failure = TRUE,
   evidence = getOption("tidyweave.evidence"),
   .context = NULL,
+  execution = NULL,
+  data = NULL,
+  sources = NULL,
   ...
 ) {
-  object <- pipeline
+  object <- replace_execution_sources(pipeline, data, sources)
+  execution <- if (is.null(.context)) {
+    product_execution(object, execution)
+  } else {
+    execution
+  }
   if (!is.null(evidence)) {
     scalar(evidence, "evidence")
   }
@@ -214,6 +244,7 @@ run.tw_product <- function(
   if (!is.null(lake)) {
     object <- set_target(object, lake)
   }
+  object <- apply_execution_defaults(object, execution)
   object <- validate(object)
   context <- .context %||% new_product_context(evidence)
   if (exists(object$id, context$results, inherits = FALSE)) {
@@ -316,16 +347,13 @@ run.tw_product <- function(
     stop_on_failure && !result$status %in% c("completed", "published", "cached")
   ) {
     abort(
-      paste0(
-        "Product `",
-        object$id,
-        "` ended with ",
-        result$status,
-        ". Inspect condition$result for execution evidence."
+      paste(
+        run_result_message(result),
+        "The condition retains this result in $result. Inspect quality(condition$result) for check details."
       ),
       "tw_run_failed",
       result = result,
-      parent = result$error
+      parent = run_result_parent(result)
     )
   }
   result
@@ -449,8 +477,27 @@ apply_product_transform <- function(transform, data, name, sources = list()) {
   )
 }
 
+effective_product_contract <- function(product) {
+  contract <- product$contract
+  rules <- product$execution_contract_rules
+  if (is.null(contract) || is.null(rules)) {
+    return(contract)
+  }
+  # Keep the user's registered declaration immutable. A resolved execution is
+  # a separate, content-addressed check definition, including its actual engine.
+  contract$declared_contract <- list(
+    id = contract$id,
+    version = contract$version,
+    fingerprint = fingerprint(contract)
+  )
+  contract$rules <- rules
+  contract$id <- paste0(contract$id, ".execution")
+  contract$version <- paste0("checks-", fingerprint(contract))
+  contract
+}
+
 product_contract <- function(product, data) {
-  contract <- product$contract %||%
+  contract <- effective_product_contract(product) %||%
     automatic_schema(product$id, automatic_types(infer_column_types(data)))
   combine_quality(contract, product$quality)
 }

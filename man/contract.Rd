@@ -48,7 +48,8 @@ List columns require a target that supports nested data.}
 
 \item{key}{Unique key columns.}
 
-\item{rules}{List of quality rules.}
+\item{rules}{A quality rule, one-sided formula, or list of rules/formulas.
+List names label rules, with the same grammar as \code{\link[=add_quality]{add_quality()}}.}
 
 \item{producer}{Contact for failed deliveries.}
 

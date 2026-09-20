@@ -7,13 +7,13 @@
 \alias{publish.tw_product}
 \title{Execute and publish a product with sensible local defaults}
 \usage{
-\method{publish}{tw_dbt_result}(x, name = NULL, to = NULL, ...)
+\method{publish}{tw_dbt_result}(x, name = NULL, to = NULL, execution = NULL, ...)
 
 publish(x, name = NULL, to = NULL, ...)
 
 \method{publish}{data.frame}(x, name = NULL, to = NULL, ...)
 
-\method{publish}{tw_product}(x, name = NULL, to = NULL, layer = NULL, ...)
+\method{publish}{tw_product}(x, name = NULL, to = NULL, layer = NULL, execution = NULL, ...)
 }
 \arguments{
 \item{x}{Composed product, data frame, or successful dbt build.}
@@ -25,7 +25,11 @@ name for a dbt build. Omit it for an already named product.}
 to the \code{tidyweave} folder in the working directory when the product has none.
 For dbt builds it defaults to the project's configured lake.}
 
-\item{...}{Execution options, including \code{stop_on_failure} and, for lake
+\item{execution}{Optional \code{\link[=execution_config]{execution_config()}} defaults for products,
+overriding defaults stored by \code{product(execution = )}.}
+
+\item{...}{Execution options, including \code{data} or \code{sources} for new deliveries
+as described in \code{\link[=run]{run()}}, \code{stop_on_failure} and, for lake
 targets, \code{business_date}, \code{notify} and \code{cache}. dbt builds accept
 \code{\link[=dbt_publish]{dbt_publish()}} options such as \code{contract}, \code{asset} and \code{layer}.}
 

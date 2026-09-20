@@ -208,6 +208,7 @@ normalize_result_source <- function(result) {
   destination <- result$output_config %||% result$output_lake
   if (pinned && !is.null(destination)) {
     source <- source_release(destination, result$asset, result$release_id)
+    source$output_lake <- result$output_lake
     source$run_id <- result$run_id
     return(source)
   }
@@ -504,8 +505,16 @@ read_source.tw_release_source <- function(source, ...) {
 read_release_source <- function(source, execution_lake = NULL) {
   check_component(source)
   materialized <- inherits(source$lake, "tw_config")
+  if (
+    materialized &&
+      inherits(source$output_lake, "tw_lake") &&
+      DBI::dbIsValid(source$output_lake$con)
+  ) {
+    execution_lake <- source$output_lake
+  }
   reuse <- materialized &&
     inherits(execution_lake, "tw_lake") &&
+    DBI::dbIsValid(execution_lake$con) &&
     identical(
       source$lake[c("backend", "catalog", "storage")],
       execution_lake$config[c("backend", "catalog", "storage")]

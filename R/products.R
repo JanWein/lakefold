@@ -12,6 +12,11 @@
 #' @param owner,description Optional metadata, otherwise inherited from contract.
 #' @param code_version Optional code and dependency version. Required only when
 #'   explicitly reusing a previously published lake release with `cache = TRUE`.
+#' @param source_name Optional name for `data`. Defaults to the product ID for
+#'   ordinary inputs, or the upstream product ID for a nested product.
+#' @param execution Optional connection-free [execution_config()] stored on this
+#'   definition. Used when it is the root of [run()], [publish()] or [ingest()].
+#'   An explicit execution argument overrides these defaults.
 #' @returns A `tw_product`, ready for composition, inspection and execution.
 #' @export
 #' @examples
@@ -28,7 +33,9 @@ product <- function(
   version = "1.0.0",
   owner = NULL,
   description = NULL,
-  code_version = NULL
+  code_version = NULL,
+  source_name = NULL,
+  execution = NULL
 ) {
   x <- new_product(
     id,
@@ -39,8 +46,22 @@ product <- function(
     owner = owner,
     description = description
   )
+  execution <- validate_stored_execution(execution)
+  if (!is.null(execution)) {
+    attr(x, "tw_execution_config") <- execution
+  }
+  if (!is.null(source_name)) {
+    scalar(source_name, "source_name")
+  }
+  if (is.null(data) && !is.null(source_name)) {
+    abort(
+      "source_name requires data. Name a later source with add_source(name = )."
+    )
+  }
   if (!is.null(data)) {
-    x <- add_source(x, data)
+    source_name <- source_name %||%
+      if (inherits(data, "tw_product")) data$id else id
+    x <- add_source(x, data, name = source_name)
   }
   x
 }

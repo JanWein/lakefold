@@ -72,7 +72,7 @@ test_that("measure result preflight rejects failed runs, wrong assets and approv
   expect_error(measure(result, total), "does not match")
   result$asset <- "orders"
   total$approved <- FALSE
-  expect_error(measure(result, total), "not approved")
+  expect_error(measure(result, total, record = TRUE), "Exploratory")
 })
 
 test_that("result measurements keep stock-date checks and close on errors", {

@@ -29,6 +29,21 @@ the same execution. Without a target, the result retains its checked table;
 \details{
 Product execution options passed through \code{...} include:
 \itemize{
+\item \code{data}: a new delivery replacing the sole primary input while retaining
+its name, transformations and checks. If the primary input is a product,
+its single-primary-input chain is followed to the ordinary delivery,
+retaining every intermediate product and gate. Ambiguous branches require
+an explicit name through \code{sources}.
+\item \code{sources}: a named list of replacements using \code{\link[=replace_sources]{replace_sources()}} names.
+Use either \code{data} or \code{sources}. The original definition and unselected
+pinned results remain unchanged. Both options replace whole inputs, not
+individual rows; partition replacement requires an explicit target policy.
+\item \code{execution}: an optional \code{\link[=execution_config]{execution_config()}} value, overriding defaults
+stored by \code{product(execution = )}. Engine defaults
+propagate through dependencies; explicit step choices win. Destination and
+layer defaults apply only to the root product. Untargeted dependencies stay
+in memory, and existing dependency targets are preserved. Stored defaults
+on nested products are not activated during dependency execution.
 \item \code{stop_on_failure}: defaults to \code{TRUE}. Set \code{FALSE} to receive failed or
 blocked run results for programmatic inspection.
 \item \code{evidence}: an optional directory for durable run records. Defaults to
@@ -40,8 +55,15 @@ quality checks cannot reuse cached releases.
 existing notification callback.
 }
 
+Selecting a quality engine through execution defaults preserves the declared
+contract's fingerprint. Execution evidence separately records the resolved
+checking engine. An explicit product code version still identifies its
+execution choices; a changed business promise needs a new contract version.
+
 Metrics and dbt project specifications also have execution methods; see
 \code{\link[=measure]{measure()}} and \code{\link[=dbt_build]{dbt_build()}} for their operation-specific options/results.
+Managed dbt projects also accept \code{sources}, a named list of successful lake
+releases. Bindings are validated before the dbt command runs.
 }
 \examples{
 orders <- product("orders") |>

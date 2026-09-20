@@ -402,7 +402,18 @@ dbt_publication_canonical <- function(x) {
 #' Build provenance does not prove a mutable relation is unchanged since dbt
 #' finished. Coordinate writers between build and publication.
 #' @export
-publish.tw_dbt_result <- function(x, name = NULL, to = NULL, ...) {
+publish.tw_dbt_result <- function(
+  x,
+  name = NULL,
+  to = NULL,
+  execution = NULL,
+  ...
+) {
+  if (!is.null(execution)) {
+    abort(
+      "Execution defaults apply to R products. Configure dbt through its project and publication arguments."
+    )
+  }
   scalar(name, "model name")
   if (!isTRUE(x$success) || !identical(x$command, "build")) {
     abort(

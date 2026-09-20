@@ -2,6 +2,7 @@
 % Please edit documentation in R/dplyr-product.R
 \name{product-dplyr}
 \alias{product-dplyr}
+\alias{filter}
 \alias{mutate.tw_product}
 \alias{filter.tw_product}
 \alias{select.tw_product}
@@ -15,6 +16,8 @@
 \alias{count.tw_product}
 \title{Use dplyr verbs in a product definition}
 \usage{
+filter(.data, ..., .by = NULL, .preserve = FALSE)
+
 \method{mutate}{tw_product}(.data, ...)
 
 \method{filter}{tw_product}(.data, ..., .by = NULL, .preserve = FALSE)

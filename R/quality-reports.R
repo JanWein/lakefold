@@ -1,14 +1,15 @@
-#' Export a portable quality report
+#' Inspect or export a portable quality report
 #'
 #' Exports persisted check metadata, counts and segment labels. No source rows
 #' are collected. The HTML is self-contained, escapes cell contents and displays
 #' status as text. An empty result is explicitly reported as not checked.
 #' @param x Quality tibble or a run/dbt result accepted by [quality()].
-#' @param path Output file path.
+#' @param path Optional output file path. Omit it to inspect a compact table.
 #' @param format HTML or JSON.
 #' @param title Human-readable report title.
 #' @param overwrite Replace an existing file only when explicitly requested.
-#' @returns The normalized output path, invisibly.
+#' @returns A diagnostic tibble when `path` is omitted; otherwise the normalized
+#'   output path, invisibly.
 #' @seealso [pointblank_report()], [expect_quality()]
 #' @export
 #' @examples
@@ -20,7 +21,7 @@
 #' unlink(path)
 quality_report <- function(
   x,
-  path,
+  path = NULL,
   format = c("html", "json"),
   title = "tidyweave quality report",
   overwrite = FALSE
@@ -29,6 +30,31 @@ quality_report <- function(
   scalar(title, "title")
   quality <- quality(x)
   attr(quality, "pointblank_agents") <- NULL
+  if (is.null(path)) {
+    if (!nrow(quality)) {
+      quality <- quality(quality_row(
+        "execution",
+        "not_checked",
+        message = "No quality checks are available."
+      ))
+    }
+    columns <- intersect(
+      c(
+        ".metric",
+        ".asset",
+        ".release",
+        "stage",
+        "rule",
+        "status",
+        "n_failed",
+        "n_total",
+        "failure_rate",
+        "message"
+      ),
+      names(quality)
+    )
+    return(tibble::as_tibble(quality[columns]))
+  }
   report_file(path, overwrite, function(temp) {
     if (format == "json") {
       jsonlite::write_json(

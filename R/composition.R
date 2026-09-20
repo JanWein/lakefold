@@ -184,49 +184,15 @@ add_contract <- function(x, contract) {
 #' @export
 add_quality <- function(x, quality, name = NULL, engine = NULL) {
   x <- editable_product(x)
-  if (!is.null(engine)) {
-    normalize_quality_engine(engine)
-  }
-  if (is.list(quality) && !inherits(quality, "tw_rule")) {
-    if (!is.null(name)) {
-      abort("Name individual rules in the quality list.")
-    }
-    for (i in seq_along(quality)) {
-      label <- names(quality)[i]
-      if (is.null(label) || is.na(label) || !nzchar(label)) {
-        label <- NULL
-      }
-      x <- add_quality(x, quality[[i]], label, engine = engine)
-    }
-    return(x)
-  }
-  if (!inherits(quality, "tw_rule")) {
-    quality <- quality_rule(
-      name %||% paste0("quality_", length(x$quality) + 1L),
-      quality,
-      engine = engine %||% "native"
-    )
-  } else if (!is.null(name)) {
-    quality$name <- scalar(name, "name")
-  }
-  if (!is.null(engine) && inherits(quality, "tw_rule")) {
-    selected <- normalize_quality_engine(engine)
-    if (
-      !identical(quality$engine, selected) &&
-        !inherits(quality$check, "formula")
-    ) {
-      abort(
-        "Only formula rules can change engines. Keep custom functions native or use pointblank_checks() for an agent builder."
-      )
-    }
-    quality$engine <- selected
-  }
-  if (quality$name %in% vapply(x$quality, `[[`, character(1), "name")) {
-    abort("Quality rule names must be unique.")
-  }
-  x$quality <- c(x$quality, list(quality))
+  x$quality <- normalize_quality_rules(
+    quality,
+    name,
+    engine,
+    existing = x$quality
+  )
   x
 }
+
 #' @rdname add_source
 #' @export
 set_target <- function(x, target) {
@@ -418,7 +384,7 @@ inspect.tw_product <- function(x, ...) {
     status = if (isTRUE(attr(x, "tw_validated"))) "validated" else "defined",
     sources = sources,
     transforms = lapply(x$transforms, inspect),
-    contract = canonical(x$contract),
+    contract = canonical(effective_product_contract(x)),
     quality = canonical(x$quality),
     target = inspect(x$target),
     catalogs = lapply(x$catalogs, inspect),
@@ -454,6 +420,7 @@ dplyr::explain
 #' @export
 explain.tw_product <- function(x, ...) {
   rlang::check_dots_empty()
+  target <- product_display_target(x)
   text <- c(
     paste0("Product: ", x$id),
     paste0("Read: ", length(x$sources), " named source(s)."),
@@ -481,20 +448,21 @@ explain.tw_product <- function(x, ...) {
       length(x$quality),
       " additional rule(s)."
     ),
-    if (is.null(x$target)) {
+    if (is.null(target)) {
       "Return: checked data and run evidence. collect() materializes lazy output."
     } else {
       paste0(
         "Publish: ",
-        inspect(x$target)$type,
+        inspect(target)$type,
         ". Failed checks block publication."
       )
     },
-    if (identical(capabilities(x$target)$lazy, FALSE)) {
+    if (identical(capabilities(target)$lazy, FALSE)) {
       "Materialization: the target requires an ordinary table."
     } else {
       "Materialization: lazy tables remain lazy unless a component collects."
     },
+    product_display_defaults(x),
     "validate() checks configuration and dependency cycles; run() executes."
   )
   cat(paste(text, collapse = "\n"), "\n")
@@ -523,7 +491,16 @@ print.tw_product <- function(x, ...) {
     "\n"
   )
   cat("Quality:", length(x$quality) + length(x$contract$rules), "rules\n")
-  cat("Target:", inspect(x$target)$type, "\n")
+  target <- product_display_target(x)
+  target_label <- inspect(target)$type
+  if (inherits(target, "tw_lake_target")) {
+    target_label <- paste0(target_label, " (", target$layer, ")")
+  }
+  cat("Target:", target_label, "\n")
+  defaults <- product_display_defaults(x)
+  if (!is.null(defaults)) {
+    cat(defaults, "\n")
+  }
   cat(
     "Status:",
     if (isTRUE(attr(x, "tw_validated"))) {
@@ -534,6 +511,33 @@ print.tw_product <- function(x, ...) {
     "\n"
   )
   invisible(x)
+}
+
+product_display_target <- function(x) {
+  execution <- attr(x, "tw_execution_config", exact = TRUE)
+  target <- x$target %||% execution$to
+  if (
+    inherits(target, "tw_lake_target") &&
+      !is.null(execution$layer) &&
+      (is.null(x$target) || is.null(target$layer))
+  ) {
+    target$layer <- execution$layer
+  }
+  target
+}
+
+product_display_defaults <- function(x) {
+  execution <- attr(x, "tw_execution_config", exact = TRUE)
+  if (is.null(execution)) {
+    return(NULL)
+  }
+  paste0(
+    "Stored execution (root only): quality = ",
+    execution$quality,
+    "; relationships = ",
+    execution$relationships,
+    ". Override with run(execution = )."
+  )
 }
 
 product_plan <- function(x, check = TRUE) {

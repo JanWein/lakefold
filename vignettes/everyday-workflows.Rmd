@@ -1,8 +1,8 @@
 ---
-title: "Everyday workflows: import, compare, analyze and recover"
+title: "Everyday workflows: publish, correct and explain"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Everyday workflows: import, compare, analyze and recover}
+  %\VignetteIndexEntry{Everyday workflows: publish, correct and explain}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -10,224 +10,219 @@ vignette: >
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>", message = FALSE)
 library(tidyweave)
+```
+
+You have a table, another delivery next month, and a report that must stay
+reproducible. Follow one path: define the work, try it, publish a checked result,
+then use the same definition for a correction. Only the publication and reporting
+sections need optional DuckDB >= 1.5.5.
+
+## Define the work once
+
+The synthetic orders use one row per order. `id` is the business key; an amount
+must be non-negative. Those are explicit business decisions.
+
+```{r define-orders}
+delivery <- data.frame(id = c(1L, 2L), amount = c(10, 20))
+orders <- product("orders", delivery) |>
+  dplyr::mutate(amount = round(amount, 2)) |>
+  add_contract(contract("orders.schema",
+    columns = c(id = "integer", amount = "numeric"), key = "id")) |>
+  add_quality(~ amount >= 0)
+```
+
+The product stores instructions, not a database connection. Ordinary dplyr verbs
+are deferred until execution. A contract describes the expected table; a quality
+rule checks its contents. Neither silently repairs the input.
+
+## Try it and explore an ordinary table
+
+```{r try-orders}
+trial <- orders |> run()
+collect(trial)
+collect(trial) |> dplyr::summarise(total = sum(amount))
+```
+
+This needs no storage, metric registration or approval. `run()` without a target
+keeps the result in memory. Use ordinary R analysis while deciding what matters.
+`explain(orders)` shows the plan without reading a source.
+
+## Understand a failed delivery
+
+```{r failed-delivery}
+bad_delivery <- delivery
+bad_delivery$amount[1] <- -10
+failed <- orders |> run(data = bad_delivery, stop_on_failure = FALSE)
+status(failed)
+quality_report(failed)
+```
+
+The same definition receives new data. `stop_on_failure = FALSE` returns the
+failed result for inspection; it does not bypass checks. `quality_report()`
+returns a diagnostic table without needing a file path. Use `quality()` for the
+underlying checks and `lineage()` for recorded input evidence. A failed gate
+does not write a new accepted release.
+
+## Publish a result you want to keep
+
+```{r storage-availability, include=FALSE}
 knitr::opts_chunk$set(eval = requireNamespace("duckdb", quietly = TRUE))
 ```
 
-This storage guide uses optional DuckDB >= 1.5.5. For a database-free start,
-see [composing products](composing-products.html).
-
-
-## One small workflow, several useful questions
-
-You already have an R table and want to answer three questions: **what is
-current, what changed, and what did the earlier report actually use?** You can
-start without a pipeline, owner, custom reader or external service.
-
-This example uses synthetic orders. The same pattern works for laboratory
-batches, monthly finance data, inventory snapshots or API extracts. A business
-key identifies a record; a partition identifies a complete group to replace.
-Choose those meanings for your own domain.
-
-```{r open-and-write}
+```{r publish-orders}
 root <- tempfile("tidyweave-everyday-")
-lake <- open_lake(root)
-orders <- data.frame(id = c(1L, 2L), amount = c(10, 20))
-first <- write_data(lake, orders, "orders")
+orders <- orders |> set_target(root)
+first <- orders |> publish()
+collect(first)
 ```
 
-An automatic structural schema allows integers and decimals in numeric columns.
-It does not invent a unique key or reject missing values. Add `contract` when
-you know the business requirements. Column names such as `Reserve amount` are
-supported; use backticks or `.data[["Reserve amount"]]` in expressions.
+The destination is now retained by the same product definition. It avoids
+repeating the destination when deliveries arrive. `publish()` writes checked data
+to a local lake. It does not publish on the internet. The framework opens and
+closes the connection it owns.
 
-## See exactly what changed
+For a workflow that needs optional engines, construct the product with
+`execution = execution_config(quality = "pointblank", relationships = "dm",
+to = root)`. This ordinary R configuration is retained without opening a
+connection. Ordinary predicates and lookup syntax stay the same. Explicit choices on individual steps win. Destination
+and layer defaults apply only to the root product, not to every dependency.
 
-A corrected delivery changes order 1, removes order 2, and introduces order 3:
+A configured `run()` may write to its configured target. For an in-memory trial,
+use a definition with no destination, as above. `publish()` makes the intention
+to persist visible at the call site.
 
-```{r compare-releases}
+## Accept a corrected complete delivery
+
+```{r correct-orders}
 corrected <- data.frame(id = c(1L, 3L), amount = c(12, 30))
-second <- write_data(lake, corrected, "orders")
-difference <- compare(lake, "orders", key = "id")
-difference
+second <- orders |> publish(data = corrected)
+collect(second)
+collect(first)
+```
+
+The new table totals 42. The first result still totals 30 because it pins its
+original release. The product definition and its checks have not been rewritten.
+
+These deliveries replace the **complete table**. Order 2 is absent from the new
+snapshot and is therefore removed; order 3 is added. If your source sends only
+changed rows, do not treat that delta as a complete snapshot. Complete-month
+replacement requires an explicit partition policy; see the
+[monthly reporting guide](getting-started.html). Keys, partition meaning and
+stock-versus-flow calculations cannot be safely inferred from column names.
+
+For several sources, use stable names with `sources = list(name = new_data)`.
+A nested product's ID selects its input while preserving its transformations
+and gates. Unknown or ambiguous names fail before execution. Already published
+inputs remain pinned until explicitly replaced. The
+[insurance guide](relational-insurance.html) shows this across checked lookups
+and a separate dbt build.
+
+## See what changed
+
+The comparison tool is an optional history operation. Open a read-only connection
+for the comparison and close it afterwards:
+
+```{r compare-orders}
+lake <- open_lake(root, read_only = TRUE)
+difference <- compare(lake, "orders")
+close_lake(lake)
 difference$numeric_summary
 difference$changed
 ```
 
-| Record | Earlier amount | Current amount | Meaning |
-|---|---:|---:|---|
-| 1 | 10 | 12 | Changed |
-| 2 | 20 | Absent | Removed |
-| 3 | Absent | 30 | Added |
-| Total | 30 | 42 | Increase of 12 |
+The contract supplies the key. By default `compare()` uses the latest two
+releases; explicit `from` and `to` IDs select another pair. Order 1 changed from
+10 to 12, order 2 was removed, and order 3 added 30. The overall increase is 12.
+Counts run in the database; row previews are limited to 100 by default.
 
-The total change includes additions and removals. Missing numeric values are
-excluded from totals and counted separately. Missing values compare equal when
-deciding whether a matched row changed. Row order does not matter.
+## Define related calculations together
 
-By default the comparison uses the latest two releases, runs counts in the
-database and collects at most 100 rows per preview. Set `from` and `to` to pin
-another pair, or `limit = Inf` when collecting every changed row is appropriate.
-When your published contract declares a key, omit `key`. Nonunique or missing
-keys produce an error instead of an ambiguous comparison.
-
-A structural change is shown in `$schema`. Added, removed or incompatible
-column types mark matched records as changed; compatible integer/decimal
-columns compare by value.
-
-## Keep complete batches or months together
-
-Whole-table replacement is the default. Add one optional argument when each
-delivery contains a complete partition:
-
-```{r partition-example}
-august <- data.frame(id = 1L, month = as.Date("2026-08-31"), amount = 100)
-september <- data.frame(id = 1L, month = as.Date("2026-09-30"), amount = 110)
-write_data(lake, august, "monthly_orders", partition_by = "month")
-write_data(lake, september, "monthly_orders", partition_by = "month")
-august$amount <- 105
-write_data(lake, august, "monthly_orders", partition_by = "month")
-read_release(lake, "monthly_orders") |> dplyr::arrange(month)
+```{r exploratory-metrics}
+exploratory <- metric_set("orders",
+  total = sum(amount),
+  count = dplyr::n())
+preview <- second |> measure(metrics = exploratory)
+collect(preview)
+quality(preview)
 ```
 
-The current table contains August 105 and September 110. A correction for
-August preserves September. Every supplied month replaces the entire month;
-send a complete month rather than individual changed records. Use a batch ID,
-region/date combination or another declared partition where that meaning fits.
-The resulting full table is validated before publication.
+These exploratory calculations require neither a code version nor approval and
+do not register unapproved definitions. Their manifests retain the selected
+release and formula. `quality(preview)` resolves checks for that exact source
+release, even if newer data is published later.
 
-Delivery monitoring checks the current date partitions. For a multi-date full
-replacement, pass `date_column = "month"` to `check_delivery()`. If no date
-column can be identified, the recorded `business_date` is used. Historical
-deliveries removed from the current table do not satisfy a current expectation.
+When the definitions are ready for an issued report, explicitly identify the
+reviewed version and approval:
 
-## Plug in an existing source client
-
-A zero-argument function can provide data from a database client, API or other
-R package. It must return a data frame:
-
-```{r source-function}
-fetch_orders <- function() {
-  # Replace this body with your existing authenticated client call.
-  data.frame(id = 1:2, amount = c(25, 75))
-}
-product("api_orders") |>
-  add_source(fetch_orders) |>
-  set_target(lake) |>
-  run()
+```{r approved-metrics}
+metrics <- metric_set("orders",
+  total = sum(amount),
+  count = dplyr::n(),
+  units = c(total = "EUR", count = "orders"),
+  code_version = "orders-analysis-v1", approved = TRUE)
+values <- second |> measure(metrics = metrics)
+collect(values)
 ```
 
-The function runs once per call; its returned table is archived as RDS. A
-changed response produces a new input fingerprint. This records the received
-R object. Use a file source when the exact original workbook or response bytes
-must be retained. Pass `evidence = "runs"` to `run()` when source failures and
-other attempts need a durable execution record. For very large inputs, use a
-lazy DBI or Arrow source and backend-supported transformations. An ordinary
-callback returning a data frame holds that table in R memory.
+Use shared `dimensions`, `time_column` and `time_behavior` for related metrics.
+Stock measures require a single date; flows may aggregate periods explicitly.
+Missing inputs are rejected by default, even with `na.rm = TRUE`; change the
+missing-value policy only when your formula intentionally handles them.
 
-## Calculate once, preserve the explanation
+Approval is your declared business decision, not an external approval system.
+Change `code_version` when external values, custom code or dependencies change.
+Formula text is fingerprinted, but arbitrary closure environments are not.
 
-A metric needs its identity, input asset and formula. Business descriptions and
-units are optional. A governed calculation still needs an explicit approval
-state and a code version:
+## Issue a report and reopen it later
 
-```{r metric-and-report}
-total <- metric("orders.total", "orders", sum(amount, na.rm = TRUE),
-  approved = TRUE, code_version = "analysis-v1")
-values <- measure(lake, total)
-report <- report_release(lake, "orders-report-v1", list(total = values),
+```{r issue-report}
+report <- values |> report_release("orders-report-v1",
   code_version = "reporting-v1")
-report_read(lake, "orders-report-v1", values_only = TRUE)
+saved <- report_read(root, "orders-report-v1", values_only = TRUE)
+saved
 ```
 
-The saved result is 42, together with its formula identity, input release,
-parameters and calculation time. `approved = TRUE` is your declared approval;
-it is not a separate approval system. `code_version` must change when external
-values, custom code or dependencies change. Full formula text is fingerprinted,
-while arbitrary closure environments are not.
+The destination is inferred from the retained source when all measurements
+belong to the same lake. Supply `to` explicitly when a destination cannot be
+inferred. The original measurement set preserves evidence; its collected table
+is for analysis and presentation. Exploratory unapproved or unversioned metrics
+cannot be frozen into an issued report.
 
-With no time column a metric defaults to flow. Supplying `time_column` defaults
-to stock and requires exactly one selected reporting date. A stock metric is
-appropriate for balances; a flow may sum transactions over multiple dates.
+A report stores values and their input release, calculation definition and
+parameters. `report_read()` never recalculates. Changed inputs or formulas need a
+new report ID; retrying identical content is safe.
 
-Missing values are rejected in metric input columns by default, even when the
-formula uses `na.rm = TRUE`. Set `na_policy = "expression"` only when the
-formula intentionally handles them. Static `.data$amount` and
-`.data[["amount"]]` are checked. For unresolved dynamic selection or a custom
-function, declare `input_columns`. Custom functions without a declaration
-check every input column.
-
-Repeat calculation and saving are safe when the report content is identical:
-
-```{r repeat-report}
-again <- measure(lake, total)
-saved_again <- report_release(lake, "orders-report-v1", list(total = again),
-  code_version = "reporting-v1")
-saved_again$id
+```{r preserve-report}
+later <- orders |> publish(data = data.frame(id = 1L, amount = 99))
+preserved <- report_read(root, "orders-report-v1", values_only = TRUE)
+stopifnot(identical(saved, preserved))
 ```
 
-Only the calculation time is ignored when comparing a retry. The first saved
-timestamps remain. Changed input releases, metric definitions, parameters,
-report code or values require a new report ID. `report_read()` itself never
-recalculates a metric. JSON readback represents date values as ISO strings.
+The current table now totals 99. The issued report still contains 42 and two
+orders, and `collect(second)` still returns its original corrected data.
 
-## Analyze with a read-only connection
+## Add infrastructure only when needed
 
-Close the writer and reopen the existing folder:
+Use [checked lookups](composing-products.html) for enrichment,
+[optional integrations](optional-integrations.html) for existing clients and
+specialist engines, and the [layered guide](layered-data-stack.html) when RAW
+receipt evidence and dbt SQL models become useful. `ingest()` belongs to that
+receipt workflow; `write_data()` is a low-level lake operation.
 
-```{r read-only}
-close_lake(lake)
-lake <- open_lake(root, read_only = TRUE)
-measure(lake, total)
-report_read(lake, "orders-report-v1", values_only = TRUE)
-```
+For exceptional writer recovery, inspect `interrupted()` and follow the
+[operations guide](https://github.com/JanWein/tidyweave/blob/main/docs/OPERATIONS.md).
+Recovery is not an ordinary delivery step.
 
-The persistent database is attached read-only. No schema migration runs, and
-measurements default to `record = FALSE`. Their returned manifests still pin
-the release and include the complete metric definition. New transient metrics
-are allowed, but reusing a registered ID/version with different content fails.
-You can also use `record = FALSE` on a writable connection for exploratory work.
-The backend's normal connection locking and storage access rules still apply.
+Lake writes require one coordinated writer and materialize a full candidate.
+Multi-product publication and dbt execution are not one distributed transaction.
+Remote storage, backup restoration and workload sizing need verification in the
+actual operating environment.
 
-## Diagnose and recover only when needed
-
-For a rule that fails during evaluation, retain its original local exception:
-
-```{r local-errors}
-contract <- contract("diagnostic", columns = c(id = "integer"),
-  rules = list(quality_rule("configuration", function(data) stop("Missing rule setting"))))
-quality <- validate(data.frame(id = 1L), contract, keep_errors = TRUE)
-lapply(quality_errors(quality), conditionMessage)
-```
-
-The exception remains in memory. Raw exception text is not stored in the
-registry, because it may include private values. For pointblank, retain agents
-with `keep_agents = TRUE` and use `pointblank_report()` for its native detail.
-
-For a crashed writer, first stop the original process and inspect
-`interrupted()`. `recover()` previews explicitly selected runs and staging
-slots, refuses known live processes, and leaves releases and quality evidence
-intact. Unknown ownership requires `writer_stopped = TRUE` after external
-verification. See the [operations guide](https://github.com/JanWein/tidyweave/blob/main/docs/OPERATIONS.md)
-for the execution and retry procedure. Recovery is an occasional operational
-step, not part of an ordinary write.
-
-## Boundaries to plan for
-
-The framework still needs one coordinated writer. It materializes a full
-candidate for partition corrections and retains each release table. Atomic
-multi-product publication, row-level upserts within a lake, distributed locking
-and retention of published data are separate concerns. Other targets can expose
-their own write modes; inspect their capabilities and transaction guarantees.
-Run the bundled `benchmark.R` against your
-own workload before selecting an operating configuration. Remote S3/PostgreSQL
-and backup restoration require verification in that environment.
-
-```{r verify-and-close, include=FALSE}
-stopifnot(values$value == 42,
+```{r verify-and-cleanup, include=FALSE}
+stopifnot(sum(collect(first)$amount) == 30,
+  sum(collect(second)$amount) == 42,
+  collect(values)$value[collect(values)$.metric == "total"] == 42,
   difference$counts[["changed"]] == 1,
-  difference$numeric_summary$difference == 12,
-  sum(read_release(lake, "monthly_orders")$amount) == 215,
-  nrow(registry(lake, "reports")) == 1)
-close_lake(lake)
+  difference$numeric_summary$difference == 12)
 unlink(root, recursive = TRUE)
 ```
