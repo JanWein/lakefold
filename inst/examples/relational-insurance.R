@@ -1,10 +1,3 @@
-# A complete synthetic example, not a new package API.
-# Sourcing this file defines functions only. To run the external workflow:
-# library(tidyweave)
-# source(system.file("examples", "relational-insurance.R", package = "tidyweave"))
-# demo <- run_relational_insurance(executable = "/path/to/dbt")
-# demo$initial$summary
-
 insurance_inputs <- function() {
   brokers <- tibble::tibble(
     broker_id = c("B1", "B2", "B3"),
@@ -180,400 +173,59 @@ insurance_contracts <- function() {
   )
 }
 
-insurance_checks <- function() {
-  list(
-    brokers = pointblank_checks("known_channels", function(data) {
-      pointblank::create_agent(tbl = data) |>
-        pointblank::col_vals_in_set(
-          columns = channel,
-          set = c("broker", "direct", "partner")
-        )
-    }),
-    policy_months = pointblank_checks("policy_values", function(data) {
-      pointblank::create_agent(tbl = data) |>
-        pointblank::col_vals_in_set(
-          columns = status,
-          set = c("active", "pending", "lapsed")
-        ) |>
-        pointblank::col_vals_gte(columns = premium_due, value = 0)
-    }),
-    payments = pointblank_checks("positive_cash", function(data) {
-      pointblank::create_agent(tbl = data) |>
-        pointblank::col_vals_gt(columns = cash_amount, value = 0)
-    })
-  )
-}
-
-insurance_setup <- function(
-  path = tempfile("tidyweave-insurance-"),
-  backend = "ducklake"
-) {
-  backend <- match.arg(backend, c("ducklake", "duckdb"))
-  if (
-    file.exists(path) &&
-      (!dir.exists(path) ||
-        length(list.files(path, all.files = TRUE, no.. = TRUE)))
-  ) {
-    stop("Choose a new or empty example directory.", call. = FALSE)
-  }
-  config <- lake_config(
-    registry_duckdb(file.path(path, "metadata.ducklake")),
-    storage_local(file.path(path, "data")),
-    landing = file.path(path, "landing"),
-    layers = c("raw", "staging", "core", "marts"),
-    backend = backend
-  )
-  list(
-    path = path,
-    config = config,
-    inputs = insurance_inputs(),
-    contracts = insurance_contracts()
-  )
-}
-
-insurance_ingest <- function(context, inputs = context$inputs) {
-  checks <- insurance_checks()
-  result <- lapply(names(inputs), function(name) {
-    ingest(
-      context$config,
-      inputs[[name]],
-      name = paste0("insurance.", name),
-      contract = context$contracts[[name]],
-      quality = checks[[name]]
-    )
-  })
-  stats::setNames(result, names(inputs))
-}
-
-# dm_examine_constraints() reports violations; it does not stop execution itself.
-insurance_dm <- function(tables, check = TRUE) {
-  relational <- dm::dm(
-    brokers = tables$brokers,
-    policy_months = tables$policy_months
-  ) |>
-    dm::dm_add_pk(brokers, broker_id) |>
-    dm::dm_add_pk(policy_months, c(policy_id, month)) |>
-    dm::dm_add_fk(policy_months, broker_id, brokers, broker_id)
-  if (!is.null(tables$payments)) {
-    relational <- relational |>
-      dm::dm(payments = tables$payments) |>
-      dm::dm_add_pk(payments, payment_id) |>
-      dm::dm_add_fk(
-        payments,
-        c(policy_id, month),
-        policy_months,
-        c(policy_id, month)
-      )
-  }
-  checks <- dm::dm_examine_constraints(relational)
-  if (check && any(!checks$is_key)) {
-    rlang::abort(
-      "Insurance relationships failed; inspect the dm constraint table before joining.",
-      class = "insurance_relationship_error",
-      checks = checks
-    )
-  }
-  relational
-}
-
-insurance_enrich_policies <- function(tables) {
-  insurance_dm(tables) |>
-    dm::dm_flatten_to_tbl(.start = policy_months, .recursive = TRUE) |>
-    dplyr::select(
-      policy_id,
-      month,
-      company,
-      broker_id,
-      status,
-      premium_due,
-      broker_name,
-      channel
-    )
-}
-
-insurance_enrich_payments <- function(tables) {
-  insurance_dm(tables) |>
-    dm::dm_flatten_to_tbl(.start = payments, .recursive = TRUE) |>
-    dplyr::transmute(
-      payment_id,
-      policy_id,
-      month,
-      payment_date,
-      cash_amount,
-      company,
-      broker_id,
-      broker_name,
-      channel,
-      policy_status = status
-    )
-}
-
-insurance_products <- function(context, raw) {
-  pinned <- function(name) {
-    source_release(context$config, raw[[name]]$asset, raw[[name]]$release_id)
-  }
-  list(
-    policies = product("insurance.policy_months.enriched") |>
-      add_source(pinned("policy_months"), name = "policy_months") |>
-      add_source(pinned("brokers"), name = "brokers") |>
-      add_transform(insurance_enrich_policies, name = "enrich_with_broker") |>
-      add_contract(context$contracts$enriched_policy_months) |>
-      set_target(target_lake(context$config, layer = "staging")),
-    payments = product("insurance.payments.enriched") |>
-      add_source(pinned("payments"), name = "payments") |>
-      add_source(pinned("policy_months"), name = "policy_months") |>
-      add_source(pinned("brokers"), name = "brokers") |>
-      add_transform(
-        insurance_enrich_payments,
-        name = "enrich_with_policy_and_broker"
-      ) |>
-      add_contract(context$contracts$enriched_payments) |>
-      set_target(target_lake(context$config, layer = "staging"))
-  )
-}
-
-# This example writes ordinary dbt source YAML for STAGING releases.
-# dbt_sources() deliberately accepts RAW ingestion results only.
-insurance_bind_products <- function(project, products) {
-  if (!identical(sort(names(products)), c("payments", "policies"))) {
-    stop(
-      "Supply the successful policies and payments product results.",
-      call. = FALSE
-    )
-  }
-  catalog_identity <- lapply(products, function(result) {
-    result$output_config[c("backend", "catalog", "storage")]
-  })
-  if (!identical(catalog_identity[[1]], catalog_identity[[2]])) {
-    stop(
-      "Both staging products must belong to the same configured lake.",
-      call. = FALSE
-    )
-  }
-  lake <- connect_lake(products[[1]]$output_config, read_only = TRUE)
-  on.exit(close_lake(lake), add = TRUE)
-  tables <- lapply(names(products), function(name) {
-    result <- products[[name]]
-    if (
-      !result$status %in% c("published", "cached") || is.na(result$release_id)
-    ) {
-      stop("Bind only successful, qualified staging releases.", call. = FALSE)
-    }
-    history <- releases(lake, result$asset)
-    reference <- history[history$release_id == result$release_id, ]
-    if (nrow(reference) != 1L || reference$schema_name != "staging") {
-      stop(
-        "The exact staging release was not found in the registry.",
-        call. = FALSE
-      )
-    }
-    list(
-      name = name,
-      identifier = reference$table_name[[1]],
-      config = list(
-        meta = list(
-          tidyweave = list(
-            asset = result$asset,
-            release_id = result$release_id,
-            run_id = result$run_id
-          )
-        )
-      )
-    )
-  })
-  yaml::write_yaml(
-    list(
-      version = 2L,
-      sources = list(list(
-        name = "accepted_products",
-        database = "lake",
-        schema = "staging",
-        quoting = list(database = TRUE, schema = TRUE, identifier = TRUE),
-        tables = tables
-      ))
-    ),
-    file.path(project$path, "models", "sources.yml")
-  )
-  invisible(project)
-}
-
-insurance_dbt_project <- function(context, products, executable = "dbt") {
-  template <- system.file(
-    "examples",
-    "relational-insurance",
-    "dbt",
-    package = "tidyweave"
-  )
-  if (!nzchar(template)) {
-    stop(
-      "Install tidyweave with the relational-insurance example files.",
-      call. = FALSE
-    )
-  }
-  path <- file.path(context$path, "analytics")
-  if (
-    dir.exists(path) && length(list.files(path, all.files = TRUE, no.. = TRUE))
-  ) {
-    stop("The example's dbt directory must be new or empty.", call. = FALSE)
-  }
-  dir.create(path, recursive = TRUE, showWarnings = FALSE)
-  for (file in list.files(
-    template,
-    recursive = TRUE,
-    all.files = TRUE,
-    no.. = TRUE
-  )) {
-    destination <- file.path(path, file)
-    dir.create(dirname(destination), recursive = TRUE, showWarnings = FALSE)
-    if (!file.copy(file.path(template, file), destination)) {
-      stop("Could not copy the dbt example.")
-    }
-  }
-  config <- context$config
-  attach <- list(path = config$catalog$path, alias = "lake")
-  profile <- list(
-    type = "duckdb",
-    path = ":memory:",
-    database = "lake",
-    schema = "core",
-    threads = 1L
-  )
-  if (config$backend == "ducklake") {
-    attach$path <- paste0("ducklake:", config$catalog$path)
-    attach$options <- list(DATA_PATH = paste0(config$storage$path, "/"))
-    profile$extensions <- list("ducklake")
-  }
-  profile$attach <- list(attach)
-  yaml::write_yaml(
-    list(insurance = list(target = "dev", outputs = list(dev = profile))),
-    file.path(path, "profiles.yml")
-  )
-  project <- dbt_project(
-    path,
-    profiles_dir = path,
-    target = "dev",
-    executable = executable
-  )
-  insurance_bind_products(project, products)
-  # Keep the dbt schema bridge separate from R composite-key/business rules.
-  properties <- list(
-    version = 2L,
-    models = c(
-      dbt_contract(
-        context$contracts$core_policy_monthly,
-        "core_policy_monthly"
-      )$models,
-      dbt_contract(
-        context$contracts$core_cash_monthly,
-        "core_cash_monthly"
-      )$models,
-      dbt_contract(context$contracts$mart_schema, "monthly_performance")$models
-    )
-  )
-  yaml::write_yaml(properties, file.path(path, "models", "contracts.yml"))
-  project
-}
-
 insurance_metrics <- function() {
   list(
     active_policies = metric(
       "insurance.active_policies",
       "insurance.monthly_performance",
-      expr = sum(active_policies),
+      expr = sum(active_policies, na.rm = TRUE),
       dimensions = c("company", "channel"),
       time_column = "month",
       time_behavior = "stock",
       unit = "policies",
       description = "Active policies in one monthly snapshot.",
       approved = TRUE,
-      code_version = "insurance-example-v1"
+      code_version = "insurance-example-v2"
     ),
     premium_due = metric(
       "insurance.premium_due",
       "insurance.monthly_performance",
-      expr = sum(premium_due),
+      expr = sum(premium_due, na.rm = TRUE),
       dimensions = c("company", "channel"),
       time_column = "month",
       time_behavior = "flow",
       unit = "EUR",
       description = "Premium charges due during the selected months.",
       approved = TRUE,
-      code_version = "insurance-example-v1"
+      code_version = "insurance-example-v2"
     ),
     cash_collected = metric(
       "insurance.cash_collected",
       "insurance.monthly_performance",
-      expr = sum(cash_collected),
+      expr = sum(cash_collected, na.rm = TRUE),
       dimensions = c("company", "channel"),
       time_column = "month",
       time_behavior = "flow",
       unit = "EUR",
       description = "Cash received during the selected months.",
       approved = TRUE,
-      code_version = "insurance-example-v1"
+      code_version = "insurance-example-v2"
     ),
     cash_to_due = metric(
       "insurance.cash_to_due",
       "insurance.monthly_performance",
-      expr = sum(cash_collected) / sum(premium_due),
+      expr = sum(cash_collected, na.rm = TRUE) / sum(premium_due, na.rm = TRUE),
       dimensions = c("company", "channel"),
       time_column = "month",
       time_behavior = "flow",
       unit = "ratio",
       description = "Synthetic cash-to-due ratio of sums; undefined if total due is zero. Not a regulatory arrears measure.",
       approved = TRUE,
-      code_version = "insurance-example-v1"
+      code_version = "insurance-example-v2"
     )
   )
 }
 
-insurance_measure <- function(context, release, report_id) {
-  lake <- connect_lake(context$config)
-  on.exit(close_lake(lake), add = TRUE)
-  metrics <- insurance_metrics()
-  january <- as.Date("2026-01-01")
-  february <- as.Date("2026-02-01")
-  pinned <- function(metric, at = NULL, by = character()) {
-    measure(lake, metric, at = at, by = by, release = release$release_id)
-  }
-  measures <- list(
-    active_jan = pinned(metrics$active_policies, january),
-    active_feb = pinned(metrics$active_policies, february),
-    due_jan = pinned(metrics$premium_due, january),
-    due_feb = pinned(metrics$premium_due, february),
-    cash_jan = pinned(metrics$cash_collected, january),
-    cash_feb = pinned(metrics$cash_collected, february),
-    ratio_jan = pinned(metrics$cash_to_due, january),
-    ratio_feb = pinned(metrics$cash_to_due, february),
-    cash_total = pinned(metrics$cash_collected, c(january, february)),
-    ratio_total = pinned(metrics$cash_to_due, c(january, february)),
-    cash_by_channel_jan = pinned(
-      metrics$cash_collected,
-      january,
-      c("company", "channel")
-    )
-  )
-  report <- report_release(
-    lake,
-    report_id,
-    measures,
-    code_version = "insurance-report-v1",
-    params = list(currency = "EUR", months = c("2026-01", "2026-02"))
-  )
-  summary <- tibble::tibble(
-    month = c(january, february),
-    active_policies = c(measures$active_jan$value, measures$active_feb$value),
-    premium_due = c(measures$due_jan$value, measures$due_feb$value),
-    cash_collected = c(measures$cash_jan$value, measures$cash_feb$value),
-    cash_to_due = c(measures$ratio_jan$value, measures$ratio_feb$value)
-  )
-  list(
-    metrics = metrics,
-    measures = measures,
-    report = report,
-    summary = summary
-  )
-}
 
 run_relational_insurance <- function(
   path = tempfile("tidyweave-insurance-"),
@@ -585,178 +237,361 @@ run_relational_insurance <- function(
     !vapply(packages, requireNamespace, logical(1), quietly = TRUE)
   ]
   if (length(missing)) {
-    stop(
-      "Install example dependencies: ",
-      paste(missing, collapse = ", "),
-      call. = FALSE
-    )
+    stop("Install example dependencies: ", paste(missing, collapse = ", "))
   }
   if (!file.exists(executable) && !nzchar(Sys.which(executable))) {
-    stop(
-      "Install dbt-duckdb separately and supply its dbt executable.",
-      call. = FALSE
-    )
+    stop("Install dbt-duckdb and supply its dbt executable.")
   }
-  context <- insurance_setup(path, backend)
-  raw <- insurance_ingest(context)
-  tables <- lapply(raw, collect)
-  relational <- insurance_dm(tables)
-  dm_checks <- dm::dm_examine_constraints(relational)
-  dm_preview <- list(
-    policies = insurance_enrich_policies(tables),
-    payments = insurance_enrich_payments(tables)
-  )
-  definitions <- insurance_products(context, raw)
-  products <- lapply(definitions, run)
+  backend <- match.arg(backend, c("ducklake", "duckdb"))
+  if (
+    file.exists(path) &&
+      (!dir.exists(path) ||
+        length(list.files(path, all.files = TRUE, no.. = TRUE)))
+  ) {
+    stop("Choose a new or empty example directory.")
+  }
 
-  # Pointblank rejects a negative cash transaction before RAW is persisted.
-  bad_payments <- context$inputs$payments
+  inputs <- insurance_inputs()
+  vapply(inputs, nrow, integer(1))
+
+  config <- lake_config(
+    path = file.path(path, "lake"),
+    backend = backend,
+    layers = c("raw", "staging", "core", "marts")
+  )
+
+  contracts <- insurance_contracts()
+
+  raw <- list(
+    brokers = product("insurance.brokers", inputs$brokers) |>
+      add_contract(contracts$brokers) |>
+      add_quality(
+        ~ channel %in% c("broker", "direct", "partner"),
+        engine = "pointblank"
+      ) |>
+      ingest(to = config),
+    policy_months = product("insurance.policy_months", inputs$policy_months) |>
+      add_contract(contracts$policy_months) |>
+      add_quality(
+        ~ status %in% c("active", "pending", "lapsed") & premium_due >= 0,
+        engine = "pointblank"
+      ) |>
+      ingest(to = config),
+    payments = product("insurance.payments", inputs$payments) |>
+      add_contract(contracts$payments) |>
+      add_quality(~ cash_amount > 0, engine = "pointblank") |>
+      ingest(to = config)
+  )
+  quality(raw$payments)
+
+  policy_product <- product(
+    "insurance.policy_months.enriched",
+    raw$policy_months
+  ) |>
+    add_lookup(raw$brokers, by = dplyr::join_by(broker_id), engine = "dm") |>
+    add_contract(contracts$enriched_policy_months)
+
+  policy_attributes <- product(
+    "insurance.payment_policy_attributes",
+    raw$policy_months
+  ) |>
+    dplyr::select(policy_id, month, company, broker_id, policy_status = status)
+
+  payment_product <- product("insurance.payments.enriched", raw$payments) |>
+    add_lookup(
+      policy_attributes,
+      by = dplyr::join_by(policy_id, month),
+      engine = "dm"
+    ) |>
+    add_lookup(raw$brokers, by = dplyr::join_by(broker_id), engine = "dm") |>
+    add_contract(contracts$enriched_payments)
+
+  published <- list(
+    policies = policy_product |> publish(to = config, layer = "staging"),
+    payments = payment_product |> publish(to = config, layer = "staging")
+  )
+  stopifnot(
+    nrow(collect(published$policies)) == 12L,
+    nrow(collect(published$payments)) == 10L
+  )
+
+  template <- system.file(
+    "examples",
+    "relational-insurance",
+    "dbt",
+    package = "tidyweave"
+  )
+  project_path <- file.path(path, "analytics")
+  dir.create(project_path, recursive = TRUE, showWarnings = FALSE)
+  stopifnot(all(file.copy(
+    list.files(template, full.names = TRUE, all.files = TRUE, no.. = TRUE),
+    project_path,
+    recursive = TRUE
+  )))
+
+  properties <- list(
+    version = 2L,
+    models = c(
+      dbt_contract(contracts$core_policy_monthly, "core_policy_monthly")$models,
+      dbt_contract(contracts$core_cash_monthly, "core_cash_monthly")$models,
+      dbt_contract(contracts$mart_schema, "monthly_performance")$models
+    )
+  )
+  yaml::write_yaml(
+    properties,
+    file.path(project_path, "models", "contracts.yml")
+  )
+
+  project <- dbt_project(
+    project_path,
+    lake = config,
+    sources = published,
+    executable = executable
+  )
+  built <- project |> run(echo = FALSE)
+  approved <- built |>
+    publish(
+      "monthly_performance",
+      contract = contracts$mart,
+      asset = "insurance.monthly_performance",
+      layer = "marts"
+    )
+
+  metrics <- insurance_metrics()
+  january <- as.Date("2026-01-01")
+  february <- as.Date("2026-02-01")
+
+  measures <- list(
+    active_jan = measure(approved, metrics$active_policies, at = january),
+    active_feb = measure(approved, metrics$active_policies, at = february),
+    due_jan = measure(approved, metrics$premium_due, at = january),
+    due_feb = measure(approved, metrics$premium_due, at = february),
+    cash_jan = measure(approved, metrics$cash_collected, at = january),
+    cash_feb = measure(approved, metrics$cash_collected, at = february),
+    ratio_jan = measure(approved, metrics$cash_to_due, at = january),
+    ratio_feb = measure(approved, metrics$cash_to_due, at = february),
+    cash_total = measure(
+      approved,
+      metrics$cash_collected,
+      at = c(january, february)
+    ),
+    ratio_total = measure(
+      approved,
+      metrics$cash_to_due,
+      at = c(january, february)
+    ),
+    cash_by_channel_jan = measure(
+      approved,
+      metrics$cash_collected,
+      at = january,
+      by = c("company", "channel")
+    )
+  )
+
+  lake <- connect_lake(config)
+  report <- report_release(
+    lake,
+    "insurance.report.initial",
+    measures,
+    code_version = "insurance-report-v1",
+    params = list(currency = "EUR", months = c("2026-01", "2026-02"))
+  )
+  close_lake(lake)
+  summary <- tibble::tibble(
+    month = c(january, february),
+    active_policies = c(measures$active_jan$value, measures$active_feb$value),
+    premium_due = c(measures$due_jan$value, measures$due_feb$value),
+    cash_collected = c(measures$cash_jan$value, measures$cash_feb$value),
+    cash_to_due = c(measures$ratio_jan$value, measures$ratio_feb$value)
+  )
+  initial <- list(
+    build = built,
+    release = approved,
+    data = collect(approved),
+    metrics = metrics,
+    measures = measures,
+    report = report,
+    summary = summary
+  )
+
+  bad_payments <- inputs$payments
   bad_payments$cash_amount[1] <- -60
-  rejected <- ingest(
-    context$config,
-    bad_payments,
-    name = "insurance.payments",
-    contract = context$contracts$payments,
-    quality = insurance_checks()$payments,
-    stop_on_failure = FALSE
-  )
-  if (!identical(rejected$status, "blocked")) {
-    rlang::abort(
-      "The negative-payment example did not reach the expected blocked quality gate.",
-      parent = rejected$error,
-      result = rejected
-    )
-  }
+  rejected <- product("insurance.payments", bad_payments) |>
+    add_contract(contracts$payments) |>
+    add_quality(~ cash_amount > 0, engine = "pointblank") |>
+    ingest(to = config, stop_on_failure = FALSE)
+  stopifnot(rejected$status == "blocked")
 
-  # A valid table shape does not establish relationships between tables.
-  orphan <- context$inputs
-  orphan$policy_months$broker_id[1] <- "B404"
-  invalid_dm <- insurance_dm(orphan, check = FALSE)
-  orphan_error <- tryCatch(insurance_enrich_policies(orphan), error = identity)
-  stopifnot(inherits(orphan_error, "insurance_relationship_error"))
-  orphan_definition <- definitions$policies |>
-    add_source(orphan$policy_months, name = "policy_months", replace = TRUE)
-  orphan_run <- run(orphan_definition, stop_on_failure = FALSE)
-  current_policy_release <- attr(
-    read_source(source_release(
-      context$config,
-      products$policies$asset
-    )),
-    "tw_input_reference"
-  )$release_id
+  orphan_policies <- inputs$policy_months
+  orphan_policies$broker_id[1] <- "B404"
+  orphan_run <- policy_product |>
+    add_source(orphan_policies, replace = TRUE) |>
+    publish(to = config, layer = "staging", stop_on_failure = FALSE)
+  stopifnot(orphan_run$status == "error")
+  lake <- connect_lake(config, read_only = TRUE)
+  current_policy_release <- releases(
+    lake,
+    published$policies$asset
+  )$release_id[[1]]
+  close_lake(lake)
+  stopifnot(identical(current_policy_release, published$policies$release_id))
+
+  two_month_stock <- tryCatch(
+    measure(approved, metrics$active_policies, at = c(january, february)),
+    error = identity
+  )
+  undefined_ratio <- tryCatch(
+    measure(
+      approved,
+      metrics$cash_to_due,
+      at = february,
+      filters = list(company = "Northstar", channel = "direct")
+    ),
+    error = identity
+  )
   stopifnot(
-    orphan_run$status == "error",
-    identical(current_policy_release, products$policies$release_id)
+    inherits(two_month_stock, "error"),
+    inherits(undefined_ratio, "error")
   )
 
-  project <- insurance_dbt_project(context, products, executable)
-  built <- dbt_build(project, echo = FALSE)
-  approved <- dbt_publish(
-    context$config,
-    built,
-    "monthly_performance",
-    contract = context$contracts$mart,
-    asset = "insurance.monthly_performance"
-  )
-  initial <- c(
-    list(build = built, release = approved, data = collect(approved)),
-    insurance_measure(context, approved, "insurance.report.initial")
-  )
-
-  # Full replacement snapshot: preserve the old transactions and add the correction.
-  corrected_inputs <- insurance_corrected_inputs(context$inputs)
+  corrected_inputs <- insurance_corrected_inputs(inputs)
   corrected_raw <- raw
-  corrected_raw$payments <- insurance_ingest(
-    context,
-    corrected_inputs["payments"]
-  )$payments
-  corrected_definitions <- insurance_products(context, corrected_raw)
-  corrected_products <- products
-  corrected_products$payments <- run(corrected_definitions$payments)
-  insurance_bind_products(project, corrected_products)
-  rebuilt <- dbt_build(project, echo = FALSE)
-  corrected_release <- dbt_publish(
-    context$config,
-    rebuilt,
-    "monthly_performance",
-    contract = context$contracts$mart,
-    asset = "insurance.monthly_performance"
+  corrected_raw$payments <- product(
+    "insurance.payments",
+    corrected_inputs$payments
+  ) |>
+    add_contract(contracts$payments) |>
+    add_quality(~ cash_amount > 0, engine = "pointblank") |>
+    ingest(to = config)
+  corrected_products <- published
+  corrected_payment_product <- payment_product |>
+    add_source(corrected_raw$payments, replace = TRUE)
+  corrected_products$payments <- corrected_payment_product |>
+    publish(to = config, layer = "staging")
+  project <- dbt_project(
+    project_path,
+    lake = config,
+    sources = corrected_products,
+    executable = executable
   )
-  corrected <- c(
-    list(
-      raw = corrected_raw,
-      products = corrected_products,
-      build = rebuilt,
-      release = corrected_release,
-      data = collect(corrected_release)
-    ),
-    insurance_measure(context, corrected_release, "insurance.report.corrected")
-  )
+  rebuilt <- project |> run(echo = FALSE)
+  corrected_release <- rebuilt |>
+    publish(
+      "monthly_performance",
+      contract = contracts$mart,
+      asset = "insurance.monthly_performance",
+      layer = "marts"
+    )
 
-  lake <- connect_lake(context$config, read_only = TRUE)
-  on.exit(close_lake(lake), add = TRUE)
-  preserved <- list(
-    report = report_read(lake, "insurance.report.initial", values_only = TRUE),
-    data = read_release(lake, approved$asset, release = approved$release_id)
-  )
-  expected <- list(
-    initial = tibble::tibble(
-      month = as.Date(c("2026-01-01", "2026-02-01")),
-      active_policies = c(5L, 5L),
-      premium_due = c(1500, 1350),
-      cash_collected = c(980, 1300),
-      cash_to_due = c(980 / 1500, 1300 / 1350)
+  corrected_measures <- list(
+    active_jan = measure(
+      corrected_release,
+      metrics$active_policies,
+      at = january
     ),
-    corrected = tibble::tibble(
-      month = as.Date(c("2026-01-01", "2026-02-01")),
-      active_policies = c(5L, 5L),
-      premium_due = c(1500, 1350),
-      cash_collected = c(1230, 1300),
-      cash_to_due = c(1230 / 1500, 1300 / 1350)
+    active_feb = measure(
+      corrected_release,
+      metrics$active_policies,
+      at = february
+    ),
+    due_jan = measure(corrected_release, metrics$premium_due, at = january),
+    due_feb = measure(corrected_release, metrics$premium_due, at = february),
+    cash_jan = measure(corrected_release, metrics$cash_collected, at = january),
+    cash_feb = measure(
+      corrected_release,
+      metrics$cash_collected,
+      at = february
+    ),
+    ratio_jan = measure(corrected_release, metrics$cash_to_due, at = january),
+    ratio_feb = measure(corrected_release, metrics$cash_to_due, at = february),
+    cash_total = measure(
+      corrected_release,
+      metrics$cash_collected,
+      at = c(january, february)
+    ),
+    ratio_total = measure(
+      corrected_release,
+      metrics$cash_to_due,
+      at = c(january, february)
+    ),
+    cash_by_channel_jan = measure(
+      corrected_release,
+      metrics$cash_collected,
+      at = january,
+      by = c("company", "channel")
     )
   )
-  stopifnot(
-    all(dm_checks$is_key),
-    nrow(dm_preview$policies) == 12L,
-    nrow(dm_preview$payments) == 10L,
-    isTRUE(all.equal(
-      initial$summary,
-      expected$initial,
-      check.attributes = FALSE
-    )),
-    isTRUE(all.equal(
-      corrected$summary,
-      expected$corrected,
-      check.attributes = FALSE
-    )),
-    preserved$report$cash_jan$value == 980,
-    sum(preserved$data$cash_collected[
-      preserved$data$month == as.Date("2026-01-01")
-    ]) ==
-      980
+
+  lake <- connect_lake(config)
+  corrected_report <- report_release(
+    lake,
+    "insurance.report.corrected",
+    corrected_measures,
+    code_version = "insurance-report-v1",
+    params = list(currency = "EUR", months = c("2026-01", "2026-02"))
   )
+  preserved <- list(report = report_read(lake, report$id, values_only = TRUE))
+  close_lake(lake)
+  preserved$data <- collect(approved)
+  corrected_summary <- tibble::tibble(
+    month = c(january, february),
+    active_policies = c(
+      corrected_measures$active_jan$value,
+      corrected_measures$active_feb$value
+    ),
+    premium_due = c(
+      corrected_measures$due_jan$value,
+      corrected_measures$due_feb$value
+    ),
+    cash_collected = c(
+      corrected_measures$cash_jan$value,
+      corrected_measures$cash_feb$value
+    ),
+    cash_to_due = c(
+      corrected_measures$ratio_jan$value,
+      corrected_measures$ratio_feb$value
+    )
+  )
+  corrected <- list(
+    raw = corrected_raw,
+    products = corrected_products,
+    build = rebuilt,
+    release = corrected_release,
+    data = collect(corrected_release),
+    metrics = metrics,
+    measures = corrected_measures,
+    report = corrected_report,
+    summary = corrected_summary
+  )
+  stopifnot(
+    preserved$report$cash_jan$value == 980,
+    corrected$measures$cash_jan$value == 1230,
+    corrected$measures$cash_feb$value == 1300,
+    corrected$measures$ratio_total$value == 2530 / 2850,
+    sum(preserved$data$cash_collected[preserved$data$month == january]) == 980
+  )
+
   list(
-    context = context,
+    context = list(
+      path = path,
+      config = config,
+      inputs = inputs,
+      contracts = contracts
+    ),
     raw = raw,
-    definitions = definitions,
-    products = products,
-    dm_model = relational,
-    dm_checks = dm_checks,
-    dm_preview = dm_preview,
+    definitions = list(policies = policy_product, payments = payment_product),
+    products = published,
     project = project,
     initial = initial,
     corrected = corrected,
     failures = list(
       pointblank = rejected,
       dm = list(
-        error = orphan_error,
-        checks = dm::dm_examine_constraints(invalid_dm),
         result = orphan_run,
-        previous_release = products$policies$release_id,
-        current_release = current_policy_release
+        current_release = current_policy_release,
+        previous_release = published$policies$release_id
       )
     ),
-    preserved = preserved,
-    expected = expected
+    preserved = preserved
   )
 }

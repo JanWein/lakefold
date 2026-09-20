@@ -1,12 +1,12 @@
 library(tidyweave)
 input <- data.frame(id = 1:3, amount = c(25, 75, 50))
-orders <- product("orders") |> add_source(input, name = "delivery")
+orders <- product("orders", input)
 result <- run(orders)
 collect(result)
 stopifnot(sum(collect(result)$amount) == 150)
 
 orders <- orders |>
-  add_transform(function(data) transform(data, amount = round(amount, 2))) |>
+  dplyr::mutate(amount = round(amount, 2)) |>
   add_quality(~ amount >= 0, name = "nonnegative")
 quality(run(orders))
 
@@ -24,27 +24,19 @@ validate(orders)
 
 bad_input <- data.frame(id = 1:2, amount = c(10, -1))
 bad_orders <- orders |>
-  add_source(bad_input, name = "delivery", replace = TRUE)
+  add_source(bad_input, replace = TRUE)
 blocked <- run(bad_orders, stop_on_failure = FALSE)
 incidents(blocked)
 stopifnot(blocked$status == "blocked")
 
 customers <- data.frame(customer = c(1L, 2L), region = c("North", "South"))
 sales <- data.frame(customer = c(1L, 2L), amount = c(100, 250))
-regional <- product("regional_orders") |>
-  add_source(sales, name = "orders") |>
-  add_source(customers, name = "customers") |>
-  add_transform(function(inputs) {
-    dplyr::left_join(inputs$orders, inputs$customers, by = "customer")
-  }) |>
-  add_quality(~ !is.na(region))
+regional <- product("regional_orders", sales) |>
+  add_lookup(customers, by = dplyr::join_by(customer))
 collect(run(regional))
 
-summary <- product("regional_summary") |>
-  add_source(regional) |>
-  add_transform(function(data) {
-    dplyr::summarise(data, total = sum(amount))
-  })
+summary <- product("regional_summary", regional) |>
+  dplyr::summarise(total = sum(amount))
 summary_result <- run(summary)
 collect(summary_result)
 stopifnot(collect(summary_result)$total == 350)

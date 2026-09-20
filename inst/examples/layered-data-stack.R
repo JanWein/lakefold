@@ -8,8 +8,10 @@
 # a function receiving the dbt result, or a compatible custom metadata adapter.
 library(tidyweave)
 
-native_orders <- product("orders") |>
-  add_source(data.frame(order_id = 1:3, amount = c(25, 75, 50))) |>
+native_orders <- product(
+  "orders",
+  data.frame(order_id = 1:3, amount = c(25, 75, 50))
+) |>
   add_quality(~ amount >= 0) |>
   run()
 stopifnot(sum(collect(native_orders)$amount) == 150)
@@ -49,9 +51,7 @@ layered_data_stack <- function(
   }
   dir.create(path, recursive = TRUE, showWarnings = FALSE)
   config <- lake_config(
-    registry_duckdb(file.path(path, "lake.duckdb")),
-    storage_local(file.path(path, "data")),
-    landing = file.path(path, "landing"),
+    path = file.path(path, "lake"),
     layers = c("raw", "staging", "core", "marts"),
     backend = backend
   )
@@ -60,25 +60,17 @@ layered_data_stack <- function(
     customer_id = c(101L, 101L, 102L),
     amount = c(25, 75, 50)
   )
-  checks <- ~ amount >= 0
-  if (use_pointblank) {
-    checks <- pointblank_checks("valid_amounts", function(data) {
-      pointblank::create_agent(tbl = data) |>
-        pointblank::col_vals_gte(columns = amount, value = 0)
-    })
-  }
+  quality_engine <- if (use_pointblank) "pointblank" else "native"
+  definition <- product("orders", orders) |>
+    add_quality(~ amount >= 0, engine = quality_engine)
 
   # Receipt is separate from acceptance. The rejected delivery stays in landing.
-  accepted <- ingest(config, orders, quality = checks)
+  accepted <- definition |> ingest(to = config)
   bad_orders <- orders
   bad_orders$amount[1] <- -25
-  rejected <- ingest(
-    config,
-    bad_orders,
-    name = "orders",
-    quality = checks,
-    stop_on_failure = FALSE
-  )
+  rejected <- definition |>
+    add_source(bad_orders, replace = TRUE) |>
+    ingest(to = config, stop_on_failure = FALSE)
   stopifnot(rejected$status == "blocked", sum(collect(accepted)$amount) == 150)
 
   # No live R connection remains open when the separate dbt process starts.
@@ -88,18 +80,20 @@ layered_data_stack <- function(
     executable = executable,
     sources = list(orders = accepted)
   )
-  built <- dbt_build(project, echo = FALSE, catalog = catalog)
-  approved <- dbt_publish(config, built, "customer_revenue")
+  built <- run(project, echo = FALSE, catalog = catalog)
+  approved <- publish(built, "customer_revenue", to = config)
   initial_revenue <- collect(approved)
   stopifnot(sum(initial_revenue$revenue) == 150)
 
   # A correction binds another immutable RAW release under the same logical name.
   next_orders <- orders
   next_orders$amount[1] <- 50
-  new_raw <- ingest(config, next_orders, name = "orders", quality = checks)
-  dbt_sources(project, list(orders = new_raw))
-  rebuilt <- dbt_build(project, echo = FALSE, catalog = catalog)
-  corrected <- dbt_publish(config, rebuilt, "customer_revenue")
+  new_raw <- definition |>
+    add_source(next_orders, replace = TRUE) |>
+    ingest(to = config)
+  project <- dbt_sources(project, list(orders = new_raw), name = "raw")
+  rebuilt <- run(project, echo = FALSE, catalog = catalog)
+  corrected <- publish(rebuilt, "customer_revenue", to = config)
   revenue <- collect(corrected)
   stopifnot(sum(revenue$revenue) == 175, sum(collect(approved)$revenue) == 150)
 
@@ -108,12 +102,7 @@ layered_data_stack <- function(
   saveRDS(corrected$outputs, file.path(path, "approved-revenue-reference.rds"))
   exported <- NULL
   if (requireNamespace("arrow", quietly = TRUE)) {
-    exported <- product("revenue_export") |>
-      add_source(source_release(
-        config,
-        corrected$asset,
-        corrected$release_id
-      )) |>
+    exported <- product("revenue_export", corrected) |>
       set_target(target_parquet(file.path(path, "approved-revenue.parquet"))) |>
       run()
   }

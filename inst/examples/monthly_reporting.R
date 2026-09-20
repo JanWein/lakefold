@@ -22,8 +22,7 @@ local({
     amount = c(100, 250)
   )
 
-  reserves <- product("reserves") |>
-    add_source(august, name = "delivery") |>
+  reserves <- product("reserves", august) |>
     add_contract(contract(
       columns = c(entity = "character", date = "Date", amount = "numeric"),
       key = c("entity", "date")
@@ -35,23 +34,18 @@ local({
   sum(collect(first)$amount)
   stopifnot(first$status == "published", sum(collect(first)$amount) == 350)
 
-  lake <- open_lake(root)
   total_reserve <- metric(
     "total_reserve",
     "reserves",
-    expr = sum(amount),
+    expr = sum(amount, na.rm = TRUE),
     time_column = "date",
     time_behavior = "stock",
     unit = "EUR",
     approved = TRUE,
     code_version = "report-v1"
   )
-  as_reported <- measure(
-    lake,
-    total_reserve,
-    at = august_date,
-    release = first$release_id
-  )
+  as_reported <- measure(first, total_reserve, at = august_date)
+  lake <- open_lake(root)
   report_release(
     lake,
     "august-report-v1",
@@ -64,7 +58,7 @@ local({
   corrected <- august
   corrected$amount[corrected$entity == "South"] <- 270
   reserves <- reserves |>
-    add_source(corrected, name = "delivery", replace = TRUE)
+    add_source(corrected, replace = TRUE)
   correction <- run(reserves, business_date = "2026-08-31")
   sum(collect(correction)$amount)
   sum(collect(first)$amount)
@@ -75,7 +69,7 @@ local({
 
   bad <- rbind(corrected, corrected[2, ])
   blocked <- reserves |>
-    add_source(bad, name = "delivery", replace = TRUE) |>
+    add_source(bad, replace = TRUE) |>
     run(stop_on_failure = FALSE)
   incidents(blocked)
   stopifnot(blocked$status == "blocked")
@@ -86,23 +80,19 @@ local({
     amount = c(110, 280)
   )
   latest <- reserves |>
-    add_source(september, name = "delivery", replace = TRUE) |>
+    add_source(september, replace = TRUE) |>
     run(business_date = "2026-09-30")
   collect(latest) |> dplyr::arrange(date, entity)
   stopifnot(nrow(collect(latest)) == 4L)
 
-  lake <- open_lake(root)
-  monthly_totals <- product("monthly_totals") |>
-    add_source(source_release(lake, "reserves", latest$release_id)) |>
-    add_transform(function(data) {
-      data |>
-        dplyr::group_by(date) |>
-        dplyr::summarise(total = sum(amount), .groups = "drop")
-    })
+  monthly_totals <- product("monthly_totals", latest) |>
+    dplyr::group_by(date) |>
+    dplyr::summarise(total = sum(amount, na.rm = TRUE), .groups = "drop")
   totals <- collect(run(monthly_totals)) |> dplyr::arrange(date)
   totals
   stopifnot(identical(totals$total, c(370, 390)))
 
+  lake <- open_lake(root, read_only = TRUE)
   issued <- report_read(lake, "august-report-v1", values_only = TRUE)
   current <- measure(lake, total_reserve, at = august_date)
   issued$total_reserve$value
