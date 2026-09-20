@@ -1,28 +1,60 @@
-# Validation record for tidyweave 0.10.0
+# Validation record for tidyweave 0.11.0
 
 Checked on 20 September 2026 with R 4.3.3 on Ubuntu 24.04. All deliveries and
 HTTP fixtures were synthetic. This is a development version, not a stable
-release candidate. The final packaged check, documentation generation and
-website audit have completed.
+release candidate. The implementation was reviewed with the Posit
+package-development, testing and critical-review skills.
 
 ## Executed checks
 
 | Check | Confirmed result |
 |---|---|
-| Final source build and `R CMD check --no-manual` | 0 errors, 0 warnings, 0 notes |
-| Installed-package test suite | 1,861 passed expectations; 0 failures, 0 warnings, 0 skips |
-| Core-only installation without DuckDB | Passed native composition, quality, metadata and optional-target preflight |
+| Full source build and `R CMD check --no-manual` | 0 errors, 0 warnings; one worktree packaging note, corrected afterward as described below |
+| Installed-package test suite, DuckDB with real optional integrations | 2,033 passed expectations; 0 failures, 0 warnings, 0 skips |
+| Source test suite, DuckLake | 2,021 passed expectations; 0 failures or warnings; three optional/source-only skips covered by the installed-package check |
+| Core-only installation without DuckDB | Passed native execution defaults, contract composition, source correction, metadata and zero-write failure gates |
 | Public function examples | Passed in the installed-package check |
 | Default vignettes | All 14 built; vignette scripts and rebuilt outputs passed package checks |
 | Native product grammar | Focused dplyr, lookup, quality, result-source and targets tests passed |
 | Interchangeable lookup engines | Native and dm tests passed, including compatible lazy database inputs |
 | Complete insurance runner, DuckLake | Real dbt builds, checked staging products, mart publication, measures and report preservation passed |
-| Complete insurance vignette, DuckLake | Rendered all infrastructure stages successfully; its final render log contained no errors or warnings |
 | Insurance correction | January cash changed from EUR 980 to EUR 1,230; the issued original report and original release retained EUR 980 |
 | Native examples | Generated composition and monthly scripts passed; the infrastructure-free insurance regression passed |
 | Product and metric vignette | Full DuckDB/dm execution passed with no warnings after migration to the common publication grammar |
-| Documentation website | 87 help topics, 14 articles and 145 HTML pages, including method redirects; no missing help topics, articles, local links or anchors; all 5 SVG files and the search index validated |
-| R documentation generation | Final roxygen pass completed without warnings or additional generated changes |
+| Documentation reference | 90 help topics and 14 articles; `pkgdown::check_pkgdown()` passed with the everyday/integration/extension grouping |
+| R documentation generation | Roxygen completed without warnings; generated help and usage passed the package check |
+
+The full check included installed examples, all vignette scripts and rebuilding
+vignette outputs. Its only note was the `.git` reference file of the isolated
+worktree appearing in the source archive. `.Rbuildignore` now excludes that file.
+A final packaging check passed with **0 errors, 0 warnings and 0 notes**, skipping
+tests, examples and vignette execution already exercised above. All 247 R, test,
+namespace, help and bundled-example files in the rebuilt archive are byte-identical
+to the fully checked archive; Git metadata is absent. No GitHub CI or website
+deployment was performed for this branch.
+
+## Coherent workflow checks
+
+Execution defaults are pure values. Engine defaults propagate through nested
+products; explicit local engines win. Destination defaults apply only to the
+root, so an intermediate lookup does not acquire an unintended publication.
+Tests verify native/Pointblank and native/dm paths, invalid preflight, unchanged
+definitions and writers not running after failed gates.
+
+Contract updates require an explicit new identity or version and preserve the
+original object. Tests cover optional added columns, removed required columns,
+changed key types, changed grain and explicit rule review. Contract formulas and
+product formulas share normalization. Automatic semantic inference through
+arbitrary dplyr operations is deliberately absent.
+
+Batch metrics distinguish per-period calculation from explicit aggregation.
+Stock guards remain active. Tests cover grouping, exact release pinning,
+Date-valued selections, labels and units in report identity, tampering, report
+retries and roundtrips, and owned/borrowed connection cleanup. Corrections retain
+existing product transformations and gates; unselected pinned releases remain
+unchanged. Managed dbt source replacements remain connection-free definitions.
+Result lineage uses recorded evidence, and normalized outcomes retain native
+statuses, including blocked missing deliveries.
 
 ## Unified grammar integrity
 
