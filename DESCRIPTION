@@ -1,6 +1,6 @@
 Package: tidyweave
 Title: Composable R Workflows for Governed Data Products
-Version: 0.8.0
+Version: 0.9.0
 Authors@R: person("Jan-Hendrik", "Weinert", role = c("aut", "cre"), email = "65009403+JanWein@users.noreply.github.com")
 Description: Composes data acquisition, transformation, contracts and quality
     checks through simple R verbs and interchangeable S3 adapters. Runs ordinary
