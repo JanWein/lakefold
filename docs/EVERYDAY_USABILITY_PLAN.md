@@ -26,9 +26,12 @@ introduced by task, while business decisions stay explicit.
   comparison and immutable report readback; insurance retains real dbt boundaries.
 - [x] Build all 14 vignettes and verify generated documentation and reference coverage.
 - [x] Verify public examples and complete the final read-only implementation review.
-- [ ] Finish the installed-package regression suite and full package check.
-- [ ] Confirm the extracted insurance runner against the final implementation.
-- [ ] Finalize the separate 0.12.0 validation record before publication.
+- [x] Finish the installed-package regression suite and full package check.
+  Result: 2,182 passed expectations, no failures or warnings; two optional
+  OpenMetadata checks skipped. Final package check: no errors, warnings or notes.
+- [x] Confirm the extracted insurance runner against the final implementation.
+  Result: corrected January cash is EUR 1,230; the original report retains EUR 980.
+- [x] Finalize the separate 0.12.0 validation record for review.
 
 ## Boundaries
 

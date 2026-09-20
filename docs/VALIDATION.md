@@ -171,11 +171,23 @@ verification, not an independent human usability study.
 |---|---|
 | R documentation generation | Roxygen completed cleanly |
 | Documentation reference | `pkgdown::check_pkgdown()` passed |
-| Source-package vignette build | All 14 vignettes built |
-| Package static checks and public examples | Passed in the current `R CMD check` run |
+| Vignettes | All 14 built, their scripts ran, and outputs rebuilt in the final check |
+| Package static checks and public examples | Passed in the final `R CMD check` run |
 | Final read-only implementation review | No remaining blockers identified |
-| Full installed-package regression suite | Pending completion of the current check |
-| Final `R CMD check --no-manual` status | Pending completion of the current check |
+| Full installed-package regression suite | 2,182 passed expectations; 0 failures, 0 warnings, 2 optional skips |
+| Targeted real insurance integration | 89 passed expectations; 0 failures, 0 warnings, 0 skips |
+| Extracted insurance runner | Passed in the installed suite; January cash changed from EUR 980 to EUR 1,230, while the original report retained EUR 980 |
+| Final `R CMD check --no-manual` status | 0 errors, 0 warnings, 0 notes |
+
+The two optional skips were the OpenMetadata CLI and Python SDK integration
+checks because their environment variables were not set. The 0.11.0 historical
+OpenMetadata results do not count as re-execution for 0.12.0. The final check
+completed on 20 September 2026 and included installed tests, public examples,
+vignette scripts and output rebuilding.
+
+The implementation is published for review in [PR #13](https://github.com/JanWein/tidyweave/pull/13).
+This local validation does not assert that its GitHub checks passed or that it
+was merged.
 
 The everyday tutorial now follows one definition through a trial, failed input,
 publication, correction, comparison, related calculations and report readback.
