@@ -1,61 +1,61 @@
 test_that("products and report metrics pin input versions", {
   f <- fixture()
-  on.exit(cleanup(f))
-  dl_run(f$pipeline, f$lake)
-  product <- dl_product(
+  on.exit(fixture_cleanup(f))
+  run(f$pipeline, f$lake)
+  product <- product(
     "risk.product",
-    c(reserves = "risk.validated"),
-    function(inputs) inputs$reserves,
     contract = f$contract,
     code_version = "build-v1"
-  )
-  built <- dl_build(f$lake, product)
+  ) |>
+    add_source(source_release(f$lake, "risk.validated")) |>
+    set_target(f$lake)
+  built <- run(product)
   expect_equal(built$status, "published")
-  expect_equal(dl_build(f$lake, product)$status, "cached")
+  expect_equal(run(product, cache = TRUE)$status, "cached")
   metric <- reserve_metric("risk.product")
-  result <- dl_measure(f$lake, metric, at = as.Date("2026-08-31"))
+  result <- measure(f$lake, metric, at = as.Date("2026-08-31"))
   expect_equal(result$value, 300)
-  expect_equal(attr(result, "dl_manifest")$release_id, built$release_id)
-  by_company <- dl_measure(f$lake, metric, by = "company")
+  expect_equal(attr(result, "tw_manifest")$release_id, built$release_id)
+  by_company <- measure(f$lake, metric, by = "company")
   expect_equal(nrow(by_company), 2)
-  report <- dl_report_release(
+  report <- report_release(
     f$lake,
     "report-aug-v1",
     list(reserve = result),
     "report-v1"
   )
   expect_equal(report$measures$reserve$values$value, 300)
-  expect_equal(nrow(dl_registry(f$lake, "reports")), 1)
+  expect_equal(nrow(registry(f$lake, "reports")), 1)
   changed <- result
   changed$value <- 999
   expect_error(
-    dl_report_release(f$lake, "bad", list(reserve = changed), "v1"),
+    report_release(f$lake, "bad", list(reserve = changed), "v1"),
     "changed"
   )
-  expect_error(dl_measure(f$lake, metric, by = "forbidden"), "Unsupported")
+  expect_error(measure(f$lake, metric, by = "forbidden"), "Unsupported")
   metric$approved <- FALSE
-  expect_error(dl_measure(f$lake, metric), "not approved")
+  expect_error(measure(f$lake, metric), "not approved")
 })
 
 test_that("stock metrics refuse summing multiple dates", {
   f <- fixture()
-  on.exit(cleanup(f))
+  on.exit(fixture_cleanup(f))
   x <- rbind(f$good, transform(f$good, date = as.Date("2026-09-30")))
   f$write(x)
-  dl_run(f$pipeline, f$lake)
-  expect_error(dl_measure(f$lake, reserve_metric()), "exactly one")
+  run(f$pipeline, f$lake)
+  expect_error(measure(f$lake, reserve_metric()), "exactly one")
   expect_equal(
-    dl_measure(f$lake, reserve_metric(), at = as.Date("2026-08-31"))$value,
+    measure(f$lake, reserve_metric(), at = as.Date("2026-08-31"))$value,
     300
   )
 })
 
 test_that("catalog exports only metadata and constructs a read-only app", {
   f <- fixture()
-  on.exit(cleanup(f))
-  dl_run(f$pipeline, f$lake)
+  on.exit(fixture_cleanup(f))
+  run(f$pipeline, f$lake)
   path <- file.path(f$root, "catalog.json")
-  dl_catalog_export(f$lake, path)
+  catalog_export(f$lake, path)
   x <- jsonlite::read_json(path)
   expect_false("reports" %in% names(x))
   expect_true(all(
@@ -63,7 +63,7 @@ test_that("catalog exports only metadata and constructs a read-only app", {
   ))
   skip_if_not_installed("shiny")
   skip_if_not_installed("bslib")
-  app <- dl_catalog(snapshot = path, launch = FALSE)
+  app <- catalog_app(snapshot = path, launch = FALSE)
   expect_s3_class(app, "shiny.appobj")
   shiny::testServer(app, {
     session$setInputs(asset = "risk.validated", search = "")
@@ -80,7 +80,7 @@ test_that("catalog exports only metadata and constructs a read-only app", {
 
 test_that("identifiers cannot inject SQL", {
   expect_error(
-    dl_contract(
+    contract(
       "bad; DROP TABLE",
       "v1",
       "owner",
@@ -90,5 +90,5 @@ test_that("identifiers cannot inject SQL", {
     ),
     "Asset ids"
   )
-  expect_error(dl_setup(layers = "raw; DROP"), "Invalid identifier")
+  expect_error(setup_lake(layers = "raw; DROP"), "Invalid identifier")
 })

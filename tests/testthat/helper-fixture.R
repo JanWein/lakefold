@@ -1,9 +1,9 @@
-fixture <- function(backend = Sys.getenv("DATALOOM_TEST_BACKEND", "duckdb")) {
+fixture <- function(backend = Sys.getenv("TIDYWEAVE_TEST_BACKEND", "duckdb")) {
   root <- tempfile("dataloom-test-")
   dir.create(root)
-  lake <- dl_setup(
-    dl_catalog_duckdb(file.path(root, "meta.duckdb")),
-    dl_storage_local(file.path(root, "data")),
+  lake <- setup_lake(
+    registry_duckdb(file.path(root, "meta.duckdb")),
+    storage_local(file.path(root, "data")),
     landing = file.path(root, "landing"),
     backend = backend
   )
@@ -23,7 +23,7 @@ fixture <- function(backend = Sys.getenv("DATALOOM_TEST_BACKEND", "duckdb")) {
     )
     x
   }
-  contract <- dl_contract(
+  contract <- contract(
     "risk.contract",
     "1.0.0",
     "Risk",
@@ -36,20 +36,21 @@ fixture <- function(backend = Sys.getenv("DATALOOM_TEST_BACKEND", "duckdb")) {
       reserve = "numeric"
     ),
     key = c("id", "date"),
-    rules = list(dl_rule("nonnegative", function(x) {
+    max_age_hours = 48,
+    rules = list(quality_rule("nonnegative", function(x) {
       counts <- dplyr::collect(dplyr::summarise(
         x,
         n = dplyr::n(),
         failed = sum(as.integer(reserve < 0), na.rm = TRUE)
       ))
-      dl_quality_counts(counts$failed, counts$n)
+      quality_counts(counts$failed, counts$n)
     }))
   )
-  pipeline <- dl_pipeline("risk.import", lake, code_version = "test-code-v1") |>
-    dl_step_land(dl_source("risk.source", path, reader = reader)) |>
-    dl_step_extract() |>
-    dl_step_validate(contract) |>
-    dl_step_publish("risk.validated")
+  pipeline <- tw_pipeline("risk.import", lake, code_version = "test-code-v1") |>
+    tw_step_land(source_file("risk.source", path, reader = reader)) |>
+    tw_step_extract() |>
+    tw_step_validate(contract) |>
+    tw_step_publish("risk.validated")
   list(
     root = root,
     lake = lake,
@@ -60,12 +61,12 @@ fixture <- function(backend = Sys.getenv("DATALOOM_TEST_BACKEND", "duckdb")) {
     pipeline = pipeline
   )
 }
-cleanup <- function(f) {
-  dl_disconnect(f$lake)
+fixture_cleanup <- function(f) {
+  disconnect_lake(f$lake)
   unlink(f$root, recursive = TRUE)
 }
 reserve_metric <- function(product = "risk.validated") {
-  dl_metric(
+  metric(
     "risk.reserve",
     product,
     expr = sum(reserve, na.rm = TRUE),

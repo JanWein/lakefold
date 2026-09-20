@@ -11,14 +11,14 @@ test_that("identifiers neither consume nor create the R random seed", {
 
 test_that("full formulas distinguish previously abbreviated metric definitions", {
   f <- fixture()
-  on.exit(cleanup(f))
-  dl_run(f$pipeline, f$lake)
+  on.exit(fixture_cleanup(f))
+  run(f$pipeline, f$lake)
   expression <- rlang::parse_expr(paste0(
     "sum(reserve + ",
     paste(rep("0", 50), collapse = " + "),
     ") + 1"
   ))
-  first <- dl_metric(
+  first <- metric(
     "long.total",
     "risk.validated",
     expr = !!expression,
@@ -32,11 +32,11 @@ test_that("full formulas distinguish previously abbreviated metric definitions",
   )
   expect_false(identical(fingerprint(first), fingerprint(changed)))
   expect_match(canonical(first)$expr$expression, "\\+ 1$")
-  expect_equal(dl_measure(f$lake, first)$value, 301)
-  expect_error(dl_measure(f$lake, changed), "version bump")
+  expect_equal(measure(f$lake, first)$value, 301)
+  expect_error(measure(f$lake, changed), "version bump")
   changed$version <- "2.0.0"
-  expect_equal(dl_measure(f$lake, changed)$value, 302)
-  registered <- dl_registry(f$lake, "assets")
+  expect_equal(measure(f$lake, changed)$value, 302)
+  registered <- registry(f$lake, "assets")
   expect_true(any(grepl(
     "expression",
     registered$definition[registered$id == first$id]
@@ -45,7 +45,7 @@ test_that("full formulas distinguish previously abbreviated metric definitions",
 
 test_that("legacy metric identities are preserved and require a new version", {
   f <- fixture()
-  on.exit(cleanup(f))
+  on.exit(fixture_cleanup(f))
   metric <- reserve_metric()
   legacy <- canonical(metric)
   legacy$expr <- "sum(...)"
@@ -64,34 +64,34 @@ test_that("legacy metric identities are preserved and require a new version", {
       registered_at = now()
     )
   )
-  old <- dl_registry(f$lake, "assets")
-  expect_error(dl_register(f$lake, metric), class = "dl_legacy_metric")
-  expect_identical(dl_registry(f$lake, "assets"), old)
+  old <- registry(f$lake, "assets")
+  expect_error(register(f$lake, metric), class = "tw_legacy_metric")
+  expect_identical(registry(f$lake, "assets"), old)
   metric$version <- "2.0.0"
-  expect_no_error(dl_register(f$lake, metric))
+  expect_no_error(register(f$lake, metric))
 })
 
 test_that("all supported data pronouns enforce the missing-value policy", {
   f <- fixture()
-  on.exit(cleanup(f))
-  dl_write(f$lake, data.frame(amount = c(10, NA)), "nullable")
+  on.exit(fixture_cleanup(f))
+  write_data(f$lake, data.frame(amount = c(10, NA)), "nullable")
   expressions <- list(
     rlang::expr(sum(amount, na.rm = TRUE)),
     rlang::expr(sum(.data$amount, na.rm = TRUE)),
     rlang::expr(sum(.data[["amount"]], na.rm = TRUE))
   )
   for (i in seq_along(expressions)) {
-    metric <- dl_metric(
+    metric <- metric(
       paste0("total", i),
       "nullable",
       expr = !!expressions[[i]],
       approved = TRUE,
       code_version = "v1"
     )
-    expect_error(dl_measure(f$lake, metric), "Missing metric input: amount")
+    expect_error(measure(f$lake, metric), "Missing metric input: amount")
   }
   column <- "amount"
-  metric <- dl_metric(
+  metric <- metric(
     "dynamic",
     "nullable",
     sum(.data[[column]], na.rm = TRUE),
@@ -99,25 +99,25 @@ test_that("all supported data pronouns enforce the missing-value policy", {
     code_version = "v1"
   )
   expect_error(
-    dl_measure(f$lake, metric, record = FALSE),
+    measure(f$lake, metric, record = FALSE),
     "Missing metric input"
   )
   metric$expr <- rlang::new_quosure(
     quote(sum(.data[[column]], na.rm = TRUE)),
     environment()
   )
-  expect_error(dl_measure(f$lake, metric, record = FALSE), "input_columns")
+  expect_error(measure(f$lake, metric, record = FALSE), "input_columns")
   metric$input_columns <- "amount"
   expect_error(
-    dl_measure(f$lake, metric, record = FALSE),
+    measure(f$lake, metric, record = FALSE),
     "Missing metric input"
   )
   metric$na_policy <- "expression"
-  expect_equal(dl_measure(f$lake, metric, record = FALSE)$value, 10)
+  expect_equal(measure(f$lake, metric, record = FALSE)$value, 10)
   expect_equal(
-    dl_measure(
+    measure(
       f$lake,
-      dl_metric(
+      metric(
         "count",
         "nullable",
         dplyr::n(),
@@ -131,13 +131,13 @@ test_that("all supported data pronouns enforce the missing-value policy", {
 
 test_that("custom metric input declarations are optional and validated", {
   f <- fixture()
-  on.exit(cleanup(f))
-  dl_write(
+  on.exit(fixture_cleanup(f))
+  write_data(
     f$lake,
     data.frame(amount = 10, optional = NA_character_),
     "nullable"
   )
-  metric <- dl_metric(
+  metric <- metric(
     "custom",
     "nullable",
     compute = function(data, dimensions, params) {
@@ -146,33 +146,33 @@ test_that("custom metric input declarations are optional and validated", {
     approved = TRUE,
     code_version = "v1"
   )
-  expect_error(dl_measure(f$lake, metric, record = FALSE), "optional")
+  expect_error(measure(f$lake, metric, record = FALSE), "optional")
   metric$input_columns <- "amount"
-  expect_equal(dl_measure(f$lake, metric, record = FALSE)$value, 10)
+  expect_equal(measure(f$lake, metric, record = FALSE)$value, 10)
   metric$input_columns <- "absent"
   expect_error(
-    dl_measure(f$lake, metric, record = FALSE),
+    measure(f$lake, metric, record = FALSE),
     "columns are missing"
   )
 })
 
 test_that("read-only attachments protect data and metadata while supporting analyses", {
-  root <- tempfile("lakefold-read-only-")
-  lake <- dl_open(root, backend = Sys.getenv("DATALOOM_TEST_BACKEND", "duckdb"))
+  root <- tempfile("tidyweave-read-only-")
+  lake <- open_lake(root, backend = Sys.getenv("TIDYWEAVE_TEST_BACKEND", "duckdb"))
   on.exit({
-    dl_close(lake)
+    close_lake(lake)
     unlink(root, recursive = TRUE)
   })
-  dl_write(lake, data.frame(id = 1L, amount = 10), "orders")
-  metric <- dl_metric(
+  write_data(lake, data.frame(id = 1L, amount = 10), "orders")
+  metric <- metric(
     "total",
     "orders",
     sum(amount, na.rm = TRUE),
     approved = TRUE,
     code_version = "v1"
   )
-  measured <- dl_measure(lake, metric)
-  dl_report_release(lake, "report", list(total = measured), "v1")
+  measured <- measure(lake, metric)
+  report_release(lake, "report", list(total = measured), "v1")
   tables <- c(
     "assets",
     "runs",
@@ -181,53 +181,53 @@ test_that("read-only attachments protect data and metadata while supporting anal
     "events",
     "schema_version"
   )
-  before <- lapply(tables, function(x) dl_registry(lake, x))
-  dl_close(lake)
-  lake <- dl_open(root, read_only = TRUE)
-  expect_equal(dl_measure(lake, metric)$value, 10)
+  before <- lapply(tables, function(x) registry(lake, x))
+  close_lake(lake)
+  lake <- open_lake(root, read_only = TRUE)
+  expect_equal(measure(lake, metric)$value, 10)
   expect_equal(
-    dl_report_read(lake, "report", values_only = TRUE)$total$value,
+    report_read(lake, "report", values_only = TRUE)$total$value,
     10
   )
-  expect_error(dl_measure(lake, metric, record = TRUE), class = "dl_read_only")
+  expect_error(measure(lake, metric, record = TRUE), class = "tw_read_only")
   expect_error(
-    dl_write(lake, data.frame(id = 2L), "other"),
-    class = "dl_read_only"
+    write_data(lake, data.frame(id = 2L), "other"),
+    class = "tw_read_only"
   )
-  expect_error(dl_register(lake, metric), class = "dl_read_only")
+  expect_error(register(lake, metric), class = "tw_read_only")
   expect_error(
-    dl_report_release(lake, "another", list(total = measured), "v1"),
-    class = "dl_read_only"
+    report_release(lake, "another", list(total = measured), "v1"),
+    class = "tw_read_only"
   )
   expect_error(DBI::dbExecute(
     lake$con,
     paste("DELETE FROM", meta(lake, "reports"))
   ))
-  expect_identical(lapply(tables, function(x) dl_registry(lake, x)), before)
+  expect_identical(lapply(tables, function(x) registry(lake, x)), before)
   transient <- metric
   transient$id <- "transient"
-  expect_equal(dl_measure(lake, transient)$value, 10)
-  expect_equal(nrow(dl_registry(lake, "assets")), nrow(before[[1]]))
+  expect_equal(measure(lake, transient)$value, 10)
+  expect_equal(nrow(registry(lake, "assets")), nrow(before[[1]]))
 })
 
 test_that("read-only opening never creates a missing lake", {
-  root <- tempfile("lakefold-absent-")
-  expect_error(dl_open(root, read_only = TRUE), "must already exist")
+  root <- tempfile("tidyweave-absent-")
+  expect_error(open_lake(root, read_only = TRUE), "must already exist")
   expect_false(dir.exists(root))
 })
 
 test_that("report retries ignore only volatile calculation times", {
   f <- fixture()
-  on.exit(cleanup(f))
-  dl_run(f$pipeline, f$lake)
+  on.exit(fixture_cleanup(f))
+  run(f$pipeline, f$lake)
   metric <- reserve_metric()
   metric$dimensions <- c("company", "date")
-  first <- dl_measure(f$lake, metric, by = "date")
-  initial <- dl_report_release(f$lake, "monthly", list(total = first), "v1")
-  saved <- dl_registry(f$lake, "reports")
-  second <- dl_measure(f$lake, metric, by = "date")
+  first <- measure(f$lake, metric, by = "date")
+  initial <- report_release(f$lake, "monthly", list(total = first), "v1")
+  saved <- registry(f$lake, "reports")
+  second <- measure(f$lake, metric, by = "date")
   expect_no_error(
-    retry <- dl_report_release(
+    retry <- report_release(
       f$lake,
       "monthly",
       list(total = second),
@@ -236,18 +236,18 @@ test_that("report retries ignore only volatile calculation times", {
   )
   expect_identical(initial, retry)
   expect_s3_class(retry$measures$total$values$date, "Date")
-  expect_identical(dl_registry(f$lake, "reports"), saved)
-  expect_equal(dl_report_read(f$lake, "monthly", TRUE)$total$value, 300)
+  expect_identical(registry(f$lake, "reports"), saved)
+  expect_equal(report_read(f$lake, "monthly", TRUE)$total$value, 300)
   expect_identical(
-    dl_report_read(f$lake, "monthly")$measures$total$manifest$calculated_at,
-    attr(first, "dl_manifest")$calculated_at
+    report_read(f$lake, "monthly")$measures$total$manifest$calculated_at,
+    attr(first, "tw_manifest")$calculated_at
   )
   expect_error(
-    dl_report_release(f$lake, "monthly", list(total = second), "v2"),
+    report_release(f$lake, "monthly", list(total = second), "v2"),
     "different content"
   )
   expect_error(
-    dl_report_release(
+    report_release(
       f$lake,
       "monthly",
       list(total = second),
@@ -259,12 +259,12 @@ test_that("report retries ignore only volatile calculation times", {
   changed <- f$good
   changed$reserve <- changed$reserve + 1
   f$write(changed)
-  dl_run(f$pipeline, f$lake)
+  run(f$pipeline, f$lake)
   expect_error(
-    dl_report_release(
+    report_release(
       f$lake,
       "monthly",
-      list(total = dl_measure(f$lake, metric)),
+      list(total = measure(f$lake, metric)),
       "v1"
     ),
     "different content"
@@ -273,7 +273,7 @@ test_that("report retries ignore only volatile calculation times", {
 
 test_that("legacy report values remain readable including missing groups", {
   f <- fixture()
-  on.exit(cleanup(f))
+  on.exit(fixture_cleanup(f))
   old <- list(
     id = "legacy",
     code_version = "v0",
@@ -291,37 +291,37 @@ test_that("legacy report values remain readable including missing groups", {
     list(id = "legacy", created_at = now(), manifest = jencode(old))
   )
   expect_equal(
-    dl_report_read(f$lake, "legacy", TRUE)$total,
+    report_read(f$lake, "legacy", TRUE)$total,
     tibble::tibble(group = c("a", NA), value = c(2, 3))
   )
-  expect_error(dl_report_read(f$lake, "absent"), class = "dl_no_report")
+  expect_error(report_read(f$lake, "absent"), class = "tw_no_report")
 })
 
 
 test_that("saved pre-read-only configurations remain executable", {
   f <- fixture()
-  on.exit(cleanup(f))
+  on.exit(fixture_cleanup(f))
   legacy <- f$pipeline
   legacy$config$read_only <- NULL
-  expect_equal(dl_run(legacy, f$lake)$status, "published")
+  expect_equal(run(legacy, f$lake)$status, "published")
 })
 
 test_that("custom metric groups are unique and repeated lineage is deduplicated", {
   f <- fixture()
-  on.exit(cleanup(f))
-  dl_run(f$pipeline, f$lake)
+  on.exit(fixture_cleanup(f))
+  run(f$pipeline, f$lake)
   metric <- reserve_metric()
-  dl_measure(f$lake, metric)
-  before <- dl_registry(f$lake, "lineage_edges")
-  dl_measure(f$lake, metric)
-  expect_identical(dl_registry(f$lake, "lineage_edges"), before)
+  measure(f$lake, metric)
+  before <- registry(f$lake, "lineage_edges")
+  measure(f$lake, metric)
+  expect_identical(registry(f$lake, "lineage_edges"), before)
   metric$compute <- function(data, dimensions, params) {
     data.frame(company = c("a", "a"), value = c(1, 2))
   }
   metric$expr <- NULL
   metric$version <- "2.0.0"
   expect_error(
-    dl_measure(f$lake, metric, by = "company"),
+    measure(f$lake, metric, by = "company"),
     "one row per requested group"
   )
 })
@@ -329,10 +329,10 @@ test_that("custom metric groups are unique and repeated lineage is deduplicated"
 
 test_that("group order cannot change the identity of identical metric results", {
   f <- fixture()
-  on.exit(cleanup(f))
-  dl_run(f$pipeline, f$lake)
+  on.exit(fixture_cleanup(f))
+  run(f$pipeline, f$lake)
   reverse <- FALSE
-  metric <- dl_metric(
+  metric <- metric(
     "ordered",
     "risk.validated",
     dimensions = "company",
@@ -343,16 +343,16 @@ test_that("group order cannot change the identity of identical metric results", 
     approved = TRUE,
     code_version = "v1"
   )
-  first <- dl_measure(f$lake, metric, by = "company")
+  first <- measure(f$lake, metric, by = "company")
   reverse <- TRUE
-  second <- dl_measure(f$lake, metric, by = "company")
+  second <- measure(f$lake, metric, by = "company")
   expect_equal(first$company, c("a", "b"))
   expect_identical(
-    attr(first, "dl_manifest")$result_hash,
-    attr(second, "dl_manifest")$result_hash
+    attr(first, "tw_manifest")$result_hash,
+    attr(second, "tw_manifest")$result_hash
   )
-  dl_report_release(f$lake, "ordered-report", list(total = first), "v1")
-  expect_no_error(dl_report_release(
+  report_release(f$lake, "ordered-report", list(total = first), "v1")
+  expect_no_error(report_release(
     f$lake,
     "ordered-report",
     list(total = second),
