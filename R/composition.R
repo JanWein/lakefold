@@ -4,11 +4,17 @@ new_product <- function(
   version,
   code_version,
   automatic_version,
-  owner = "",
-  description = ""
+  owner = NULL,
+  description = NULL
 ) {
   asset_id(id)
   scalar(version, "version")
+  if (!is.null(owner)) {
+    scalar(owner, "owner")
+  }
+  if (!is.null(description)) {
+    scalar(description, "description")
+  }
   if (!is.null(code_version)) {
     scalar(code_version, "code_version")
   }
@@ -18,7 +24,7 @@ new_product <- function(
       version = version,
       automatic_version = automatic_version,
       code_version = code_version,
-      source = NULL,
+      sources = list(),
       transforms = list(),
       contract = NULL,
       quality = list(),
@@ -27,80 +33,107 @@ new_product <- function(
       owner = owner,
       description = description
     ),
-    class = "dl_product_spec"
+    class = "tw_product"
   )
   if (!is.null(contract)) {
-    out <- dl_add_contract(out, contract)
+    out <- add_contract(out, contract)
   }
   out
 }
 
 editable_product <- function(x) {
-  if (!inherits(x, "dl_product_spec")) {
-    abort("Start with dl_product('name') to compose a product with dl_add_*().")
+  if (!inherits(x, "tw_product")) {
+    abort("Start with product('name') to compose a product with add_*().")
   }
-  attr(x, "dl_validated") <- NULL
+  attr(x, "tw_validated") <- NULL
   x
 }
 
 #' Compose a data product using ordinary R objects
 #'
 #' These functions describe work without executing it. Start with
-#' `dl_product("orders")`, add a data frame, file path, zero-argument function
+#' `product("orders")`, add a data frame, file path, zero-argument function
 #' or source adapter, then add only the capabilities you need.
 #' Transformations run in addition order; the contract and quality checks run
-#' on the final candidate. Adding a source, contract or target replaces that
-#' component. Transforms, quality rules and catalogs accumulate.
+#' on the final candidate. Sources, transforms, rules and catalogs accumulate.
+#' A contract or target replaces the previously configured component.
 #'
-#' @param x Product created with `dl_product("name")`.
+#' @param x Product created with `product("name")`.
 #' @param source Data frame, file path, function or source adapter.
+#' @param replace Replace a source with the same name explicitly.
 #' @param reader Optional file reader. CSV, TSV, RDS and Excel have defaults.
 #' @param transform R function, formula using `.x`, or transform adapter.
-#' @param name Optional step name, generated when omitted.
+#' @param name Optional source, step or catalog name, generated when omitted.
 #' @param contract Contract, named type vector, or named list of prototypes.
 #' @param quality One-sided row predicate, function, rule, or list of rules.
 #'   Formula `NA` results count as failures. Functions return scalar logicals
-#'   or [dl_quality_counts()]. Names in rule lists become rule names.
+#'   or [quality_counts()]. Names in rule lists become rule names.
 #' @param target Lake folder path, connected lake, configuration or target
-#'   adapter. Use [dl_target_lake()] for partition or layer options.
+#'   adapter. Use [target_lake()] for partition or layer options.
 #' @param catalog Function receiving run metadata, or catalog adapter.
 #' @returns An updated product specification. No source data are read.
-#' @seealso [dl_run()], [dl_publish()], [dl_validate()], [dl_inspect()]
+#' @seealso [run()], [publish()], [validate()], [inspect()]
 #' @export
 #' @examples
-#' orders <- dl_product("orders") |>
-#'   dl_add_source(data.frame(id = 1:2, amount = c(25, 75))) |>
-#'   dl_add_transform(function(data) transform(data, amount = amount * 2)) |>
-#'   dl_add_contract(c(id = "integer", amount = "numeric")) |>
-#'   dl_add_quality(~ amount >= 0)
-#' orders |> dl_run() |> dl_collect()
-dl_add_source <- function(x, source, reader = NULL) {
+#' orders <- product("orders") |>
+#'   add_source(data.frame(id = 1:2, amount = c(25, 75))) |>
+#'   add_transform(function(data) transform(data, amount = amount * 2)) |>
+#'   add_contract(c(id = "integer", amount = "numeric")) |>
+#'   add_quality(~ amount >= 0)
+#' orders |> run() |> collect()
+add_source <- function(x, source, name = NULL, reader = NULL, replace = FALSE) {
   x <- editable_product(x)
+  flag(replace, "replace")
   if (!is.null(reader) && (!is.character(source) || !is.function(reader))) {
     abort("reader is only used with a file path and must be a function.")
   }
+  name <- name %||%
+    if (inherits(source, "tw_product")) {
+      source$id
+    } else {
+      paste0("source_", length(x$sources) + 1L)
+    }
+  scalar(name, "name")
+  if (name %in% names(x$sources) && !replace) {
+    abort(paste0(
+      "Source `",
+      name,
+      "` already exists. Use replace = TRUE to replace it."
+    ))
+  }
   if (is.character(source)) {
     scalar(source, "source path")
-    source <- dl_source(
-      paste0(x$id, ".source"),
-      source,
-      reader = reader %||% simple_reader(source)
-    )
+    if (
+      is.null(reader) &&
+        tolower(tools::file_ext(source)) %in% c("parquet", "pq")
+    ) {
+      source <- source_parquet(source)
+    } else {
+      source <- source_file(
+        paste0(
+          x$id,
+          ".source.",
+          substr(digest::digest(name, algo = "sha256"), 1L, 12L)
+        ),
+        source,
+        reader = reader %||% simple_reader(source)
+      )
+    }
   }
-  if (!component_method("dl_read_source", source)) {
-    abort("source must be a data frame, path, function or source adapter.")
+  if (!component_method("read_source", source)) {
+    abort("source must be a table, path, function, product or source adapter.")
   }
-  x$source <- source
+  x$sources[[name]] <- source
   x
 }
-#' @rdname dl_add_source
+#' @rdname add_source
 #' @export
-dl_add_transform <- function(x, transform, name = NULL) {
+add_transform <- function(x, transform, name = NULL) {
   x <- editable_product(x)
   if (inherits(transform, "formula")) {
     transform <- rlang::as_function(transform)
   }
-  if (!component_method("dl_execute_transform", transform)) {
+  if (!component_method("execute_transform", transform)) {
     abort(
       "transform must be a function, formula using .x, or transform adapter."
     )
@@ -113,26 +146,26 @@ dl_add_transform <- function(x, transform, name = NULL) {
   x$transforms[[name]] <- transform
   x
 }
-#' @rdname dl_add_source
+#' @rdname add_source
 #' @export
-dl_add_contract <- function(x, contract) {
+add_contract <- function(x, contract) {
   x <- editable_product(x)
-  if (!inherits(contract, "dl_contract")) {
-    contract <- dl_contract(paste0(x$id, ".contract"), columns = contract)
+  if (!inherits(contract, "tw_contract")) {
+    contract <- contract(paste0(x$id, ".contract"), columns = contract)
   }
-  if (isTRUE(attr(contract, "dl_anonymous"))) {
+  if (isTRUE(attr(contract, "tw_anonymous"))) {
     contract$id <- paste0(x$id, ".contract")
-    attr(contract, "dl_anonymous") <- NULL
+    attr(contract, "tw_anonymous") <- NULL
   }
   assert_contract_ready(contract)
   x$contract <- contract
   x
 }
-#' @rdname dl_add_source
+#' @rdname add_source
 #' @export
-dl_add_quality <- function(x, quality, name = NULL) {
+add_quality <- function(x, quality, name = NULL) {
   x <- editable_product(x)
-  if (is.list(quality) && !inherits(quality, "dl_rule")) {
+  if (is.list(quality) && !inherits(quality, "tw_rule")) {
     if (!is.null(name)) {
       abort("Name individual rules in the quality list.")
     }
@@ -141,12 +174,12 @@ dl_add_quality <- function(x, quality, name = NULL) {
       if (is.null(label) || is.na(label) || !nzchar(label)) {
         label <- NULL
       }
-      x <- dl_add_quality(x, quality[[i]], label)
+      x <- add_quality(x, quality[[i]], label)
     }
     return(x)
   }
-  if (!inherits(quality, "dl_rule")) {
-    quality <- dl_rule(
+  if (!inherits(quality, "tw_rule")) {
+    quality <- quality_rule(
       name %||% paste0("quality_", length(x$quality) + 1L),
       quality
     )
@@ -159,69 +192,132 @@ dl_add_quality <- function(x, quality, name = NULL) {
   x$quality <- c(x$quality, list(quality))
   x
 }
-#' @rdname dl_add_source
+#' @rdname add_source
 #' @export
-dl_add_target <- function(x, target) {
+set_target <- function(x, target) {
   x <- editable_product(x)
   x$target <- normalize_target(target)
   x
 }
-#' @rdname dl_add_source
+#' @rdname add_source
 #' @export
-dl_add_catalog <- function(x, catalog) {
+add_catalog <- function(x, catalog, name = NULL) {
   x <- editable_product(x)
-  if (!component_method("dl_publish_metadata", catalog)) {
+  if (!component_method("publish_metadata", catalog)) {
     abort(
-      "catalog must be a function or an adapter with dl_publish_metadata()."
+      "catalog must be a function or an adapter with publish_metadata()."
     )
   }
-  x$catalogs <- c(x$catalogs, list(catalog))
+  name <- name %||%
+    if (is.function(catalog)) {
+      paste0("callback-", length(x$catalogs) + 1L)
+    } else {
+      catalog$id %||% paste0("catalog-", length(x$catalogs) + 1L)
+    }
+  scalar(name, "name")
+  if (name %in% names(x$catalogs)) {
+    abort("Catalog names must be unique.")
+  }
+  x$catalogs[[name]] <- catalog
   x
 }
 
 #' @export
-dl_validate.dl_product_spec <- function(data, contract = NULL, ...) {
+validate.tw_product <- function(data, contract = NULL, ...) {
   rlang::check_dots_empty()
   if (!is.null(contract)) {
-    abort("Add a contract with dl_add_contract() before preflight.")
+    abort("Add a contract with add_contract() before preflight.")
   }
-  asset_id(data$id)
-  scalar(data$version, "version")
-  if (is.null(data$source)) {
-    abort("This product has no source. Add one with dl_add_source().")
-  }
-  assert_component(data$source, "dl_read_source")
-  for (step in data$transforms) {
-    assert_component(step, "dl_execute_transform")
-  }
-  if (!is.null(data$contract)) {
-    assert_contract_ready(data$contract)
-    args <- data$contract
-    args[c("kind", "automatic_schema")] <- NULL
-    args$columns <- unlist(args$columns, use.names = TRUE)
-    do.call(dl_contract, args)
-  }
-  rules <- c(data$contract$rules, data$quality)
-  if (anyDuplicated(vapply(rules, `[[`, character(1), "name"))) {
-    abort("Contract and added quality rules must have unique names.")
-  }
-  for (rule in rules) {
-    assert_component(rule, "dl_run_quality")
-  }
-  if (!is.null(data$target)) {
-    dl_check_component(data$target)
-    if (
-      !component_method("dl_execute_target", data$target) &&
-        !component_method("dl_write_target", data$target)
-    ) {
-      abort("The target needs dl_write_target() or dl_execute_target().")
-    }
-  }
-  for (catalog in data$catalogs) {
-    assert_component(catalog, "dl_publish_metadata")
-  }
-  attr(data, "dl_validated") <- TRUE
+  validate_product_graph(data)
+  attr(data, "tw_validated") <- TRUE
   data
+}
+
+validate_product_graph <- function(product) {
+  seen <- new.env(parent = emptyenv())
+  visit <- function(data, stack = character()) {
+    asset_id(data$id)
+    scalar(data$version, "version")
+    if (data$id %in% stack) {
+      abort(
+        paste0(
+          "Product dependency cycle: ",
+          paste(c(stack, data$id), collapse = " -> "),
+          "."
+        ),
+        "tw_dependency_cycle"
+      )
+    }
+    if (exists(data$id, seen, inherits = FALSE)) {
+      previous <- get(data$id, seen, inherits = FALSE)
+      attr(previous, "tw_validated") <- NULL
+      current <- data
+      attr(current, "tw_validated") <- NULL
+      if (!identical(previous, current)) {
+        abort(
+          paste0(
+            "Different definitions use product id `",
+            data$id,
+            "`. Give each product a unique id."
+          ),
+          "tw_dependency_conflict"
+        )
+      }
+      return(invisible(NULL))
+    }
+    if (!length(data$sources)) {
+      abort("This product has no source. Add one with add_source().")
+    }
+    if (
+      is.null(names(data$sources)) ||
+        anyDuplicated(names(data$sources)) ||
+        anyNA(names(data$sources)) ||
+        any(!nzchar(names(data$sources)))
+    ) {
+      abort("Product sources must have unique, non-empty names.")
+    }
+    for (source in data$sources) {
+      if (inherits(source, "tw_product")) {
+        visit(source, c(stack, data$id))
+      } else {
+        assert_component(source, "read_source")
+      }
+    }
+    for (step in data$transforms) {
+      assert_component(step, "execute_transform")
+    }
+    if (!is.null(data$contract)) {
+      assert_contract_ready(data$contract)
+      args <- data$contract
+      args[c("kind", "automatic_schema")] <- NULL
+      args$columns <- unlist(args$columns, use.names = TRUE)
+      do.call(contract, args)
+    }
+    rules <- c(data$contract$rules, data$quality)
+    if (anyDuplicated(vapply(rules, `[[`, character(1), "name"))) {
+      abort("Contract and added quality rules must have unique names.")
+    }
+    for (rule in rules) {
+      assert_component(rule, "run_quality")
+    }
+    if (!is.null(data$target)) {
+      check_component(data$target)
+      if (
+        !component_method("tw_execute_target", data$target) &&
+          !component_method("write_target", data$target)
+      ) {
+        abort("The target needs a write_target() method.")
+      }
+    }
+    normalize_catalogs(data$catalogs)
+    for (catalog in data$catalogs) {
+      assert_component(catalog, "publish_metadata")
+    }
+    assign(data$id, data, seen)
+    invisible(NULL)
+  }
+  visit(product)
+  invisible(product)
 }
 
 #' Inspect a product or run without executing it
@@ -230,35 +326,35 @@ dl_validate.dl_product_spec <- function(data, contract = NULL, ...) {
 #' contract, target and optional integrations. Data rows, connection credentials
 #' and closure environments are omitted. This is descriptive metadata, not a
 #' portable executable serialization. Save project R code for reproducibility.
-#' Extension packages may implement `dl_inspect()` to provide safe descriptors.
+#' Extension packages may implement `inspect()` to provide safe descriptors.
 #' @param x Product, run or component.
 #' @param ... Reserved for extensions.
-#' @returns `dl_inspect()` returns a list. `dl_explain()` returns a character
+#' @returns `inspect()` returns a list. `explain()` returns a character
 #'   vector invisibly after printing a plain-language explanation.
 #' @export
 #' @examples
-#' orders <- dl_product("orders") |> dl_add_source(data.frame(id = 1:2))
-#' dl_inspect(orders)
-#' dl_explain(orders)
-dl_inspect <- function(x, ...) UseMethod("dl_inspect")
+#' orders <- product("orders") |> add_source(data.frame(id = 1:2))
+#' inspect(orders)
+#' explain(orders)
+inspect <- function(x, ...) UseMethod("inspect")
 #' @export
-dl_inspect.default <- function(x, ...) list(type = class(x)[[1]])
+inspect.default <- function(x, ...) list(type = class(x)[[1]])
 #' @export
-dl_inspect.NULL <- function(x, ...) list(type = "memory")
+inspect.NULL <- function(x, ...) list(type = "memory")
 #' @export
-dl_inspect.data.frame <- function(x, ...) {
+inspect.data.frame <- function(x, ...) {
   list(type = "data.frame", rows = nrow(x), columns = names(x))
 }
 #' @export
-dl_inspect.function <- function(x, ...) {
+inspect.function <- function(x, ...) {
   list(type = "R function", code = canonical(x))
 }
 #' @export
-dl_inspect.dl_source <- function(x, ...) {
+inspect.tw_source <- function(x, ...) {
   list(type = "file", id = x$id, path = x$path, reader = canonical(x$reader))
 }
 #' @export
-dl_inspect.dl_database_source <- function(x, ...) {
+inspect.tw_database_source <- function(x, ...) {
   list(
     type = "DBI",
     table = if (inherits(x$table, "Id")) as.list(x$table@name) else x$table,
@@ -268,32 +364,36 @@ dl_inspect.dl_database_source <- function(x, ...) {
   )
 }
 #' @export
-dl_inspect.dl_sql_transform <- function(x, ...) {
+inspect.tw_sql_transform <- function(x, ...) {
   list(type = "DuckDB SQL", query = x$query)
 }
 #' @export
-dl_inspect.dl_product_spec <- function(x, ...) {
+inspect.tw_product <- function(x, ...) {
+  sources <- lapply(x$sources, function(source) {
+    if (inherits(source, "tw_product")) {
+      list(type = "product", id = source$id, version = source$version)
+    } else {
+      inspect(source)
+    }
+  })
   list(
     id = x$id,
     version = x$version,
     code_version = x$code_version,
-    status = if (isTRUE(attr(x, "dl_validated"))) "validated" else "defined",
-    source = if (is.null(x$source)) {
-      list(type = "missing")
-    } else {
-      dl_inspect(x$source)
-    },
-    transforms = lapply(x$transforms, dl_inspect),
+    status = if (isTRUE(attr(x, "tw_validated"))) "validated" else "defined",
+    sources = sources,
+    transforms = lapply(x$transforms, inspect),
     contract = canonical(x$contract),
     quality = canonical(x$quality),
-    target = dl_inspect(x$target),
-    catalogs = lapply(x$catalogs, dl_inspect),
-    owner = x$owner %||% x$contract$owner,
-    description = x$description %||% x$contract$description
+    target = inspect(x$target),
+    catalogs = lapply(x$catalogs, inspect),
+    owner = x$owner %||% x$contract$owner %||% "",
+    description = x$description %||% x$contract$description %||% "",
+    plan = product_plan(x, check = FALSE)
   )
 }
 #' @export
-dl_inspect.dl_run_result <- function(x, ...) {
+inspect.tw_run_result <- function(x, ...) {
   x[c(
     "run_id",
     "status",
@@ -310,50 +410,61 @@ dl_inspect.dl_run_result <- function(x, ...) {
     "lifecycle"
   )]
 }
-#' @rdname dl_inspect
+#' @rdname inspect
 #' @export
-dl_explain <- function(x) {
-  if (!inherits(x, "dl_product_spec")) {
-    abort("Use a composed dl_product() with dl_explain().")
+explain <- function(x) {
+  if (!inherits(x, "tw_product")) {
+    abort("Use product() with explain().")
   }
   text <- c(
     paste0("Product: ", x$id),
-    paste0(
-      "Read: ",
-      if (is.null(x$source)) "add a source first" else dl_inspect(x$source)$type
-    ),
-    paste0(
-      "Transform: ",
-      length(x$transforms),
-      " ordered step(s), using ordinary R tables."
-    ),
+    paste0("Read: ", length(x$sources), " named source(s)."),
+    if (length(x$sources) > 1L) {
+      "The first transform receives a named list; combine it into one table."
+    } else {
+      "Transforms receive one table, which may stay lazy."
+    },
+    paste0("Transform: ", length(x$transforms), " ordered step(s)."),
     paste0(
       "Check: ",
-      if (is.null(x$contract)) "inferred structure" else "declared contract",
+      if (is.null(x$contract)) {
+        "inferred structure"
+      } else {
+        "declared contract"
+      },
       " and ",
       length(x$quality),
-      " additional quality rule(s)."
+      " additional rule(s)."
     ),
     if (is.null(x$target)) {
-      "Return: data and run evidence in memory. Use dl_publish() for durable storage."
+      "Return: checked data and run evidence. collect() materializes lazy output."
     } else {
       paste0(
         "Publish: ",
-        dl_inspect(x$target)$type,
+        inspect(x$target)$type,
         ". Failed checks block publication."
       )
     },
-    "dl_validate() checks configuration; dl_run() executes the work."
+    if (identical(capabilities(x$target)$lazy, FALSE)) {
+      "Materialization: the target requires an ordinary table."
+    } else {
+      "Materialization: lazy tables remain lazy unless a component collects."
+    },
+    "validate() checks configuration and dependency cycles; run() executes."
   )
   cat(paste(text, collapse = "\n"), "\n")
   invisible(text)
 }
 #' @export
-print.dl_product_spec <- function(x, ...) {
+print.tw_product <- function(x, ...) {
   cat("<Data product:", x$id, ">\n")
   cat(
-    "Source:",
-    if (is.null(x$source)) "not set" else dl_inspect(x$source)$type,
+    "Sources:",
+    if (!length(x$sources)) {
+      "not set"
+    } else {
+      paste(names(x$sources), collapse = ", ")
+    },
     "\n"
   )
   cat("Transformations:", length(x$transforms), "\n")
@@ -367,52 +478,72 @@ print.dl_product_spec <- function(x, ...) {
     "\n"
   )
   cat("Quality:", length(x$quality) + length(x$contract$rules), "rules\n")
-  cat("Target:", dl_inspect(x$target)$type, "\n")
+  cat("Target:", inspect(x$target)$type, "\n")
   cat(
     "Status:",
-    if (isTRUE(attr(x, "dl_validated"))) "validated" else "defined",
+    if (isTRUE(attr(x, "tw_validated"))) {
+      "validated"
+    } else {
+      "defined"
+    },
     "\n"
   )
   invisible(x)
 }
 
-product_plan <- function(x) {
+product_plan <- function(x, check = TRUE) {
+  source_types <- vapply(
+    x$sources,
+    function(source) {
+      if (inherits(source, "tw_product")) {
+        "product"
+      } else {
+        inspect(source)$type
+      }
+    },
+    character(1)
+  )
   steps <- c(
-    "read",
+    rep("read", length(x$sources)),
     rep("transform", length(x$transforms)),
     "validate",
     "publish",
     rep("catalog", length(x$catalogs))
   )
   ids <- c(
-    x$id,
+    names(x$sources),
     names(x$transforms),
     x$contract$id %||% "automatic structure",
     x$id,
-    if (length(x$catalogs)) {
-      paste0("catalog_", seq_along(x$catalogs))
-    } else {
-      character()
-    }
+    if (length(x$catalogs)) names(normalize_catalogs(x$catalogs))
+  )
+  components <- c(x$sources, x$transforms, list(NULL, x$target), x$catalogs)
+  lazy <- vapply(
+    components,
+    function(component) capabilities(component)$lazy,
+    logical(1)
   )
   out <- tibble::tibble(
     position = seq_along(steps),
     step = steps,
     id = ids,
     target = c(
-      if (is.null(x$source)) "missing source" else dl_inspect(x$source)$type,
-      vapply(x$transforms, function(step) dl_inspect(step)$type, character(1)),
+      source_types,
+      vapply(x$transforms, function(step) inspect(step)$type, character(1)),
       "contract and quality",
-      dl_inspect(x$target)$type,
+      inspect(x$target)$type,
       rep("metadata only", length(x$catalogs))
+    ),
+    materializes = ifelse(is.na(lazy), NA, !lazy)
+  )
+  if (check) {
+    attr(out, "complete") <- tryCatch(
+      {
+        validate(x)
+        TRUE
+      },
+      error = function(e) FALSE
     )
-  )
-  attr(out, "complete") <- tryCatch(
-    {
-      dl_validate(x)
-      TRUE
-    },
-    error = function(e) FALSE
-  )
+  }
   out
 }

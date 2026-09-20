@@ -1,14 +1,19 @@
 #' Define a data contract
 #' @param id Optional contract identifier. An unnamed contract is scoped to
-#'   the product when added with [dl_add_contract()].
+#'   the product when added with [add_contract()].
 #' @param version Immutable definition version.
 #' @param owner Optional business owner.
 #' @param description Optional business description.
 #' @param grain Optional meaning of one row.
 #' @param columns Named character vector of R types: character, integer,
-#'   numeric,
-#'   logical, Date, POSIXct. A named list of zero-length prototypes such as
-#'   `list(id = integer(), amount = double())` is also accepted.
+#'   numeric, logical, Date, POSIXct, integer64 or list. A named list of
+#'   zero-length prototypes such as `list(id = integer(), amount = double())`
+#'   is also accepted. Factors describe character labels: validation preserves
+#'   factors in memory, but database storage need not preserve levels or order.
+#'   Integer64 columns remain distinct from doubles; no numeric conversion is
+#'   performed. Caller-owned DuckDB connections must use
+#'   `DBI::dbConnect(duckdb::duckdb(), bigint = "integer64")` to preserve them.
+#'   List columns require a target that supports nested data.
 #' @param required Non-null columns.
 #' @param key Unique key columns.
 #' @param rules List of quality rules.
@@ -24,12 +29,12 @@
 #' @return A serializable contract specification.
 #' @export
 #' @examples
-#' contract <- dl_contract(
+#' contract <- contract(
 #'   "orders", "1.0.0", "Analytics", "Order amounts", "One order",
 #'   c(order_id = "integer", amount = "numeric"), key = "order_id"
 #' )
 #' contract
-dl_contract <- function(
+contract <- function(
   id = "contract",
   version = "1.0.0",
   owner = "",
@@ -40,7 +45,7 @@ dl_contract <- function(
   key = character(),
   rules = list(),
   producer = owner,
-  max_age_hours = 48,
+  max_age_hours = NULL,
   allow_empty = FALSE,
   allow_extra = FALSE,
   operator = NULL,
@@ -80,7 +85,16 @@ dl_contract <- function(
   if (
     !all(
       columns %in%
-        c("character", "integer", "numeric", "logical", "Date", "POSIXct")
+        c(
+          "character",
+          "integer",
+          "numeric",
+          "logical",
+          "Date",
+          "POSIXct",
+          "integer64",
+          "list"
+        )
     )
   ) {
     abort("Unsupported contract column type.")
@@ -98,8 +112,8 @@ dl_contract <- function(
   ) {
     abort("max_age_hours must be positive and finite, or NULL.")
   }
-  if (!all(vapply(rules, inherits, logical(1), "dl_rule"))) {
-    abort("Use dl_rule() or dl_pointblank() for rules.")
+  if (!all(vapply(rules, inherits, logical(1), "tw_rule"))) {
+    abort("Use quality_rule() or pointblank_checks() for rules.")
   }
   if (anyDuplicated(vapply(rules, `[[`, character(1), "name"))) {
     abort("Rule names must be unique.")
@@ -130,7 +144,7 @@ dl_contract <- function(
       allow_empty = allow_empty,
       allow_extra = allow_extra
     ),
-    class = "dl_contract"
+    class = "tw_contract"
   )
   if (!is.null(operator)) {
     contract$operator <- operator
@@ -139,17 +153,20 @@ dl_contract <- function(
     contract$column_metadata <- column_metadata
   }
   if (anonymous) {
-    attr(contract, "dl_anonymous") <- TRUE
+    attr(contract, "tw_anonymous") <- TRUE
   }
   contract
 }
 
 #' Define a quality rule
 #' @param name Rule name.
-#' @param check Function taking a table and returning a scalar logical or
-#'   dl_quality_counts(), or a one-sided row predicate such as `~ amount >= 0`.
-#'   Missing formula results count as failures. Lazy formulas run in the
-#'   database; arbitrary functions remain responsible for their own collection.
+#' @param check Function taking a table and returning a logical vector or
+#'   quality_counts(), or a one-sided row predicate such as `~ amount >= 0`.
+#'   A scalar function result is one aggregate test; a longer vector must have
+#'   one value per row. Formula results are evaluated per row, including scalar
+#'   predicates repeated for each row. Missing logical values count as failures.
+#'   Lazy formulas run on the backend; arbitrary functions remain responsible
+#'   for their own collection.
 #' @param severity error blocks publication; warning permits publication.
 #' @param max_failure Fraction of permitted failed test units.
 #' @param description Rule description.
@@ -163,13 +180,13 @@ dl_contract <- function(
 #' @return A rule specification or counts object.
 #' @export
 #' @examples
-#' rule <- dl_rule("positive", function(data) {
+#' rule <- quality_rule("positive", function(data) {
 #'   counts <- dplyr::summarise(data, failed = sum(amount <= 0), total = dplyr::n())
 #'   if (inherits(counts, "tbl_sql")) counts <- dplyr::collect(counts)
-#'   dl_quality_counts(counts$failed, counts$total)
+#'   quality_counts(counts$failed, counts$total)
 #' })
 #' rule$name
-dl_rule <- function(
+quality_rule <- function(
   name,
   check,
   severity = c("error", "warning"),
@@ -184,7 +201,8 @@ dl_rule <- function(
     abort("Use a one-sided quality formula, for example ~ amount >= 0.")
   }
   if (
-    length(max_failure) != 1 ||
+    !is.numeric(max_failure) ||
+      length(max_failure) != 1 ||
       !is.finite(max_failure) ||
       max_failure < 0 ||
       max_failure > 1
@@ -200,16 +218,20 @@ dl_rule <- function(
       description = description,
       engine = "r"
     ),
-    class = "dl_rule"
+    class = "tw_rule"
   )
 }
-#' @rdname dl_rule
+#' @rdname quality_rule
 #' @export
-dl_quality_counts <- function(n_failed, n_total) {
+quality_counts <- function(n_failed, n_total) {
   if (
-    length(n_failed) != 1 ||
+    !is.numeric(n_failed) ||
+      !is.numeric(n_total) ||
+      length(n_failed) != 1 ||
       length(n_total) != 1 ||
       any(!is.finite(c(n_failed, n_total))) ||
+      n_failed != trunc(n_failed) ||
+      n_total != trunc(n_total) ||
       n_failed < 0 ||
       n_total < n_failed
   ) {
@@ -217,19 +239,19 @@ dl_quality_counts <- function(n_failed, n_total) {
   }
   structure(
     list(n_failed = n_failed, n_total = n_total),
-    class = "dl_quality_counts"
+    class = "tw_quality_counts"
   )
 }
-#' @rdname dl_rule
+#' @rdname quality_rule
 #' @export
-dl_pointblank <- function(
+pointblank_checks <- function(
   name,
   build,
   severity = c("error", "warning"),
   max_failure = 0,
   policy = c("rule", "agent")
 ) {
-  rule <- dl_rule(name, build, severity, max_failure)
+  rule <- quality_rule(name, build, severity, max_failure)
   rule$engine <- "pointblank"
   policy <- match.arg(policy)
   if (policy != "rule") {
@@ -409,24 +431,24 @@ pointblank_results <- function(rule, data, keep_agent = FALSE) {
 #' @param stage Label stored with each check, such as `"ingest"` or
 #'   `"candidate"`.
 #' @param keep_agents Retain interrogated pointblank agents as an in-memory
-#'   attribute for [dl_pointblank_report()]. Defaults to `FALSE`.
-#' @param keep_errors Retain original R conditions in an in-memory `dl_errors`
+#'   attribute for [pointblank_report()]. Defaults to `FALSE`.
+#' @param keep_errors Retain original R conditions in an in-memory `tw_errors`
 #'   attribute. They can contain private data and are never persisted in the
-#'   registry. Inspect with [dl_quality_errors()]. Defaults to `FALSE`.
+#'   registry. Inspect with [quality_errors()]. Defaults to `FALSE`.
 #' @return For data, a tibble with one row per check; only passed and warning
 #'   permit publication. For a workflow, the validated definition.
 #' @export
 #' @examples
-#' contract <- dl_contract(
+#' contract <- contract(
 #'   "orders", "1.0.0", "Analytics", "Order amounts", "One order",
 #'   c(order_id = "integer", amount = "numeric"), key = "order_id"
 #' )
-#' dl_validate(data.frame(order_id = 1:2, amount = c(25, 75)), contract)
-dl_validate <- function(data, contract = NULL, ...) UseMethod("dl_validate")
+#' validate(data.frame(order_id = 1:2, amount = c(25, 75)), contract)
+validate <- function(data, contract = NULL, ...) UseMethod("validate")
 
-#' @rdname dl_validate
+#' @rdname validate
 #' @export
-dl_validate.default <- function(
+validate.default <- function(
   data,
   contract,
   stage = "candidate",
@@ -435,8 +457,8 @@ dl_validate.default <- function(
   ...
 ) {
   rlang::check_dots_empty()
-  if (!inherits(contract, "dl_contract")) {
-    abort("contract must be a dl_contract.")
+  if (!inherits(contract, "tw_contract")) {
+    abort("contract must be a contract.")
   }
   assert_contract_ready(contract)
   scalar(stage, "stage")
@@ -459,7 +481,7 @@ dl_validate.default <- function(
     })
   }
   add(protect("schema", function() {
-    actual <- colnames(data)
+    actual <- names(table_prototype(data))
     expected <- names(contract$columns)
     good <- all(expected %in% actual) &&
       (contract$allow_extra || setequal(actual, expected))
@@ -479,31 +501,18 @@ dl_validate.default <- function(
     out <- dplyr::bind_rows(result)
     out$stage <- stage
     if (keep_errors) {
-      attr(out, "dl_errors") <- errors
+      attr(out, "tw_errors") <- errors
     }
     return(out)
   }
   add(protect("types", function() {
-    proto <- if (inherits(data, "tbl_sql")) {
-      dplyr::collect(utils::head(data, 0))
-    } else {
-      data[0, , drop = FALSE]
-    }
+    proto <- table_prototype(data)
     good <- vapply(
       names(contract$columns),
       function(n) {
         x <- proto[[n]]
         t <- contract$columns[[n]]
-        switch(
-          t,
-          numeric = is.numeric(x) &&
-            !inherits(x, c("Date", "POSIXt", "integer64")),
-          integer = is.integer(x),
-          character = is.character(x),
-          logical = is.logical(x),
-          Date = inherits(x, "Date"),
-          POSIXct = inherits(x, "POSIXct")
-        )
+        contract_type_matches(x, t)
       },
       logical(1)
     )
@@ -564,7 +573,7 @@ dl_validate.default <- function(
     agents <- attr(rules, "pointblank_agents") %||% list()
   }
   if (keep_errors) {
-    errors <- c(errors, attr(rules, "dl_errors"))
+    errors <- c(errors, attr(rules, "tw_errors"))
   }
   out <- dplyr::bind_rows(result)
   out$stage <- stage
@@ -580,7 +589,7 @@ dl_validate.default <- function(
         )
   ] <- "r"
   if (keep_errors) {
-    attr(out, "dl_errors") <- errors
+    attr(out, "tw_errors") <- errors
   }
   if (keep_agents) {
     attr(out, "pointblank_agents") <- agents
@@ -594,28 +603,28 @@ quality_ok <- function(results) {
 
 
 #' Inspect locally retained quality exceptions
-#' @param quality Results from `dl_validate(..., keep_errors = TRUE)`.
+#' @param quality Results from `validate(..., keep_errors = TRUE)`.
 #' @returns A named list of original R conditions, empty when none were retained.
 #' @export
 #' @examples
-#' contract <- dl_contract("example", columns = c(id = "integer"),
-#'   rules = list(dl_rule("broken", function(data) stop("Check configuration"))))
-#' quality <- dl_validate(data.frame(id = 1L), contract, keep_errors = TRUE)
-#' lapply(dl_quality_errors(quality), conditionMessage)
-dl_quality_errors <- function(quality) {
-  attr(quality, "dl_errors") %||% list()
+#' contract <- contract("example", columns = c(id = "integer"),
+#'   rules = list(quality_rule("broken", function(data) stop("Check configuration"))))
+#' quality <- validate(data.frame(id = 1L), contract, keep_errors = TRUE)
+#' lapply(quality_errors(quality), conditionMessage)
+quality_errors <- function(quality) {
+  attr(quality, "tw_errors") %||% list()
 }
 
 #' @export
-dl_validate.dl_pipeline <- function(data, contract = NULL, ...) {
+validate.tw_pipeline <- function(data, contract = NULL, ...) {
   rlang::check_dots_empty()
   if (!is.null(contract)) {
     abort("A pipeline already contains its contract.")
   }
   check_pipeline(data)
   need("duckdb")
-  dl_check_component(data$steps$land)
+  check_component(data$steps$land)
   assert_contract_ready(data$steps$validate)
-  attr(data, "dl_validated") <- TRUE
+  attr(data, "tw_validated") <- TRUE
   data
 }

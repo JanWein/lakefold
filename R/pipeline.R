@@ -1,9 +1,9 @@
 #' Build a pipeline specification
 #' @param id Pipeline identifier.
-#' @param lake A connection-free dl_config or a connected lake; only
+#' @param lake A connection-free lake_config or a connected lake; only
 #'   configuration is retained.
 #' @param config Optional named alternative to lake for a connection-free
-#'   dl_config.
+#'   lake_config.
 #' @param version Definition version.
 #' @param code_version Version of all execution code, e.g. a Git commit SHA.
 #'   Change it when imported functions, dependencies or captured values change.
@@ -16,20 +16,20 @@
 #' @param partition_by Partition columns. Empty or NULL keys are rejected.
 #' @param layer Publication schema.
 #' @return A pipeline specification, with no open connection or loaded data.
-#' @export
 #' @examples
-#' contract <- dl_contract(
+#' contract <- contract(
 #'   "orders", "1.0.0", "Analytics", "Order amounts", "One order",
 #'   c(order_id = "integer", amount = "numeric"), key = "order_id"
 #' )
-#' pipeline <- dl_pipeline("orders.import", dl_config(backend = "duckdb"),
+#' pipeline <- tw_pipeline("orders.import", lake_config(backend = "duckdb"),
 #'   code_version = "v1") |>
-#'   dl_step_land(dl_source("orders.file", "orders.csv", utils::read.csv)) |>
-#'   dl_step_extract() |>
-#'   dl_step_validate(contract) |>
-#'   dl_step_publish("orders")
-#' dl_plan(pipeline)
-dl_pipeline <- function(
+#'   tw_step_land(source_file("orders.file", "orders.csv", utils::read.csv)) |>
+#'   tw_step_extract() |>
+#'   tw_step_validate(contract) |>
+#'   tw_step_publish("orders")
+#' plan(pipeline)
+#' @noRd
+tw_pipeline <- function(
   id,
   lake = NULL,
   version = "1.0.0",
@@ -40,7 +40,7 @@ dl_pipeline <- function(
     abort("Supply either lake or config, not both.")
   }
   lake <- config %||% lake
-  config <- if (inherits(lake, "dl_config")) {
+  config <- if (inherits(lake, "tw_config")) {
     lake
   } else {
     assert_lake(lake)
@@ -58,12 +58,12 @@ dl_pipeline <- function(
       config = config,
       steps = list()
     ),
-    class = "dl_pipeline"
+    class = "tw_pipeline"
   )
 }
 add_step <- function(pipeline, type, value) {
-  if (!inherits(pipeline, "dl_pipeline")) {
-    abort("Use dl_pipeline() first.")
+  if (!inherits(pipeline, "tw_pipeline")) {
+    abort("Use tw_pipeline() first.")
   }
   if (type %in% names(pipeline$steps)) {
     abort(paste("Duplicate pipeline step:", type))
@@ -73,40 +73,40 @@ add_step <- function(pipeline, type, value) {
   if (!identical(type, expected[length(current) + 1L])) {
     abort(
       paste("Next pipeline step must be", expected[length(current) + 1L]),
-      "dl_pipeline_invalid"
+      "tw_pipeline_invalid"
     )
   }
   pipeline$steps[[type]] <- value
   pipeline
 }
-#' @rdname dl_pipeline
-#' @export
-dl_step_land <- function(pipeline, source) {
-  if (!inherits(source, "dl_source")) {
-    abort("source must be a dl_source.")
+#' @rdname tw_pipeline
+#' @noRd
+tw_step_land <- function(pipeline, source) {
+  if (!inherits(source, "tw_source")) {
+    abort("source must be a source_file.")
   }
   add_step(pipeline, "land", source)
 }
-#' @rdname dl_pipeline
-#' @export
-dl_step_extract <- function(pipeline, using = NULL, into = "raw") {
+#' @rdname tw_pipeline
+#' @noRd
+tw_step_extract <- function(pipeline, using = NULL, into = "raw") {
   ident(into)
   if (!is.null(using) && !is.function(using)) {
     abort("using must be a reader function.")
   }
   add_step(pipeline, "extract", list(using = using, layer = into))
 }
-#' @rdname dl_pipeline
-#' @export
-dl_step_validate <- function(pipeline, contract) {
-  if (!inherits(contract, "dl_contract")) {
-    abort("contract must be a dl_contract.")
+#' @rdname tw_pipeline
+#' @noRd
+tw_step_validate <- function(pipeline, contract) {
+  if (!inherits(contract, "tw_contract")) {
+    abort("contract must be a contract.")
   }
   add_step(pipeline, "validate", contract)
 }
-#' @rdname dl_pipeline
-#' @export
-dl_step_publish <- function(
+#' @rdname tw_pipeline
+#' @noRd
+tw_step_publish <- function(
   pipeline,
   into,
   mode = c("replace", "replace_partition"),
@@ -128,8 +128,8 @@ dl_step_publish <- function(
 }
 
 check_pipeline <- function(p) {
-  if (!inherits(p, "dl_pipeline")) {
-    abort("Use dl_pipeline() to define the workflow.", "dl_pipeline_invalid")
+  if (!inherits(p, "tw_pipeline")) {
+    abort("Use tw_pipeline() to define the workflow.", "tw_pipeline_invalid")
   }
   order <- names(p$steps)
   if ("precheck" %in% order) {
@@ -146,7 +146,7 @@ check_pipeline <- function(p) {
   if (!identical(order, expected)) {
     abort(
       "Complete the pipeline: land, extract, optional transforms, validate, publish.",
-      "dl_pipeline_invalid"
+      "tw_pipeline_invalid"
     )
   }
   if (
@@ -203,7 +203,7 @@ run_result <- function(run, status, release = NA_character_, quality = NULL) {
       release_id = release,
       quality = quality
     ),
-    class = "dl_run_result"
+    class = "tw_run_result"
   )
 }
 
@@ -304,7 +304,7 @@ find_cached <- function(
 compose_candidate <- function(lake, raw, publish, run) {
   old <- tryCatch(
     resolve_release(lake, publish$asset),
-    dl_no_release = function(e) NULL
+    tw_no_release = function(e) NULL
   )
   parent <- if (is.null(old)) NA_character_ else old$release_id[[1]]
   data <- raw
@@ -322,7 +322,7 @@ compose_candidate <- function(lake, raw, publish, run) {
       }
     }
     if (!is.null(old)) {
-      previous <- dl_tbl(lake, publish$asset, parent)
+      previous <- tbl(lake, publish$asset, parent)
       if (!setequal(colnames(previous), colnames(raw))) {
         abort(
           "Partition replacement requires the same columns as the prior release."
@@ -358,12 +358,12 @@ publish_candidate <- function(
   DBI::dbWithTransaction(lake$con, {
     current <- tryCatch(
       resolve_release(lake, publish$asset)$release_id[[1]],
-      dl_no_release = function(e) NA_character_
+      tw_no_release = function(e) NA_character_
     )
     if (!identical(current, candidate$parent)) {
       abort(
         "Publication conflict: another release changed this asset. Retry the run.",
-        "dl_publication_conflict"
+        "tw_publication_conflict"
       )
     }
     insert_meta(
@@ -405,52 +405,48 @@ publish_candidate <- function(
   run_result(run, "published", release, quality)
 }
 
-#' Run an ingestion pipeline
-#' @param pipeline Pipeline specification.
-#' @param lake Optional existing connection; otherwise opened from the
-#'   specification.
-#' @param business_date Business date of this delivery, separate from arrival
-#'   time.
-#' @param notify Optional function(event) using your existing notification
-#'   transport.
-#' @param stop_on_failure Stop after persisting failure metadata (recommended
-#'   for jobs).
-#' @param cache `TRUE` reuses any matching historical release, preserving
-#'   idempotent job retries. `"current"` only reuses the current release;
-#'   [dl_write()] uses this policy so writing older data makes it current again.
-#'   Set `FALSE` to re-evaluate callbacks with external or changing state.
-#' @return A run result with run_id, status, release_id and quality results.
-#' @param ... Execution options forwarded to the selected workflow method.
+#' Execute a product
+#'
+#' Checks the complete definition and dependency graph before acquiring data.
+#' Sources are acquired once, transformations run in order, and contract and
+#' quality failures block publication. Shared upstream products run once within
+#' the same execution. Without a target, the result retains its checked table;
+#' [collect()] materializes lazy output when it is needed.
+#'
+#' Product execution options passed through `...` include:
+#' * `stop_on_failure`: defaults to `TRUE`. Set `FALSE` to receive failed or
+#'   blocked run results for programmatic inspection.
+#' * `evidence`: an optional directory for durable run records. Defaults to
+#'   `getOption("tidyweave.evidence")`; no evidence directory is required.
+#' * `cache`: lake targets default to `FALSE`. `TRUE` reuses a matching current
+#'   release and requires an explicit product `code_version`. Live reference
+#'   quality checks cannot reuse cached releases.
+#' * `business_date` and `notify`: optional lake publication context and an
+#'   existing notification callback.
+#'
+#' Metrics and dbt project specifications also have execution methods; see
+#' [measure()] and [dbt_build()] for their operation-specific options/results.
+#' @param pipeline Product to execute.
+#' @param lake Optional connected lake or lake configuration, overriding the
+#'   product's target for this run. Prefer [set_target()] in reusable definitions.
+#' @param ... Execution options described above or provided by an adapter.
+#' @returns For products, a run result containing status, timestamps, input and
+#'   output descriptors, quality, metadata and lifecycle. On failure an error
+#'   contains the same result in `condition$result`.
+#' @seealso [publish()], [collect()], [inspect()], [run_history()]
 #' @export
-#' @examplesIf requireNamespace("duckdb", quietly = TRUE)
-#' root <- tempfile("lakefold-example-")
-#' config <- dl_config(
-#'   dl_catalog_duckdb(file.path(root, "lake.db")),
-#'   dl_storage_local(file.path(root, "data")),
-#'   landing = file.path(root, "landing"), backend = "duckdb"
-#' )
-#' lake <- dl_connect(config)
-#' path <- file.path(root, "orders.csv")
-#' utils::write.csv(data.frame(order_id = 1:2, amount = c(25, 75)), path,
-#'   row.names = FALSE)
-#' source <- dl_source("orders.file", path, reader = utils::read.csv)
-#' contract <- dl_contract(
-#'   "orders", "1.0.0", "Analytics", "Order amounts", "One order",
-#'   c(order_id = "integer", amount = "numeric"), key = "order_id"
-#' )
-#' pipeline <- dl_pipeline("orders.import", config, code_version = "v1") |>
-#'   dl_step_land(source) |>
-#'   dl_step_extract() |>
-#'   dl_step_validate(contract) |>
-#'   dl_step_publish("orders")
-#' dl_run(pipeline, lake)
-#' dl_disconnect(lake)
-#' unlink(root, recursive = TRUE)
-dl_run <- function(pipeline, lake = NULL, ...) UseMethod("dl_run")
+#' @examples
+#' orders <- product("orders") |>
+#'   add_source(data.frame(id = 1:2, amount = c(25, 75))) |>
+#'   add_quality(~ amount >= 0)
+#' result <- run(orders)
+#' collect(result)
+#' inspect(result)
+run <- function(pipeline, lake = NULL, ...) UseMethod("run")
 
-#' @rdname dl_run
 #' @export
-dl_run.dl_pipeline <- function(
+#' @noRd
+run.tw_pipeline <- function(
   pipeline,
   lake = NULL,
   business_date = NA_character_,
@@ -468,8 +464,8 @@ dl_run.dl_pipeline <- function(
   check_pipeline(pipeline)
   own <- is.null(lake)
   if (own) {
-    lake <- dl_connect(pipeline$config)
-    on.exit(dl_disconnect(lake), add = TRUE)
+    lake <- connect_lake(pipeline$config)
+    on.exit(disconnect_lake(lake), add = TRUE)
   }
   assert_writable(lake)
   expected_config <- pipeline$config
@@ -481,25 +477,53 @@ dl_run.dl_pipeline <- function(
   contract <- pipeline$steps$validate
   input_contract <- pipeline$steps$precheck
   pub <- pipeline$steps$publish
-  dl_register(lake, src)
+  register(lake, src)
   if (!isTRUE(pipeline$infer_contract)) {
-    dl_register(lake, contract)
+    register(lake, contract)
   }
   if (!is.null(input_contract)) {
-    dl_register(lake, input_contract)
+    register(lake, input_contract)
   }
-  dl_register(lake, pipeline)
+  register(lake, pipeline)
   definition <- pipeline
   definition$config <- NULL
   dh <- fingerprint(definition)
-  run <- new_run(lake, pipeline$id, pub$asset, dh, pipeline$code_version)
+  run <- attr(pipeline, "tw_run_id")
+  if (is.null(run)) {
+    run <- new_run(lake, pipeline$id, pub$asset, dh, pipeline$code_version)
+  } else {
+    prior <- metadata_filter(lake, "runs", run_id = run)
+    if (
+      nrow(prior) != 1L ||
+        prior$status[[1]] != "running" ||
+        prior$pipeline[[1]] != pipeline$id ||
+        prior$asset[[1]] != pub$asset
+    ) {
+      abort("The prepared product run is missing or no longer running.")
+    }
+    exec(
+      lake,
+      paste(
+        "UPDATE",
+        meta(lake, "runs"),
+        "SET definition_hash = ? WHERE run_id = ?"
+      ),
+      list(dh, run)
+    )
+  }
   result <- tryCatch(
     {
       landed <- land_source(lake, src)
       ih <- fingerprint(list(
         source = src$id,
         content = landed$hash,
-        business_date = as.character(business_date)
+        business_date = as.character(business_date),
+        product_inputs = lapply(
+          attr(pipeline, "tw_product_inputs"),
+          function(x) {
+            x[c("source", "source_version", "fingerprint")]
+          }
+        )
       ))
       exec(
         lake,
@@ -524,6 +548,22 @@ dl_run.dl_pipeline <- function(
           business_date = as.character(business_date)
         )
       )
+      extra_inputs <- attr(pipeline, "tw_product_inputs") %||% list()
+      for (input in if (isTRUE(attr(pipeline, "tw_inputs_recorded"))) {
+        list()
+      } else {
+        extra_inputs
+      }) {
+        insert_meta(
+          lake,
+          "inputs",
+          c(
+            list(run_id = run),
+            input,
+            list(business_date = as.character(business_date))
+          )
+        )
+      }
       cached <- if (!identical(cache, FALSE)) {
         find_cached(
           lake,
@@ -560,7 +600,7 @@ dl_run.dl_pipeline <- function(
               "An input gate requires a materialized data frame from the reader."
             )
           }
-          input_quality <- dl_validate(
+          input_quality <- validate(
             extracted,
             input_contract,
             stage = "ingest"
@@ -569,7 +609,7 @@ dl_run.dl_pipeline <- function(
           if (!quality_ok(input_quality)) {
             abort(
               "Input quality gate blocked writing the raw table.",
-              "dl_input_blocked",
+              "tw_input_blocked",
               quality = input_quality
             )
           }
@@ -599,7 +639,7 @@ dl_run.dl_pipeline <- function(
             error = function(e) {
               abort(
                 paste("Transform failed:", step$id),
-                "dl_transform_failed",
+                "tw_transform_failed",
                 parent = e
               )
             }
@@ -612,27 +652,27 @@ dl_run.dl_pipeline <- function(
                 "Transform must return a data frame or lazy table:",
                 step$id
               ),
-              "dl_transform_failed"
+              "tw_transform_failed"
             )
           }
         }
         candidate <- compose_candidate(lake, transformed, pub, run)
         if (isTRUE(pipeline$infer_contract)) {
-          resolver <- attr(pipeline, "dl_resolve_contract")
+          resolver <- attr(pipeline, "tw_resolve_contract")
           if (!is.function(resolver)) {
             abort(
               "Rebuild this product from its project code before executing it."
             )
           }
           contract <- resolver(candidate$data)
-          dl_register(lake, contract)
+          register(lake, contract)
         }
         quality_data <- if (!is.null(pipeline$composition)) {
-          dl_collect(candidate$data)
+          collect(candidate$data)
         } else {
           candidate$data
         }
-        quality <- dl_validate(quality_data, contract)
+        quality <- validate(quality_data, contract)
         persist_quality(lake, run, contract, quality)
         quality <- dplyr::bind_rows(input_quality, quality)
         if (!quality_ok(quality)) {
@@ -663,12 +703,23 @@ dl_run.dl_pipeline <- function(
             dh,
             ih,
             business_date,
-            list(list(from_id = paste0("raw.", pub$asset), from_version = run))
+            c(
+              list(list(
+                from_id = paste0("raw.", pub$asset),
+                from_version = run
+              )),
+              lapply(extra_inputs, function(input) {
+                list(
+                  from_id = input$source,
+                  from_version = input$source_version
+                )
+              })
+            )
           )
         }
       }
     },
-    dl_input_blocked = function(e) {
+    tw_input_blocked = function(e) {
       finish_run(
         lake,
         run,
@@ -687,7 +738,7 @@ dl_run.dl_pipeline <- function(
       run_result(run, "blocked", quality = e$quality)
     },
     error = function(e) {
-      status <- if (inherits(e, "dl_missing_delivery")) "missing" else "error"
+      status <- if (inherits(e, "tw_missing_delivery")) "missing" else "error"
       # Avoid logging arbitrary exception text, which may contain source values or credentials.
       msg <- if (status == "missing") {
         "Expected source file is missing."
@@ -712,7 +763,7 @@ dl_run.dl_pipeline <- function(
   if (stop_on_failure && !result$status %in% c("published", "cached")) {
     abort(
       paste("Run", run, "ended with", result$status, "; metadata persisted."),
-      "dl_run_failed",
+      "tw_run_failed",
       result = result,
       parent = result$error
     )
@@ -720,8 +771,8 @@ dl_run.dl_pipeline <- function(
   result
 }
 #' @export
-print.dl_run_result <- function(x, ...) {
-  cat("<dl_run>", x$run_id, "|", x$status, "| release:", x$release_id, "\n")
+print.tw_run_result <- function(x, ...) {
+  cat("<run>", x$run_id, "|", x$status, "| release:", x$release_id, "\n")
   invisible(x)
 }
 
@@ -731,18 +782,18 @@ print.dl_run_result <- function(x, ...) {
 #' @return Runs still marked running. Never auto-cancels a possibly live writer.
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
-#' root <- tempfile("lakefold-example-")
-#' config <- dl_config(
-#'   dl_catalog_duckdb(file.path(root, "lake.db")),
-#'   dl_storage_local(file.path(root, "data")),
+#' root <- tempfile("tidyweave-example-")
+#' config <- lake_config(
+#'   registry_duckdb(file.path(root, "lake.db")),
+#'   storage_local(file.path(root, "data")),
 #'   landing = file.path(root, "landing"), backend = "duckdb"
 #' )
-#' lake <- dl_connect(config)
-#' dl_interrupted(lake)
-#' dl_disconnect(lake)
+#' lake <- connect_lake(config)
+#' interrupted(lake)
+#' disconnect_lake(lake)
 #' unlink(root, recursive = TRUE)
-dl_interrupted <- function(lake, older_than_hours = 1) {
-  runs <- dl_registry(lake, "runs")
+interrupted <- function(lake, older_than_hours = 1) {
+  runs <- registry(lake, "runs")
   started <- as.POSIXct(
     runs$started_at,
     format = "%Y-%m-%dT%H:%M:%OSZ",
@@ -756,6 +807,6 @@ dl_interrupted <- function(lake, older_than_hours = 1) {
 }
 
 #' @export
-dl_run.default <- function(pipeline, lake = NULL, ...) {
-  dl_execute(pipeline, lake, ...)
+run.default <- function(pipeline, lake = NULL, ...) {
+  tw_execute(pipeline, lake, ...)
 }

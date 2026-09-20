@@ -3,21 +3,21 @@
 #' Reads only a zero-row prototype for lazy tables. Required fields, keys,
 #' units and business rules are never inferred from sample values. The draft
 #' cannot be used for a quality gate or registered until explicitly confirmed.
-#' @param data A data frame or lazy database table.
+#' @param data A data frame, lazy database table or Arrow table.
 #' @param id Contract identifier.
 #' @param owner,description,grain Optional business metadata.
 #' @param version Contract definition version.
-#' @param ... Additional arguments to [dl_contract()], such as `key`,
+#' @param ... Additional arguments to [contract()], such as `key`,
 #'   `required`, `rules`, `operator` or `column_metadata`.
-#' @returns A printable `dl_contract_draft` inheriting from `dl_contract`.
-#' @seealso [dl_contract_confirm()], [dl_contract_diff()]
+#' @returns A printable `tw_contract_draft` inheriting from `contract`.
+#' @seealso [contract_confirm()], [contract_diff()]
 #' @export
 #' @examples
-#' draft <- dl_contract_from(data.frame(id = 1:2, amount = c(10, 20)),
+#' draft <- contract_from(data.frame(id = 1:2, amount = c(10, 20)),
 #'   "orders", "Analytics", "Order amounts", "One order", key = "id")
-#' contract <- dl_contract_confirm(draft)
-#' dl_validate(data.frame(id = 1L, amount = 10), contract)
-dl_contract_from <- function(
+#' contract <- contract_confirm(draft)
+#' validate(data.frame(id = 1L, amount = 10), contract)
+contract_from <- function(
   data,
   id,
   owner = "",
@@ -32,7 +32,7 @@ dl_contract_from <- function(
     args$required <- character()
   }
   contract <- do.call(
-    dl_contract,
+    contract,
     c(
       list(
         id = id,
@@ -46,30 +46,34 @@ dl_contract_from <- function(
     )
   )
   contract$draft <- TRUE
-  class(contract) <- c("dl_contract_draft", "dl_contract")
+  class(contract) <- c("tw_contract_draft", "tw_contract")
   contract
 }
 
 infer_column_types <- function(data) {
-  if (!is.data.frame(data) && !inherits(data, "tbl_sql")) {
-    abort("data must be a data frame or lazy database table.")
-  }
-  proto <- if (inherits(data, "tbl_sql")) {
-    dplyr::collect(utils::head(data, 0))
-  } else {
-    data[0, , drop = FALSE]
-  }
+  proto <- table_prototype(data)
   vapply(
     proto,
     function(x) {
+      x <- contract_column_value(x)
       if (inherits(x, "Date")) {
         return("Date")
       }
       if (inherits(x, "POSIXct")) {
         return("POSIXct")
       }
-      if (inherits(x, c("factor", "integer64")) || is.object(x)) {
-        abort("Convert unsupported classed columns explicitly before drafting.")
+      if (inherits(x, "integer64")) {
+        return("integer64")
+      }
+      if (is.factor(x)) {
+        return("character")
+      }
+      if (is.object(x)) {
+        abort(paste0(
+          "Column class `",
+          class(x)[[1]],
+          "` has no contract type. Convert it explicitly before validation."
+        ))
       }
       if (is.integer(x)) {
         return("integer")
@@ -83,9 +87,46 @@ infer_column_types <- function(data) {
       if (is.logical(x)) {
         return("logical")
       }
+      if (is.list(x)) {
+        return("list")
+      }
       abort("Unsupported column type in contract draft.")
     },
     character(1)
+  )
+}
+
+table_prototype <- function(data) {
+  if (is.data.frame(data)) {
+    return(data[0, , drop = FALSE])
+  }
+  if (is_lazy_table(data)) {
+    return(dplyr::collect(utils::head(data, 0)))
+  }
+  abort("data must be a data frame, lazy database table or Arrow table.")
+}
+
+contract_column_value <- function(x) {
+  if (inherits(x, "AsIs")) {
+    remaining <- setdiff(class(x), "AsIs")
+    class(x) <- if (length(remaining)) remaining else NULL
+  }
+  x
+}
+
+contract_type_matches <- function(x, type) {
+  x <- contract_column_value(x)
+  switch(
+    type,
+    numeric = is.numeric(x) && !is.object(x),
+    integer = is.integer(x) && !is.object(x),
+    character = is.character(x) || is.factor(x),
+    logical = is.logical(x) && !is.object(x),
+    Date = inherits(x, "Date"),
+    POSIXct = inherits(x, "POSIXct"),
+    integer64 = inherits(x, "integer64"),
+    list = is.list(x) && !is.object(x),
+    FALSE
   )
 }
 
@@ -94,28 +135,28 @@ infer_column_types <- function(data) {
 #' Confirms that the caller has reviewed the inferred types and chosen the
 #' nullability, keys, rules and optional metadata. This is a local specification
 #' transition, not an approval workflow or a proof that any data passed.
-#' @param contract A draft from [dl_contract_from()].
-#' @returns A `dl_contract` ready for registration and validation.
+#' @param contract A draft from [contract_from()].
+#' @returns A `contract` ready for registration and validation.
 #' @export
 #' @examples
-#' draft <- dl_contract_from(data.frame(id = 1L), "orders", "Analytics",
+#' draft <- contract_from(data.frame(id = 1L), "orders", "Analytics",
 #'   "Order identifiers", "One order", key = "id")
-#' dl_contract_confirm(draft)
-dl_contract_confirm <- function(contract) {
-  if (!inherits(contract, "dl_contract_draft")) {
-    abort("contract must be a draft from dl_contract_from().")
+#' contract_confirm(draft)
+contract_confirm <- function(contract) {
+  if (!inherits(contract, "tw_contract_draft")) {
+    abort("contract must be a draft from contract_from().")
   }
   args <- unclass(contract)
   args[c("draft", "kind")] <- NULL
   args$columns <- unlist(args$columns, use.names = TRUE)
-  do.call(dl_contract, args)
+  do.call(tidyweave::contract, args)
 }
 
 assert_contract_ready <- function(contract) {
-  if (inherits(contract, "dl_contract_draft") || isTRUE(contract$draft)) {
+  if (inherits(contract, "tw_contract_draft") || isTRUE(contract$draft)) {
     abort(
-      "Review the contract draft and call dl_contract_confirm() first.",
-      "dl_contract_draft"
+      "Review the contract draft and call contract_confirm() first.",
+      "tw_contract_draft"
     )
   }
 }
@@ -129,13 +170,13 @@ assert_contract_ready <- function(contract) {
 #' @returns A tibble with `field`, `before`, `after` and `breaking`.
 #' @export
 #' @examples
-#' old <- dl_contract("orders", "1", "Analytics", "Orders", "One order",
+#' old <- contract("orders", "1", "Analytics", "Orders", "One order",
 #'   c(id = "integer"), key = "id")
-#' new <- dl_contract("orders", "2", "Analytics", "Orders", "One order",
+#' new <- contract("orders", "2", "Analytics", "Orders", "One order",
 #'   c(id = "integer", amount = "numeric"), key = "id")
-#' dl_contract_diff(old, new)
-dl_contract_diff <- function(old, new) {
-  if (!inherits(old, "dl_contract") || !inherits(new, "dl_contract")) {
+#' contract_diff(old, new)
+contract_diff <- function(old, new) {
+  if (!inherits(old, "tw_contract") || !inherits(new, "tw_contract")) {
     abort("old and new must be contract specifications.")
   }
   changes <- list()
@@ -192,7 +233,7 @@ dl_contract_diff <- function(old, new) {
 }
 
 #' @export
-print.dl_contract_draft <- function(x, ...) {
-  cat("<dl_contract_draft> Review business rules before confirming.\n")
-  print.dl_contract(x, ...)
+print.tw_contract_draft <- function(x, ...) {
+  cat("<tw_contract_draft> Review business rules before confirming.\n")
+  print.tw_contract(x, ...)
 }

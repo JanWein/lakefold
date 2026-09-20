@@ -2,38 +2,38 @@
 #'
 #' Creates or reopens a self-contained local folder. DuckDB is the default and
 #' needs no extension download or external service. The backend is remembered
-#' in `lakefold.json`; reopening a folder never silently switches backends.
+#' in `tidyweave.json`; reopening a folder never silently switches backends.
 #' A new lake needs an empty or nonexistent folder. Existing lakes made with
-#' custom configuration still open through [dl_connect()].
-#' Use [dl_config()] and [dl_connect()] for custom layers or remote storage.
-#' @param path Local folder, created if needed. Defaults to `"lakefold"` in
+#' custom configuration still open through [connect_lake()].
+#' Use [lake_config()] and [connect_lake()] for custom layers or remote storage.
+#' @param path Local folder, created if needed. Defaults to `"tidyweave"` in
 #'   the working directory.
 #' @param backend Optional `"duckdb"` or `"ducklake"`. DuckLake requires its
 #'   DuckDB extension. Defaults to the saved choice, or DuckDB for a new folder.
 #' @param read_only Open an existing lake without registry or data writes.
 #' @param lake Connected lake to close.
-#' @returns `dl_open()` returns a connected `dl_lake`. `dl_close()` invisibly
-#'   returns `TRUE`; it is an alias for [dl_disconnect()].
-#' @seealso [dl_write()], [dl_read()]
+#' @returns `open_lake()` returns a connected `tw_lake`. `close_lake()` invisibly
+#'   returns `TRUE`; it is an alias for [disconnect_lake()].
+#' @seealso [write_data()], [read_release()]
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
-#' root <- tempfile("lakefold-")
-#' lake <- dl_open(root)
-#' dl_write(lake, data.frame(id = 1:2), "orders")
-#' dl_read(lake, "orders")
-#' dl_close(lake)
-#' lake <- dl_open(root) # reopens the same data
-#' dl_read(lake, "orders")
-#' dl_close(lake)
+#' root <- tempfile("tidyweave-")
+#' lake <- open_lake(root)
+#' write_data(lake, data.frame(id = 1:2), "orders")
+#' read_release(lake, "orders")
+#' close_lake(lake)
+#' lake <- open_lake(root) # reopens the same data
+#' read_release(lake, "orders")
+#' close_lake(lake)
 #' unlink(root, recursive = TRUE)
-dl_open <- function(path = "lakefold", backend = NULL, read_only = FALSE) {
+open_lake <- function(path = "tidyweave", backend = NULL, read_only = FALSE) {
   need("duckdb")
   flag(read_only, "read_only")
   path <- absolute_path(path)
   if (!is.null(backend)) {
     backend <- match.arg(backend, c("duckdb", "ducklake"))
   }
-  manifest <- file.path(path, "lakefold.json")
+  manifest <- file.path(path, "tidyweave.json")
   if (file.exists(manifest)) {
     saved <- tryCatch(
       jdecode(paste(readLines(manifest, warn = FALSE), collapse = "\n")),
@@ -47,7 +47,7 @@ dl_open <- function(path = "lakefold", backend = NULL, read_only = FALSE) {
         !saved$backend %in% c("duckdb", "ducklake")
     ) {
       abort(
-        "Invalid lakefold.json. Restore the folder's original configuration."
+        "Invalid tidyweave.json. Restore the folder's original configuration."
       )
     }
     if (!is.null(backend) && !identical(backend, saved$backend)) {
@@ -62,7 +62,7 @@ dl_open <- function(path = "lakefold", backend = NULL, read_only = FALSE) {
     }
     if (length(list.files(path, all.files = TRUE, no.. = TRUE))) {
       abort(
-        "This folder is not empty and has no lakefold.json. Use its original dl_config() or choose an empty folder."
+        "This folder is not empty and has no tidyweave.json. Use its original lake_config() or choose an empty folder."
       )
     }
     backend <- backend %||% "duckdb"
@@ -73,20 +73,20 @@ dl_open <- function(path = "lakefold", backend = NULL, read_only = FALSE) {
     temp <- tempfile("config-", tmpdir = path)
     on.exit(unlink(temp), add = TRUE)
     writeLines(jencode(list(format = 1L, backend = backend)), temp)
-    if (!file.rename(temp, manifest)) abort("Unable to save lakefold.json.")
+    if (!file.rename(temp, manifest)) abort("Unable to save tidyweave.json.")
   }
-  dl_setup(
-    catalog = dl_catalog_duckdb(file.path(path, "metadata.duckdb")),
-    storage = dl_storage_local(file.path(path, "data")),
+  setup_lake(
+    catalog = registry_duckdb(file.path(path, "metadata.duckdb")),
+    storage = storage_local(file.path(path, "data")),
     landing = file.path(path, "landing"),
     backend = backend,
     read_only = read_only
   )
 }
 
-#' @rdname dl_open
+#' @rdname open_lake
 #' @export
-dl_close <- function(lake) dl_disconnect(lake)
+close_lake <- function(lake) disconnect_lake(lake)
 
 #' Write data with optional configuration
 #'
@@ -100,7 +100,7 @@ dl_close <- function(lake) dl_disconnect(lake)
 #' change. Once an execution attempt uses an explicit contract, subsequent writes
 #' must supply one too, even if that attempt was blocked. This prevents
 #' accidentally dropping its rules. Draft contracts
-#' still require [dl_contract_confirm()].
+#' still require [contract_confirm()].
 #'
 #' Data frames are archived as RDS snapshots. File inputs preserve their original
 #' bytes before parsing. CSV, TSV and RDS have native readers; Excel uses
@@ -109,13 +109,13 @@ dl_close <- function(lake) dl_disconnect(lake)
 #' first file may be parsed twice to establish and validate its schema. Readers
 #' must be deterministic and must not modify their input.
 #'
-#' Definition versions are derived automatically. Use [dl_ingest()] when manual
-#' control of definition versions is needed. Built-in
+#' Definition versions are derived automatically. Use [product()] and [run()]
+#' when composing transformations or controlling definition versions. Built-in
 #' readers and structural checks can reuse the current release. Custom readers
 #' or rules run again by default because captured values and external state
 #' cannot be fingerprinted reliably. Supply `code_version` to enable reuse and
 #' update it whenever code, dependencies or captured values change.
-#' @param lake Connected lake or [dl_config()].
+#' @param lake Connected lake or [lake_config()].
 #' @param data Data frame, path to a local file, or a zero-argument function
 #'   returning a data frame. A source function is called once per write before
 #'   cache lookup; its returned data is archived as RDS. Use it to connect
@@ -134,24 +134,24 @@ dl_close <- function(lake) dl_disconnect(lake)
 #' @param partition_by Optional column names identifying complete partitions
 #'   to replace. Omit to replace the whole asset. Every row of each supplied
 #'   partition replaces that partition; other partitions remain published.
-#' @param ... Arguments passed to [dl_ingest()], such as `business_date`,
+#' @param ... Publication options, such as `business_date`,
 #'   `notify`, `layer` and `stop_on_failure`.
-#' @returns A `dl_run_result` with status, release ID and quality results.
-#'   [dl_read()] returns the published data; [dl_quality()] explains a failure.
-#' @seealso [dl_open()], [dl_read()], [dl_ingest()], [dl_pipeline()]
+#' @returns A `tw_run_result` with status, release ID and quality results.
+#'   [read_release()] returns the published data; [quality()] explains a failure.
+#' @seealso [open_lake()], [read_release()], [product()], [run()]
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
-#' root <- tempfile("lakefold-")
-#' lake <- dl_open(root)
+#' root <- tempfile("tidyweave-")
+#' lake <- open_lake(root)
 #' orders <- data.frame(id = 1:3, amount = c(25, 75, 50))
-#' dl_write(lake, orders)
-#' dl_read(lake, "orders")
-#' contract <- dl_contract("orders.checked",
+#' write_data(lake, orders)
+#' read_release(lake, "orders")
+#' contract <- contract("orders.checked",
 #'   columns = c(id = "integer", amount = "numeric"), key = "id")
-#' dl_write(lake, orders, contract = contract)
-#' dl_close(lake)
+#' write_data(lake, orders, contract = contract)
+#' close_lake(lake)
 #' unlink(root, recursive = TRUE)
-dl_write <- function(
+write_data <- function(
   lake,
   data,
   name = NULL,
@@ -176,7 +176,7 @@ dl_write <- function(
       if (!is.data.frame(received)) {
         abort("A source function must return a data frame.")
       }
-      dl_write(
+      write_data(
         con,
         received,
         name,
@@ -223,8 +223,8 @@ dl_write <- function(
   }
   for (value in list(contract, input_contract)) {
     if (!is.null(value)) {
-      if (!inherits(value, "dl_contract")) {
-        abort("Use dl_contract() for contracts.")
+      if (!inherits(value, "tw_contract")) {
+        abort("Use contract() for contracts.")
       }
       assert_contract_ready(value)
     }
@@ -239,7 +239,7 @@ dl_write <- function(
     }
     source <- NULL
     if (file_input) {
-      source <- dl_source(paste0(name, ".file"), data, reader)
+      source <- source_file(paste0(name, ".file"), data, reader)
       landed <- land_source(con, source)
       source$original_path <- source$path
       source$path <- landed$path
@@ -279,7 +279,7 @@ dl_write <- function(
       )
     }
     runtime <- list(
-      package = as.character(utils::packageVersion("lakefold")),
+      package = as.character(utils::packageVersion("tidyweave")),
       R = as.character(getRversion()),
       duckdb = as.character(utils::packageVersion("duckdb"))
     )
@@ -296,7 +296,7 @@ dl_write <- function(
     )
     if (file_input) {
       source$version <- version
-      dl_ingest(
+      tw_ingest(
         con,
         source,
         contract,
@@ -309,7 +309,7 @@ dl_write <- function(
         ...
       )
     } else {
-      dl_ingest_data(
+      tw_ingest_data(
         con,
         data,
         contract,
@@ -345,7 +345,7 @@ automatic_types <- function(columns) {
 }
 
 automatic_schema <- function(name, columns) {
-  contract <- dl_contract(
+  contract <- contract(
     paste0(name, ".schema"),
     version = paste0("auto-", fingerprint(columns)),
     columns = columns,
@@ -382,7 +382,7 @@ published_schema <- function(lake, name) {
       )
     }
   }
-  release <- tryCatch(resolve_release(lake, name), dl_no_release = function(e) {
+  release <- tryCatch(resolve_release(lake, name), tw_no_release = function(e) {
     NULL
   })
   if (is.null(release)) {
@@ -428,21 +428,21 @@ published_schema <- function(lake, name) {
 #' @param release Optional release ID. Defaults to the latest release.
 #' @param lazy Return a lazy database table instead of collecting all rows.
 #' @returns A tibble, or a lazy `tbl_sql` when `lazy = TRUE`.
-#' @seealso [dl_write()], [dl_tbl()], [dl_releases()]
+#' @seealso [write_data()], [tbl()], [releases()]
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
-#' root <- tempfile("lakefold-")
-#' lake <- dl_open(root)
-#' dl_write(lake, data.frame(id = 1:3), "orders")
-#' dl_read(lake, "orders")
-#' dl_read(lake, "orders", lazy = TRUE) |>
+#' root <- tempfile("tidyweave-")
+#' lake <- open_lake(root)
+#' write_data(lake, data.frame(id = 1:3), "orders")
+#' read_release(lake, "orders")
+#' read_release(lake, "orders", lazy = TRUE) |>
 #'   dplyr::filter(id > 1) |>
 #'   dplyr::collect()
-#' dl_close(lake)
+#' close_lake(lake)
 #' unlink(root, recursive = TRUE)
-dl_read <- function(lake, name, release = NULL, lazy = FALSE) {
+read_release <- function(lake, name, release = NULL, lazy = FALSE) {
   flag(lazy, "lazy")
-  data <- dl_tbl(lake, name, release)
+  data <- tbl(lake, name, release)
   if (lazy) data else dplyr::collect(data)
 }
 

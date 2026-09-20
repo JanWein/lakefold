@@ -4,29 +4,30 @@
 #' @return Tibble of published assets with latest attempt and freshness.
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
-#' root <- tempfile("lakefold-example-")
-#' config <- dl_config(
-#'   dl_catalog_duckdb(file.path(root, "lake.db")),
-#'   dl_storage_local(file.path(root, "data")),
+#' root <- tempfile("tidyweave-example-")
+#' config <- lake_config(
+#'   registry_duckdb(file.path(root, "lake.db")),
+#'   storage_local(file.path(root, "data")),
 #'   landing = file.path(root, "landing"), backend = "duckdb"
 #' )
-#' lake <- dl_connect(config)
+#' lake <- connect_lake(config)
 #' path <- file.path(root, "orders.csv")
 #' utils::write.csv(data.frame(order_id = 1:2, amount = c(25, 75)), path,
 #'   row.names = FALSE)
-#' source <- dl_source("orders.file", path, reader = utils::read.csv)
-#' contract <- dl_contract(
+#' source <- source_file("orders.file", path, reader = utils::read.csv)
+#' contract <- contract(
 #'   "orders", "1.0.0", "Analytics", "Order amounts", "One order",
 #'   c(order_id = "integer", amount = "numeric"), key = "order_id"
 #' )
-#' release <- dl_ingest(lake, source, contract, "orders", code_version = "v1")
-#' dl_freshness(lake)
-#' dl_disconnect(lake)
+#' release <- product("orders", contract = contract, code_version = "v1") |>
+#'   add_source(source) |> publish(to = lake)
+#' freshness(lake)
+#' disconnect_lake(lake)
 #' unlink(root, recursive = TRUE)
-dl_freshness <- function(lake, at = Sys.time()) {
+freshness <- function(lake, at = Sys.time()) {
   catalog_summary(
     lapply(c("assets", "releases", "runs", "events"), function(n) {
-      dl_registry(lake, n)
+      registry(lake, n)
     }) |>
       stats::setNames(c("assets", "releases", "runs", "events")),
     at
@@ -147,17 +148,17 @@ catalog_summary <- function(snapshot, at = Sys.time()) {
 #'   exported.
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
-#' root <- tempfile("lakefold-example-")
-#' config <- dl_config(
-#'   dl_catalog_duckdb(file.path(root, "lake.db")),
-#'   dl_storage_local(file.path(root, "data")),
+#' root <- tempfile("tidyweave-example-")
+#' config <- lake_config(
+#'   registry_duckdb(file.path(root, "lake.db")),
+#'   storage_local(file.path(root, "data")),
 #'   landing = file.path(root, "landing"), backend = "duckdb"
 #' )
-#' lake <- dl_connect(config)
-#' dl_catalog_export(lake, file.path(root, "catalog.json"))
-#' dl_disconnect(lake)
+#' lake <- connect_lake(config)
+#' catalog_export(lake, file.path(root, "catalog.json"))
+#' disconnect_lake(lake)
 #' unlink(root, recursive = TRUE)
-dl_catalog_export <- function(lake, path) {
+catalog_export <- function(lake, path) {
   # Reports include values and are intentionally excluded from catalog exports.
   names <- c(
     "assets",
@@ -169,7 +170,7 @@ dl_catalog_export <- function(lake, path) {
     "events"
   )
   snapshot <- stats::setNames(
-    lapply(names, function(n) dl_registry(lake, n)),
+    lapply(names, function(n) registry(lake, n)),
     names
   )
   snapshot$exported_at <- now()
@@ -193,24 +194,24 @@ dl_catalog_export <- function(lake, path) {
 
 #' Start a read-only data catalog
 #' @param lake Connected lake, or NULL when reading an exported snapshot.
-#' @param snapshot Path to JSON exported by dl_catalog_export().
+#' @param snapshot Path to JSON exported by catalog_export().
 #' @param launch Start the app; FALSE returns a shiny.appobj for Connect.
 #' @param refresh_seconds Metadata refresh interval.
 #' @return A Shiny app object (when launch = FALSE).
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
-#' root <- tempfile("lakefold-example-")
-#' config <- dl_config(
-#'   dl_catalog_duckdb(file.path(root, "lake.db")),
-#'   dl_storage_local(file.path(root, "data")),
+#' root <- tempfile("tidyweave-example-")
+#' config <- lake_config(
+#'   registry_duckdb(file.path(root, "lake.db")),
+#'   storage_local(file.path(root, "data")),
 #'   landing = file.path(root, "landing"), backend = "duckdb"
 #' )
-#' lake <- dl_connect(config)
-#' app <- dl_catalog(lake, launch = FALSE)
+#' lake <- connect_lake(config)
+#' app <- catalog_app(lake, launch = FALSE)
 #' class(app)
-#' dl_disconnect(lake)
+#' disconnect_lake(lake)
 #' unlink(root, recursive = TRUE)
-dl_catalog <- function(
+catalog_app <- function(
   lake = NULL,
   snapshot = NULL,
   launch = interactive(),
@@ -250,11 +251,11 @@ dl_catalog <- function(
         "lineage_edges",
         "events"
       )
-      stats::setNames(lapply(names, function(n) dl_registry(lake, n)), names)
+      stats::setNames(lapply(names, function(n) registry(lake, n)), names)
     }
   }
   ui <- bslib::page_sidebar(
-    title = "lakefold | Data Catalog",
+    title = "tidyweave | Data Catalog",
     theme = bslib::bs_theme(
       version = 5,
       bootswatch = "flatly",
@@ -548,7 +549,7 @@ dl_catalog <- function(
       }
       x <- x[order(x$published_at, decreasing = TRUE), ]
       paste0(
-        'dl_tbl(lake, "',
+        'tbl(lake, "',
         x$asset[[1]],
         '", release = "',
         x$release_id[[1]],

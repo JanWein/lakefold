@@ -9,37 +9,37 @@
 #' @return A serializable configuration object containing no credentials.
 #' @export
 #' @examples
-#' dl_catalog_duckdb(file.path(tempdir(), "lake.db"))
-#' dl_storage_local(file.path(tempdir(), "data"))
-#' dl_catalog_postgres("DUCKLAKE_PG_CONNECTION")
-dl_catalog_duckdb <- function(path) {
+#' registry_duckdb(file.path(tempdir(), "lake.db"))
+#' storage_local(file.path(tempdir(), "data"))
+#' registry_postgres("DUCKLAKE_PG_CONNECTION")
+registry_duckdb <- function(path) {
   structure(
     list(type = "duckdb", path = absolute_path(path)),
-    class = "dl_catalog_spec"
+    class = "tw_catalog_spec"
   )
 }
-#' @rdname dl_catalog_duckdb
+#' @rdname registry_duckdb
 #' @export
-dl_catalog_postgres <- function(connection_env = "DUCKLAKE_PG_CONNECTION") {
+registry_postgres <- function(connection_env = "DUCKLAKE_PG_CONNECTION") {
   structure(
     list(
       type = "postgres",
       connection_env = scalar(connection_env, "connection_env")
     ),
-    class = "dl_catalog_spec"
+    class = "tw_catalog_spec"
   )
 }
-#' @rdname dl_catalog_duckdb
+#' @rdname registry_duckdb
 #' @export
-dl_storage_local <- function(path) {
+storage_local <- function(path) {
   structure(
     list(type = "local", path = absolute_path(path)),
-    class = "dl_storage_spec"
+    class = "tw_storage_spec"
   )
 }
-#' @rdname dl_catalog_duckdb
+#' @rdname registry_duckdb
 #' @export
-dl_storage_s3 <- function(
+storage_s3 <- function(
   bucket,
   prefix = "dataloom/",
   endpoint,
@@ -59,7 +59,7 @@ dl_storage_s3 <- function(
       endpoint = sub("/$", "", endpoint),
       region = region
     ),
-    class = "dl_storage_spec"
+    class = "tw_storage_spec"
   )
 }
 
@@ -74,29 +74,29 @@ dl_storage_s3 <- function(
 #' @param read_only Attach existing storage read-only and skip schema creation
 #'   and migration. A lake created by a newer package may require an upgrade.
 #' @param config A configuration from a previously connected lake.
-#' @return A connected lake handle. Close it with dl_disconnect().
+#' @return A connected lake handle. Close it with disconnect_lake().
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
-#' root <- tempfile("lakefold-example-")
-#' config <- dl_config(
-#'   dl_catalog_duckdb(file.path(root, "lake.db")),
-#'   dl_storage_local(file.path(root, "data")),
+#' root <- tempfile("tidyweave-example-")
+#' config <- lake_config(
+#'   registry_duckdb(file.path(root, "lake.db")),
+#'   storage_local(file.path(root, "data")),
 #'   landing = file.path(root, "landing"), backend = "duckdb"
 #' )
-#' lake <- dl_connect(config)
+#' lake <- connect_lake(config)
 #' lake
-#' dl_disconnect(lake)
+#' disconnect_lake(lake)
 #' unlink(root, recursive = TRUE)
-dl_setup <- function(
-  catalog = dl_catalog_duckdb("metadata.ducklake"),
-  storage = dl_storage_local("data"),
+setup_lake <- function(
+  catalog = registry_duckdb("metadata.ducklake"),
+  storage = storage_local("data"),
   layers = c("raw", "validated", "products"),
   landing = "landing",
   backend = c("ducklake", "duckdb"),
   install_extensions = TRUE,
   read_only = FALSE
 ) {
-  dl_connect(dl_config(
+  connect_lake(lake_config(
     catalog,
     storage,
     layers,
@@ -111,16 +111,16 @@ dl_setup <- function(
 #'
 #' This constructor validates configuration and resolves paths, but does not
 #' create directories, install extensions, connect to databases or read secrets.
-#' Pass its result to `dl_connect()` or `dl_pipeline()` when ready to execute.
-#' @inheritParams dl_setup
-#' @return A connection-free `dl_config` specification.
+#' Pass its result to [connect_lake()] or [target_lake()] when ready to execute.
+#' @inheritParams setup_lake
+#' @return A connection-free `lake_config` specification.
 #' @export
 #' @examples
-#' config <- dl_config(backend = "duckdb")
+#' config <- lake_config(backend = "duckdb")
 #' print(config)
-dl_config <- function(
-  catalog = dl_catalog_duckdb("metadata.ducklake"),
-  storage = dl_storage_local("data"),
+lake_config <- function(
+  catalog = registry_duckdb("metadata.ducklake"),
+  storage = storage_local("data"),
   layers = c("raw", "validated", "products"),
   landing = "landing",
   backend = c("ducklake", "duckdb"),
@@ -130,8 +130,8 @@ dl_config <- function(
   flag(read_only, "read_only")
   backend <- match.arg(backend)
   if (
-    !inherits(catalog, "dl_catalog_spec") ||
-      !inherits(storage, "dl_storage_spec")
+    !inherits(catalog, "tw_catalog_spec") ||
+      !inherits(storage, "tw_storage_spec")
   ) {
     abort("Use catalog and storage constructors.")
   }
@@ -154,16 +154,16 @@ dl_config <- function(
       install_extensions = install_extensions,
       read_only = read_only
     ),
-    class = "dl_config"
+    class = "tw_config"
   )
 }
 
-#' @rdname dl_setup
+#' @rdname setup_lake
 #' @export
-dl_connect <- function(config, read_only = config$read_only %||% FALSE) {
+connect_lake <- function(config, read_only = config$read_only %||% FALSE) {
   need("duckdb")
-  if (!inherits(config, "dl_config")) {
-    abort("Use dl_config() to describe this lake.")
+  if (!inherits(config, "tw_config")) {
+    abort("Use lake_config() to describe this lake.")
   }
   flag(read_only, "read_only")
   config$read_only <- read_only
@@ -174,10 +174,14 @@ dl_connect <- function(config, read_only = config$read_only %||% FALSE) {
   ) {
     abort("A read-only catalog must already exist.")
   }
-  con <- DBI::dbConnect(duckdb::duckdb(), dbdir = ":memory:")
+  con <- DBI::dbConnect(
+    duckdb::duckdb(),
+    dbdir = ":memory:",
+    bigint = "integer64"
+  )
   ok <- FALSE
   on.exit(if (!ok) DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
-  lake <- structure(list(con = con, config = config), class = "dl_lake")
+  lake <- structure(list(con = con, config = config), class = "tw_lake")
   cat <- config$catalog
   st <- config$storage
   if (!read_only) {
@@ -238,7 +242,7 @@ dl_connect <- function(config, read_only = config$read_only %||% FALSE) {
       tryCatch(
         exec(
           lake,
-          paste0("CREATE SECRET dl_s3 (", paste(parts, collapse = ", "), ")")
+          paste0("CREATE SECRET tw_s3 (", paste(parts, collapse = ", "), ")")
         ),
         error = function(e) {
           abort(
@@ -296,7 +300,7 @@ dl_connect <- function(config, read_only = config$read_only %||% FALSE) {
     registry_init(lake)
   } else {
     versions <- tryCatch(
-      dl_registry(lake, "schema_version")$version,
+      registry(lake, "schema_version")$version,
       error = function(e) {
         abort("Registry is missing. Open with a writable connection first.")
       }
@@ -317,25 +321,25 @@ dl_connect <- function(config, read_only = config$read_only %||% FALSE) {
 #' @return Invisibly TRUE.
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
-#' root <- tempfile("lakefold-example-")
-#' config <- dl_config(
-#'   dl_catalog_duckdb(file.path(root, "lake.db")),
-#'   dl_storage_local(file.path(root, "data")),
+#' root <- tempfile("tidyweave-example-")
+#' config <- lake_config(
+#'   registry_duckdb(file.path(root, "lake.db")),
+#'   storage_local(file.path(root, "data")),
 #'   landing = file.path(root, "landing"), backend = "duckdb"
 #' )
-#' lake <- dl_connect(config)
-#' dl_disconnect(lake)
+#' lake <- connect_lake(config)
+#' disconnect_lake(lake)
 #' unlink(root, recursive = TRUE)
-dl_disconnect <- function(lake) {
+disconnect_lake <- function(lake) {
   if (DBI::dbIsValid(lake$con)) {
     DBI::dbDisconnect(lake$con, shutdown = TRUE)
   }
   invisible(TRUE)
 }
 #' @export
-print.dl_lake <- function(x, ...) {
+print.tw_lake <- function(x, ...) {
   cat(
-    "<lakefold>",
+    "<tidyweave>",
     x$config$backend,
     "| layers:",
     paste(x$config$layers, collapse = ", "),

@@ -11,8 +11,8 @@ registry_init <- function(lake) {
   versions <- query(lake, paste("SELECT version FROM", registry_table))$version
   if (anyNA(versions) || any(versions > 3L)) {
     abort(
-      "Registry schema is newer than this lakefold version supports.",
-      "dl_registry_version"
+      "Registry schema is newer than this tidyweave version supports.",
+      "tw_registry_version"
     )
   }
   schemas <- list(
@@ -75,17 +75,17 @@ registry_init <- function(lake) {
 #' @return A tibble.
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
-#' root <- tempfile("lakefold-example-")
-#' config <- dl_config(
-#'   dl_catalog_duckdb(file.path(root, "lake.db")),
-#'   dl_storage_local(file.path(root, "data")),
+#' root <- tempfile("tidyweave-example-")
+#' config <- lake_config(
+#'   registry_duckdb(file.path(root, "lake.db")),
+#'   storage_local(file.path(root, "data")),
 #'   landing = file.path(root, "landing"), backend = "duckdb"
 #' )
-#' lake <- dl_connect(config)
-#' dl_registry(lake, "runs")
-#' dl_disconnect(lake)
+#' lake <- connect_lake(config)
+#' registry(lake, "runs")
+#' disconnect_lake(lake)
 #' unlink(root, recursive = TRUE)
-dl_registry <- function(
+registry <- function(
   lake,
   table = c(
     "assets",
@@ -115,24 +115,24 @@ dl_registry <- function(
 #'   errors.
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
-#' root <- tempfile("lakefold-example-")
-#' config <- dl_config(
-#'   dl_catalog_duckdb(file.path(root, "lake.db")),
-#'   dl_storage_local(file.path(root, "data")),
+#' root <- tempfile("tidyweave-example-")
+#' config <- lake_config(
+#'   registry_duckdb(file.path(root, "lake.db")),
+#'   storage_local(file.path(root, "data")),
 #'   landing = file.path(root, "landing"), backend = "duckdb"
 #' )
-#' lake <- dl_connect(config)
-#' contract <- dl_contract(
+#' lake <- connect_lake(config)
+#' contract <- contract(
 #'   "orders", "1.0.0", "Analytics", "Order amounts", "One order",
 #'   c(order_id = "integer", amount = "numeric"), key = "order_id"
 #' )
-#' dl_register(lake, contract)
-#' dl_registry(lake, "assets")
-#' dl_disconnect(lake)
+#' register(lake, contract)
+#' registry(lake, "assets")
+#' disconnect_lake(lake)
 #' unlink(root, recursive = TRUE)
-dl_register <- function(lake, object) {
+register <- function(lake, object) {
   assert_writable(lake)
-  if (inherits(object, "dl_contract")) {
+  if (inherits(object, "tw_contract")) {
     assert_contract_ready(object)
   }
   if (is.null(object$id) || is.null(object$version) || is.null(object$kind)) {
@@ -153,7 +153,7 @@ dl_register <- function(lake, object) {
   if (nrow(old)) {
     if (any(old$fingerprint != h)) {
       if (
-        inherits(object, "dl_metric") &&
+        inherits(object, "tw_metric") &&
           any(vapply(
             old$definition,
             function(x) is.character(jdecode(x)$expr),
@@ -162,7 +162,7 @@ dl_register <- function(lake, object) {
       ) {
         abort(
           "Legacy metric formulas used abbreviated labels. Register a new metric version; historical reports remain readable.",
-          "dl_legacy_metric"
+          "tw_legacy_metric"
         )
       }
       abort(paste(
@@ -203,7 +203,7 @@ resolve_release <- function(lake, asset, release = NULL) {
     params
   )
   if (!nrow(rows)) {
-    abort(paste("No published release for", asset), "dl_no_release")
+    abort(paste("No published release for", asset), "tw_no_release")
   }
   rows
 }
@@ -215,26 +215,27 @@ resolve_release <- function(lake, asset, release = NULL) {
 #' @return A lazy dbplyr table.
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
-#' root <- tempfile("lakefold-example-")
-#' config <- dl_config(
-#'   dl_catalog_duckdb(file.path(root, "lake.db")),
-#'   dl_storage_local(file.path(root, "data")),
+#' root <- tempfile("tidyweave-example-")
+#' config <- lake_config(
+#'   registry_duckdb(file.path(root, "lake.db")),
+#'   storage_local(file.path(root, "data")),
 #'   landing = file.path(root, "landing"), backend = "duckdb"
 #' )
-#' lake <- dl_connect(config)
+#' lake <- connect_lake(config)
 #' path <- file.path(root, "orders.csv")
 #' utils::write.csv(data.frame(order_id = 1:2, amount = c(25, 75)), path,
 #'   row.names = FALSE)
-#' source <- dl_source("orders.file", path, reader = utils::read.csv)
-#' contract <- dl_contract(
+#' source <- source_file("orders.file", path, reader = utils::read.csv)
+#' contract <- contract(
 #'   "orders", "1.0.0", "Analytics", "Order amounts", "One order",
 #'   c(order_id = "integer", amount = "numeric"), key = "order_id"
 #' )
-#' release <- dl_ingest(lake, source, contract, "orders", code_version = "v1")
-#' dl_tbl(lake, "orders", release$release_id) |> dplyr::collect()
-#' dl_disconnect(lake)
+#' release <- product("orders", contract = contract, code_version = "v1") |>
+#'   add_source(source) |> publish(to = lake)
+#' tbl(lake, "orders", release$release_id) |> dplyr::collect()
+#' disconnect_lake(lake)
 #' unlink(root, recursive = TRUE)
-dl_tbl <- function(lake, asset, release = NULL) {
+tbl <- function(lake, asset, release = NULL) {
   r <- resolve_release(lake, asset_id(asset), release)
   dplyr::tbl(lake$con, table_id(r$schema_name[[1]], r$table_name[[1]]))
 }

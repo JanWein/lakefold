@@ -13,7 +13,7 @@
 #' evidence.
 #' This publishes one relation, not an atomic bundle of all dbt models.
 #' @param lake Connected lake with the dbt relation attached.
-#' @param result Successful result from [dl_dbt_build()].
+#' @param result Successful result from [dbt_build()].
 #' @param model Exact dbt unique ID, such as `"model.shop.customer_revenue"`.
 #' @param contract Contract for the copied candidate.
 #' @param asset Governed asset ID.
@@ -24,15 +24,15 @@
 #' @param business_date Business date, separate from build or publication time.
 #' @param notify Optional existing notification callback.
 #' @param stop_on_failure Signal failure after persisting quality evidence.
-#' @returns A `dl_run_result`. Use [dl_tbl()] with its release ID for immutable
-#'   consumption, and [dl_model()] for relationships between pinned releases.
+#' @returns A `tw_run_result`. Use [tbl()] with its release ID for immutable
+#'   consumption, and [model()] for relationships between pinned releases.
 #' @export
 #' @examples
-#' # After dl_dbt_build() and reopening the lake connection:
-#' # release <- dl_dbt_publish(lake, result, "model.shop.customer_revenue",
+#' # After dbt_build() and reopening the lake connection:
+#' # release <- dbt_publish(lake, result, "model.shop.customer_revenue",
 #' #   contract, "shop.revenue", code_version = "v1")
-#' # dl_tbl(lake, "shop.revenue", release$release_id)
-dl_dbt_publish <- function(
+#' # tbl(lake, "shop.revenue", release$release_id)
+dbt_publish <- function(
   lake,
   result,
   model,
@@ -52,15 +52,15 @@ dl_dbt_publish <- function(
   scalar(version, "version")
   ident(layer)
   flag(stop_on_failure, "stop_on_failure")
-  if (!inherits(contract, "dl_contract")) {
-    abort("contract must be a dl_contract.")
+  if (!inherits(contract, "tw_contract")) {
+    abort("contract must be a contract.")
   }
   assert_contract_ready(contract)
   if (!layer %in% lake$config$layers) {
     abort("Publication layer is not configured.")
   }
   if (
-    !inherits(result, "dl_dbt_result") ||
+    !inherits(result, "tw_dbt_result") ||
       !isTRUE(result$success) ||
       !identical(result$command, "build") ||
       result$status != 0L ||
@@ -68,7 +68,7 @@ dl_dbt_publish <- function(
   ) {
     abort(
       "Publication requires a successful dbt build result.",
-      "dl_dbt_invalid"
+      "tw_dbt_invalid"
     )
   }
   node <- result$manifest$nodes[[model]]
@@ -80,7 +80,7 @@ dl_dbt_publish <- function(
   ) {
     abort(
       "The selected materialized node must have succeeded in this build.",
-      "dl_dbt_invalid"
+      "tw_dbt_invalid"
     )
   }
   invocation <- scalar(
@@ -103,8 +103,8 @@ dl_dbt_publish <- function(
     code_version = code_version,
     layer = layer
   )
-  dl_register(lake, contract)
-  dl_register(lake, definition)
+  register(lake, contract)
+  register(lake, definition)
   dh <- fingerprint(definition)
   run <- new_run(lake, paste0(asset, ".dbt_publish"), asset, dh, code_version)
   out <- tryCatch(
@@ -145,8 +145,8 @@ dl_dbt_publish <- function(
         pub,
         run
       )
-      quality <- dl_validate(candidate$data, contract)
-      dbt_quality <- dl_quality(result)
+      quality <- validate(candidate$data, contract)
+      dbt_quality <- quality(result)
       dbt_quality$failure_rate <- NULL
       quality <- dplyr::bind_rows(dbt_quality, quality)
       persist_quality(lake, run, contract, quality)
@@ -201,7 +201,7 @@ dl_dbt_publish <- function(
   if (stop_on_failure && !out$status %in% c("published", "cached")) {
     abort(
       "dbt snapshot publication failed; metadata persisted.",
-      "dl_run_failed",
+      "tw_run_failed",
       result = out,
       parent = out$error
     )

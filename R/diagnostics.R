@@ -1,24 +1,24 @@
 #' Inspect execution status across R and dbt workflows
-#' @param x A connected lake, [dl_run()] result or [dl_dbt_build()] result.
+#' @param x A connected lake, [run()] result or [dbt_build()] result.
 #' @param asset Optional asset ID when querying a lake.
 #' @returns A tibble with `engine`, `id`, `status`, `success`, `release_id`,
 #'   `asset` and `message`. A dbt process failure remains visible even when
 #'   individual nodes passed. No raw stdout or stderr is included.
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
-#' root <- tempfile("lakefold-")
-#' lake <- dl_connect(dl_config(dl_catalog_duckdb(file.path(root, "lake.db")),
-#'   dl_storage_local(file.path(root, "data")),
+#' root <- tempfile("tidyweave-")
+#' lake <- connect_lake(lake_config(registry_duckdb(file.path(root, "lake.db")),
+#'   storage_local(file.path(root, "data")),
 #'   landing = file.path(root, "landing"), backend = "duckdb"))
-#' dl_status(lake)
-#' dl_disconnect(lake)
+#' status(lake)
+#' disconnect_lake(lake)
 #' unlink(root, recursive = TRUE)
-dl_status <- function(x, asset = NULL) {
-  if (inherits(x, "dl_lake")) {
+status <- function(x, asset = NULL) {
+  if (inherits(x, "tw_lake")) {
     runs <- metadata_filter(x, "runs", asset = asset)
     runs <- runs[order(runs$started_at, decreasing = TRUE), ]
     return(tibble::tibble(
-      engine = rep("lakefold", nrow(runs)),
+      engine = rep("tidyweave", nrow(runs)),
       id = runs$run_id,
       status = runs$status,
       success = runs$status %in% c("published", "cached"),
@@ -27,9 +27,9 @@ dl_status <- function(x, asset = NULL) {
       message = runs$message
     ))
   }
-  if (inherits(x, "dl_run_result")) {
+  if (inherits(x, "tw_run_result")) {
     return(tibble::tibble(
-      engine = "lakefold",
+      engine = "tidyweave",
       id = x$run_id,
       status = x$status,
       success = x$status %in% c("completed", "published", "cached"),
@@ -38,7 +38,7 @@ dl_status <- function(x, asset = NULL) {
       message = ""
     ))
   }
-  if (inherits(x, "dl_dbt_result")) {
+  if (inherits(x, "tw_dbt_result")) {
     nodes <- x$results
     rows <- tibble::tibble(
       engine = rep("dbt", nrow(nodes)),
@@ -65,7 +65,7 @@ dl_status <- function(x, asset = NULL) {
     }
     return(rows)
   }
-  abort("x must be a lake, lakefold run result or dbt result.")
+  abort("x must be a lake, tidyweave run result or dbt result.")
 }
 
 metadata_filter <- function(lake, table, asset = NULL, run_id = NULL) {
@@ -102,14 +102,14 @@ metadata_filter <- function(lake, table, asset = NULL, run_id = NULL) {
 #' @param release Exact release ID to inspect, together with `asset`.
 #' @returns A quality tibble. `failure_rate` is derived from available counts.
 #'   Native pointblank thresholds are recorded in the JSON `details` column.
-#' @seealso [dl_quality_report()], [dl_status()]
+#' @seealso [quality_report()], [status()]
 #' @export
 #' @examples
-#' contract <- dl_contract("orders", "1", "Analytics", "Orders", "One order",
+#' contract <- contract("orders", "1", "Analytics", "Orders", "One order",
 #'   c(id = "integer"), key = "id")
-#' dl_quality(dl_validate(data.frame(id = c(1L, 1L)), contract))
-dl_quality <- function(x, run_id = NULL, asset = NULL, release = NULL) {
-  if (inherits(x, "dl_lake")) {
+#' quality(validate(data.frame(id = c(1L, 1L)), contract))
+quality <- function(x, run_id = NULL, asset = NULL, release = NULL) {
+  if (inherits(x, "tw_lake")) {
     if (
       is.null(run_id) == is.null(asset) || (!is.null(release) && is.null(asset))
     ) {
@@ -120,7 +120,7 @@ dl_quality <- function(x, run_id = NULL, asset = NULL, release = NULL) {
     } else {
       runs <- metadata_filter(x, "runs", asset = asset, run_id = run_id)
       if (!nrow(runs)) {
-        abort("No matching run found.", "dl_no_run")
+        abort("No matching run found.", "tw_no_run")
       }
       runs <- runs[order(runs$started_at, runs$run_id, decreasing = TRUE), ]
       run_id <- runs$run_id[[1]]
@@ -133,15 +133,15 @@ dl_quality <- function(x, run_id = NULL, asset = NULL, release = NULL) {
       }
     }
     out <- metadata_filter(x, "quality_results", run_id = run_id)
-  } else if (inherits(x, "dl_run_result")) {
+  } else if (inherits(x, "tw_run_result")) {
     if (is.null(x$quality)) {
       abort(
-        "This result has no in-memory checks; use dl_quality(lake, run_id = ...)."
+        "This result has no in-memory checks; use quality(lake, run_id = ...)."
       )
     }
     out <- x$quality
-  } else if (inherits(x, "dl_dbt_result")) {
-    states <- dl_status(x)
+  } else if (inherits(x, "tw_dbt_result")) {
+    states <- status(x)
     out <- dplyr::bind_rows(lapply(seq_len(nrow(states)), function(i) {
       node <- states[i, ]
       status <- if (node$status %in% c("pass", "success")) {
@@ -198,14 +198,14 @@ dl_quality <- function(x, run_id = NULL, asset = NULL, release = NULL) {
 #' @returns A tibble sorted newest first. Historical releases are retained.
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
-#' root <- tempfile("lakefold-")
-#' lake <- dl_connect(dl_config(dl_catalog_duckdb(file.path(root, "lake.db")),
-#'   dl_storage_local(file.path(root, "data")),
+#' root <- tempfile("tidyweave-")
+#' lake <- connect_lake(lake_config(registry_duckdb(file.path(root, "lake.db")),
+#'   storage_local(file.path(root, "data")),
 #'   landing = file.path(root, "landing"), backend = "duckdb"))
-#' dl_releases(lake)
-#' dl_disconnect(lake)
+#' releases(lake)
+#' disconnect_lake(lake)
 #' unlink(root, recursive = TRUE)
-dl_releases <- function(lake, asset = NULL) {
+releases <- function(lake, asset = NULL) {
   out <- metadata_filter(lake, "releases", asset = asset)
   out[order(out$published_at, out$release_id, decreasing = TRUE), ]
 }
@@ -222,9 +222,9 @@ dl_releases <- function(lake, asset = NULL) {
 #'   have empty version fields because a manifest declares dependencies.
 #' @export
 #' @examples
-#' path <- system.file("extdata", "dbt-artifacts", package = "lakefold")
-#' dl_lineage(path, "model.shop.customer_revenue")
-dl_lineage <- function(
+#' path <- system.file("extdata", "dbt-artifacts", package = "tidyweave")
+#' lineage(path, "model.shop.customer_revenue")
+lineage <- function(
   x,
   asset = NULL,
   direction = c("upstream", "downstream"),
@@ -232,10 +232,10 @@ dl_lineage <- function(
 ) {
   direction <- match.arg(direction)
   flag(recursive, "recursive")
-  if (inherits(x, "dl_lake")) {
-    edges <- dl_registry(x, "lineage_edges")
+  if (inherits(x, "tw_lake")) {
+    edges <- registry(x, "lineage_edges")
   } else {
-    source <- dl_dbt_lineage(x)
+    source <- dbt_lineage(x)
     edges <- tibble::tibble(
       run_id = rep("", nrow(source)),
       from_id = source$from,

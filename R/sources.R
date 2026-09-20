@@ -6,9 +6,9 @@
 #' @return Source specification. Files are read only at execution time.
 #' @export
 #' @examples
-#' source <- dl_source("orders.file", "orders.csv", reader = utils::read.csv)
+#' source <- source_file("orders.file", "orders.csv", reader = utils::read.csv)
 #' source
-dl_source <- function(
+source_file <- function(
   id,
   path,
   reader = function(path) utils::read.csv(path),
@@ -32,13 +32,13 @@ dl_source <- function(
       owner = owner,
       description = description
     ),
-    class = "dl_source"
+    class = "tw_source"
   )
 }
 
 land_source <- function(lake, source) {
   if (!file.exists(source$path) || dir.exists(source$path)) {
-    abort("Source file is missing.", "dl_missing_delivery")
+    abort("Source file is missing.", "tw_missing_delivery")
   }
   # Copy first, then hash the bytes that will actually be parsed.
   tmp <- tempfile("incoming-", tmpdir = lake$config$landing)

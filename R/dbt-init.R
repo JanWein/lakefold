@@ -8,59 +8,59 @@
 #' attachment. Supported configurations use a local metadata catalog and local
 #' storage. For S3, PostgreSQL or dbt v2 catalog configuration, create and
 #'   verify
-#' an appropriate profile yourself and use [dl_dbt_project()]. The starter
+#' an appropriate profile yourself and use [dbt_project()]. The starter
 #' uses the dbt-duckdb profile format; it does not install dbt or adapters.
 #'
 #' @param path Character scalar giving a new or empty directory.
-#' @param config A [dl_config()] with a local DuckDB catalog and local storage.
+#' @param config A [lake_config()] with a local DuckDB catalog and local storage.
 #' @param name Character scalar. A dbt project identifier containing letters,
 #'   digits and underscores, starting with a letter.
-#' @inheritParams dl_dbt_project
-#' @returns A [dl_dbt_project()] specification pointing to the written project
+#' @inheritParams dbt_project
+#' @returns A [dbt_project()] specification pointing to the written project
 #'   and profile. Files contain synthetic data and local paths, no credentials.
-#' @seealso [dl_dbt_build()], [dl_ingest()]
+#' @seealso [dbt_build()], [product()]
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
-#' root <- tempfile("lakefold-example-")
-#' config <- dl_config(
-#'   catalog = dl_catalog_duckdb(file.path(root, "lake.duckdb")),
-#'   storage = dl_storage_local(file.path(root, "data")),
+#' root <- tempfile("tidyweave-example-")
+#' config <- lake_config(
+#'   catalog = registry_duckdb(file.path(root, "lake.duckdb")),
+#'   storage = storage_local(file.path(root, "data")),
 #'   landing = file.path(root, "landing"), backend = "duckdb"
 #' )
-#' project <- dl_dbt_init(file.path(root, "dbt"), config)
+#' project <- dbt_init(file.path(root, "dbt"), config)
 #' project
 #' unlink(root, recursive = TRUE)
 #' @export
-dl_dbt_init <- function(
+dbt_init <- function(
   path,
   config,
-  name = "lakefold_demo",
+  name = "tidyweave_demo",
   executable = "dbt"
 ) {
   need("yaml")
   ident(name)
   if (
-    !inherits(config, "dl_config") ||
+    !inherits(config, "tw_config") ||
       config$catalog$type != "duckdb" ||
       config$storage$type != "local"
   ) {
     abort(
-      "The starter requires dl_config() with local catalog and storage.",
-      "dl_dbt_invalid"
+      "The starter requires lake_config() with local catalog and storage.",
+      "tw_dbt_invalid"
     )
   }
   path <- absolute_path(path)
   if (file.exists(path) && !dir.exists(path)) {
-    abort("path is a file.", "dl_dbt_invalid")
+    abort("path is a file.", "tw_dbt_invalid")
   }
   if (
     dir.exists(path) && length(list.files(path, all.files = TRUE, no.. = TRUE))
   ) {
     abort(
       "Choose a new or empty directory; existing files are never overwritten.",
-      "dl_dbt_invalid"
+      "tw_dbt_invalid"
     )
   }
-  project <- dl_dbt_project(path, path, target = "dev", executable = executable)
+  project <- dbt_project(path, path, target = "dev", executable = executable)
   directories <- c("models/staging", "models/marts", "seeds", "macros")
   for (directory in directories) {
     dir.create(
@@ -162,7 +162,7 @@ dl_dbt_init <- function(
   )
   writeLines(
     c(
-      ".lakefold/",
+      ".tidyweave/",
       "target/",
       "logs/",
       "dbt_packages/",
@@ -176,22 +176,22 @@ dl_dbt_init <- function(
     c(
       paste0("# ", name),
       "",
-      "Synthetic lakefold starter project.",
+      "Synthetic tidyweave starter project.",
       "",
       "Install a compatible dbt CLI and DuckDB adapter, then run from R:",
       "",
       "```r",
-      "library(lakefold)",
-      "project <- dl_dbt_project(\".\", profiles_dir = \".\")",
-      "result <- dl_dbt_build(project)",
-      "dl_dbt_status(result)",
-      "dl_dbt_lineage(result)",
+      "library(tidyweave)",
+      "project <- dbt_project(\".\", profiles_dir = \".\")",
+      "result <- dbt_build(project)",
+      "dbt_status(result)",
+      "dbt_lineage(result)",
       "```",
       "",
       "Close R connections to this catalog before running dbt. Reconnect afterwards.",
       "profiles.yml contains machine-specific paths and is intentionally gitignored.",
       "The schema macro uses exact schema names. Use a separate catalog for each environment.",
-      "dbt models are mutable and are not automatically lakefold releases."
+      "dbt models are mutable and are not automatically tidyweave releases."
     ),
     file.path(path, "README.md")
   )
