@@ -10,6 +10,10 @@
   Adapter capabilities and execution plans expose materialization boundaries.
 * Optional adapters add transactional DBI targets, Arrow/Parquet, versioned
   pins, and httr2 API ingestion with bounded pagination.
+* Pin publication metadata resolves same-timestamp version ordering and verifies
+  the returned reference. Ambiguous external writes require an explicit version.
+* Output paths remain stable before and after directory creation, including
+  Windows path normalization, so unchanged targets workflows remain cached.
 * Durable run evidence includes failed quality checks and retryable metadata
   delivery. OpenLineage and OpenMetadata adapters keep catalog failures separate
   from data publication.
