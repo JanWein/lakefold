@@ -35,7 +35,7 @@ separate from data publication.
 - [x] Consolidate canonical executable English documentation and examples.
 - [x] Document architecture rationale and modern-stack/Ab Initio comparison.
 - [x] Verify core, optional integrations, examples and R CMD check.
-- [ ] Publish verified code and rename the GitHub project.
+- [x] Publish verified code and rename the GitHub project.
 
 ## Scope and verification
 
