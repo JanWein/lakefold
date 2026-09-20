@@ -1,7 +1,8 @@
 test_that("a minimal project runs without optional infrastructure", {
   root <- withr::local_tempdir()
   path <- file.path(root, "orders")
-  expect_equal(init_project(path), path)
+  created <- init_project(path)
+  expect_equal(created, normalizePath(path, winslash = "/", mustWork = TRUE))
   withr::local_dir(path)
   environment <- new.env(parent = globalenv())
   sys.source("run.R", envir = environment)

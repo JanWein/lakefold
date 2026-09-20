@@ -13,7 +13,7 @@ test_that("targets runs each dependency once and tracks changed input files", {
       "orders_definition <- product('orders') |> add_source('input.csv')",
       "totals_definition <- product('totals') |> add_source(orders_definition) |> add_transform(function(data) data.frame(total = sum(data$amount)))",
       "unrelated_definition <- product('unrelated') |> add_source(data.frame(id = 1L))",
-      "as_targets(list(totals = totals_definition, unrelated = unrelated_definition), evidence = 'evidence')"
+      "as_targets(list(totals = totals_definition, unrelated = unrelated_definition), evidence = './evidence')"
     ),
     "_targets.R"
   )
