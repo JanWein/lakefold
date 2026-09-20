@@ -1,3 +1,38 @@
+test_that("the insurance grammar preserves transaction grain without infrastructure", {
+  example <- new.env(parent = asNamespace("tidyweave"))
+  sys.source(
+    system.file(
+      "examples",
+      "relational-insurance.R",
+      package = "tidyweave",
+      mustWork = TRUE
+    ),
+    envir = example
+  )
+  inputs <- example$insurance_inputs()
+  contracts <- example$insurance_contracts()
+  attributes <- product("policy_attributes", inputs$policy_months) |>
+    dplyr::select(policy_id, month, company, broker_id, policy_status = status)
+  payments <- product("payments", inputs$payments) |>
+    add_lookup(attributes, by = dplyr::join_by(policy_id, month)) |>
+    add_lookup(inputs$brokers, by = dplyr::join_by(broker_id)) |>
+    add_contract(contracts$enriched_payments)
+  data <- collect(run(payments))
+  expect_equal(nrow(data), 10L)
+  expect_false("premium_due" %in% names(data))
+  expect_equal(anyDuplicated(data$payment_id), 0L)
+  first <- data$policy_id == "P1" & data$month == as.Date("2026-01-01")
+  expect_equal(sum(first), 2L)
+  expect_equal(sum(data$cash_amount[first]), 100)
+  invalid <- inputs$payments
+  invalid$month[[1]] <- as.Date("2026-03-01")
+  failed <- payments |>
+    add_source(invalid, replace = TRUE) |>
+    run(stop_on_failure = FALSE)
+  expect_identical(failed$status, "error")
+  expect_s3_class(failed$error$parent, "tw_lookup_unmatched")
+})
+
 test_that("the insurance example preserves business grains and issued reports", {
   executable <- Sys.getenv("TIDYWEAVE_DBT_EXECUTABLE")
   skip_if(
@@ -94,12 +129,12 @@ test_that("the insurance example preserves business grains and issued reports", 
   invalid <- collect(demo$corrected$raw$payments)
   invalid$month[[1]] <- as.Date("2026-03-01")
   failed <- demo$definitions$payments |>
-    add_source(invalid, name = "payments", replace = TRUE) |>
+    add_source(invalid, replace = TRUE) |>
     run(stop_on_failure = FALSE)
   expect_identical(failed$status, "error")
   expect_null(failed$outputs)
   expect_s3_class(failed$error, "tw_transform_failed")
-  expect_s3_class(failed$error$parent, "insurance_relationship_error")
+  expect_s3_class(failed$error$parent, "tw_lookup_unmatched")
 
   lake <- connect_lake(demo$context$config, read_only = TRUE)
   withr::defer(close_lake(lake))
@@ -114,7 +149,7 @@ test_that("the insurance example preserves business grains and issued reports", 
     expect_identical(built$success, TRUE)
     for (name in names(results)) {
       source <- built$manifest$sources[[
-        paste0("source.insurance.accepted_products.", name)
+        paste0("source.insurance.inputs.", name)
       ]]
       history <- releases(lake, results[[name]]$asset)
       reference <- history[history$release_id == results[[name]]$release_id, ]
@@ -174,9 +209,8 @@ test_that("the insurance example preserves business grains and issued reports", 
   expect_equal(saved$due_feb$value, 1350)
   stock_error <- tryCatch(
     measure(
-      lake,
-      demo$initial$metrics$active_policies,
-      release = demo$initial$release$release_id
+      demo$initial$release,
+      demo$initial$metrics$active_policies
     ),
     error = identity
   )
@@ -187,11 +221,10 @@ test_that("the insurance example preserves business grains and issued reports", 
   )
   ratio_error <- tryCatch(
     measure(
-      lake,
+      demo$initial$release,
       demo$initial$metrics$cash_to_due,
       at = as.Date("2026-02-01"),
-      filters = list(channel = "direct"),
-      release = demo$initial$release$release_id
+      filters = list(channel = "direct")
     ),
     error = identity
   )

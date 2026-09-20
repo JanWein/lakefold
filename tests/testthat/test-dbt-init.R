@@ -108,34 +108,19 @@ test_that("RAW starter binds ingestion releases without creating dbt seeds", {
   config <- lake_config(
     registry_duckdb(file.path(root, "lake.db")),
     storage_local(file.path(root, "data")),
+    landing = file.path(root, "landing"),
     backend = "duckdb",
     layers = c("raw", "staging", "core", "marts")
   )
-  accepted <- structure(
-    list(
-      status = "published",
-      run_id = "run1",
-      asset = "orders",
-      release_id = "release1",
-      output_config = config,
-      outputs = list(
-        type = "lake release",
-        database = "lake",
-        schema = "raw",
-        table = "accepted_orders_1",
-        asset = "orders",
-        release_id = "release1"
-      ),
-      metadata = list(
-        schema = c(
-          order_id = "integer",
-          customer_id = "integer",
-          amount = "character"
-        )
-      )
-    ),
-    class = "tw_run_result"
+  accepted <- ingest(
+    data.frame(order_id = 1:2, customer_id = c(1L, 1L), amount = c("10", "20")),
+    to = config,
+    name = "orders"
   )
+  expect_true(all(startsWith(
+    accepted$inputs$landed_path,
+    paste0(normalizePath(root, winslash = "/"), "/")
+  )))
   project <- dbt_init(
     file.path(root, "dbt"),
     config,
@@ -169,9 +154,9 @@ test_that("RAW starter binds ingestion releases without creating dbt seeds", {
       project$path,
       "models/tidyweave_sources_raw.yml"
     ))$sources[[1]]$tables[[1]]$identifier,
-    "accepted_orders_1"
+    accepted$outputs$table
   )
-  expect_false(file.exists(config$catalog$path))
+  expect_true(file.exists(config$catalog$path))
   bad <- accepted
   bad$metadata$schema <- c(id = "integer")
   expect_error(

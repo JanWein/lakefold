@@ -98,7 +98,8 @@ test_that("real dbt transformation consumes staged input and propagates test fai
     "model.shop.orders"
   )
   expect_equal(first$amount, c(20, 40))
-  expect_equal(attr(first, "tw_transform_metadata")$model, "model.shop.orders")
+  expect_null(attr(first, "tw_transform_metadata"))
+  expect_null(first_run$metadata$transformations$after_dbt)
   second <- execute_transform(step, data.frame(id = 1:2, amount = c(15, 25)))
   expect_equal(second$amount, c(30, 50))
   expect_equal(any(vapply(connections, DBI::dbIsValid, logical(1))), FALSE)

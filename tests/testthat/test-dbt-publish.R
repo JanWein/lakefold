@@ -16,6 +16,17 @@ test_that("dbt releases preserve snapshots and revalidate mutable source relatio
       success = TRUE,
       status = 0L,
       command = "build",
+      artifacts_dir = system.file(
+        "extdata",
+        "dbt-artifacts",
+        package = "tidyweave"
+      ),
+      invocation_id = parsed$manifest$metadata$invocation_id,
+      artifact_hashes = dbt_artifact_hashes(system.file(
+        "extdata",
+        "dbt-artifacts",
+        package = "tidyweave"
+      )),
       results = parsed$results,
       manifest = parsed$manifest
     ),
