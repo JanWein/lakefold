@@ -1,5 +1,5 @@
 test_that("native states have consistent outcome categories", {
-  states <- c("completed", "published", "cached", "blocked", "error")
+  states <- c("completed", "published", "cached", "blocked", "error", "missing")
   outcomes <- vapply(
     states,
     function(state) {
@@ -11,7 +11,7 @@ test_that("native states have consistent outcome categories", {
   )
   expect_equal(
     unname(outcomes),
-    c("succeeded", "succeeded", "succeeded", "blocked", "failed")
+    c("succeeded", "succeeded", "succeeded", "blocked", "failed", "blocked")
   )
   dbt <- structure(
     list(

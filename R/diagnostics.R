@@ -4,7 +4,9 @@
 #' @param asset Optional asset ID when querying a lake.
 #' @returns A tibble with `engine`, `id`, `status`, `success`, `release_id`,
 #'   `asset`, `outcome` and `message`. `outcome` normalizes native statuses to
-#'   `succeeded`, `blocked`, `failed` or `skipped` (unknown states are `NA`). A dbt process failure remains visible even when
+#'   `succeeded`, `blocked`, `failed` or `skipped` (unknown states are `NA`).
+#'   Missing deliveries are `blocked` because no acceptable input is available.
+#'   A dbt process failure remains visible even when
 #'   individual nodes passed. No raw stdout or stderr is included.
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
@@ -320,7 +322,7 @@ status_outcome <- function(status) {
   out[
     status %in% c("completed", "published", "cached", "success", "pass", "warn")
   ] <- "succeeded"
-  out[status %in% c("blocked", "fail")] <- "blocked"
+  out[status %in% c("blocked", "fail", "missing")] <- "blocked"
   out[status %in% c("error", "failed", "runtime error")] <- "failed"
   out[status %in% c("skipped", "skip")] <- "skipped"
   out

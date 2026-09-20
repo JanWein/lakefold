@@ -15,7 +15,9 @@ measurement set from \code{\link[=measure]{measure()}}.}
 \value{
 A tibble with \code{engine}, \code{id}, \code{status}, \code{success}, \code{release_id},
 \code{asset}, \code{outcome} and \code{message}. \code{outcome} normalizes native statuses to
-\code{succeeded}, \code{blocked}, \code{failed} or \code{skipped} (unknown states are \code{NA}). A dbt process failure remains visible even when
+\code{succeeded}, \code{blocked}, \code{failed} or \code{skipped} (unknown states are \code{NA}).
+Missing deliveries are \code{blocked} because no acceptable input is available.
+A dbt process failure remains visible even when
 individual nodes passed. No raw stdout or stderr is included.
 }
 \description{
