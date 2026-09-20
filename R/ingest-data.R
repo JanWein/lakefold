@@ -11,7 +11,7 @@
 #' @param code_version Version of preparation code and dependencies.
 #' @param version Ingestion and source definition version.
 #' @param input_contract Optional contract to check before writing Raw.
-#' @param ... Arguments forwarded to [tw_ingest()], such as business_date,
+#' @param ... Arguments forwarded to `tw_ingest()`, such as business_date,
 #'   layer, notify and stop_on_failure.
 #' @returns A tw_run_result. Identical data and definitions can reuse a release.
 #'   Connections opened here are closed on exit.

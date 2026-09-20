@@ -18,7 +18,28 @@ absolute_path <- function(path) {
   if (!grepl("^(/|[A-Za-z]:[/\\\\]|\\\\\\\\)", path)) {
     path <- file.path(getwd(), path)
   }
-  normalizePath(path, winslash = "/", mustWork = FALSE)
+  # Canonicalize the existing ancestor before appending missing components.
+  # Normalizing a nonexistent path directly can retain Windows short names or
+  # separators that change after creation, invalidating an unchanged targets DAG.
+  suffix <- character()
+  while (!file.exists(path)) {
+    parent <- dirname(path)
+    if (identical(parent, path)) {
+      break
+    }
+    suffix <- c(basename(path), suffix)
+    path <- parent
+  }
+  path <- normalizePath(path, winslash = "/", mustWork = FALSE)
+  for (component in suffix) {
+    path <- switch(
+      component,
+      "." = path,
+      ".." = dirname(path),
+      file.path(path, component)
+    )
+  }
+  path
 }
 ident <- function(x) {
   scalar(x, "Identifier")

@@ -5,11 +5,11 @@
 #' a data frame, ensuring the checked values are the values subsequently written.
 #' The mandatory candidate gate remains in place, including after partition
 #' composition. A failed input gate is persisted with stage `"ingest"`.
-#' @param pipeline Pipeline after [tw_step_extract()].
+#' @param pipeline Pipeline after `tw_step_extract()`.
 #' @param contract Contract for the extracted input, possibly containing
 #'   [pointblank_checks()] rules. It can differ from the final product contract.
 #' @returns The updated pipeline specification; no IO is performed.
-#' @seealso [tw_ingest()], [validate()]
+#' @seealso `tw_ingest()`, [validate()]
 #' @examples
 #' contract <- contract("orders", "1", "Analytics", "Orders", "One order",
 #'   c(id = "integer"), key = "id")

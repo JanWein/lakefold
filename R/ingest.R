@@ -2,7 +2,7 @@
 #'
 #' A compact entry point for the standard ingestion pipeline. It performs the
 #' same immutable landing and contract gate as explicit pipeline steps. Use
-#' [tw_pipeline()] when transformations or partition replacement are needed.
+#' `tw_pipeline()` when transformations or partition replacement are needed.
 #'
 #' @param lake A connected lake or a connection-free [lake_config()].
 #' @param source A [source_file()] definition with a local file and reader.
@@ -22,7 +22,7 @@
 #' @returns A `tw_run_result` with `run_id`, `status`, `release_id` and
 #'   `quality`.
 #'   Connections opened from a config are closed before returning.
-#' @seealso [tw_pipeline()], [tbl()], [run()]
+#' @seealso `tw_pipeline()`, [tbl()], [run()]
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("tidyweave-example-")
 #' config <- lake_config(
