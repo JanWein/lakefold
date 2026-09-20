@@ -80,10 +80,12 @@ jobs:
           use-public-rspm: true
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
-          # Prefer CRAN source while the macOS knitr binary format is incompatible with pak.
+          # Prefer CRAN source for macOS dependencies whose binary compression is incompatible with pak.
           extra-packages: |
             any::rcmdcheck
             ${{ runner.os == 'macOS' && 'knitr=?source' || '' }}
+            ${{ runner.os == 'macOS' && 'readxl=?source' || '' }}
+            ${{ runner.os == 'macOS' && 'xfun=?source' || '' }}
           needs: check
       - name: Check portable package behavior
         run: Rscript scripts/check.R
