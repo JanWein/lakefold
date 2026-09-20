@@ -27,6 +27,10 @@
 #' orders |> run() |> collect()
 NULL
 
+#' @rdname product-dplyr
+#' @export
+dplyr::filter
+
 dplyr_product_step <- function(x, verb, args) {
   add_transform(
     x,
