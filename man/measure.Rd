@@ -44,7 +44,8 @@ For a publication result it must be omitted or match that exact release.}
 \item{record}{Record definition and lineage. Defaults to \code{TRUE} on a writable
 lake and \code{FALSE} on a read-only lake or publication result. Use a connected
 writable lake for \code{record = TRUE}. Unrecorded results still carry their
-complete metric definition and pinned release in the manifest.}
+complete metric definition and pinned release in the manifest. Exploratory
+metrics always default to \code{record = FALSE} and cannot be saved in reports.}
 
 \item{metrics}{Nonempty list of metric definitions for a measurement set.
 Optional unique names label metrics in the collected table. Supply either

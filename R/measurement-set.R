@@ -114,12 +114,39 @@ measurement_set_table <- function(x, metadata) {
   rows <- lapply(seq_along(x), function(i) {
     value <- tibble::as_tibble(x[[i]])
     attr(value, "tw_manifest") <- NULL
+    attr(value, "tw_quality_reference") <- NULL
     value$.metric <- metadata[[i]]$metric
     value$.period <- rep(list(metadata[[i]]$period), nrow(value))
     value$.unit <- metadata[[i]]$unit
     by <- attr(x[[i]], "tw_manifest")$by
     value[c(by, ".metric", ".period", ".unit", "value")]
   })
+  integer64 <- vapply(
+    rows,
+    function(row) inherits(row$value, "integer64"),
+    logical(1)
+  )
+  ordinary_numeric <- vapply(
+    rows,
+    function(row) {
+      is.numeric(row$value) && !is.object(row$value)
+    },
+    logical(1)
+  )
+  if (any(integer64) && any(ordinary_numeric)) {
+    need("bit64")
+    limit <- bit64::as.integer64("9007199254740992")
+    for (i in which(integer64)) {
+      value <- rows[[i]]$value
+      if (any(value > limit | value < -limit, na.rm = TRUE)) {
+        abort(paste(
+          "These metrics mix decimal values with integers outside the exact numeric range.",
+          "Collect the individual metric results separately to preserve their precision."
+        ))
+      }
+      rows[[i]]$value <- as.double(as.character(value))
+    }
+  }
   dplyr::bind_rows(rows)
 }
 
@@ -147,4 +174,33 @@ report_connection <- function(lake, read_only) {
   abort(
     "lake must be a connected lake, lake configuration or local lake folder."
   )
+}
+
+measurement_report_destination <- function(results) {
+  references <- lapply(results, function(x) {
+    ref <- attr(x, "tw_quality_reference")
+    manifest <- attr(x, "tw_manifest")
+    if (
+      !is.list(ref) ||
+        !inherits(ref$config, "tw_config") ||
+        !identical(ref$asset, manifest$product) ||
+        !identical(ref$release, manifest$release_id)
+    ) {
+      abort("Report destination cannot be inferred. Supply to explicitly.")
+    }
+    ref
+  })
+  configs <- lapply(references, `[[`, "config")
+  if (!all(vapply(configs, identical, logical(1), configs[[1]]))) {
+    abort("Results refer to different lakes. Supply to explicitly.")
+  }
+  borrowed <- references[[1]]$lake
+  if (
+    inherits(borrowed, "tw_lake") &&
+      DBI::dbIsValid(borrowed$con) &&
+      identical(borrowed$config, configs[[1]])
+  ) {
+    return(borrowed)
+  }
+  configs[[1]]
 }

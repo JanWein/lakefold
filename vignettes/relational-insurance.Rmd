@@ -169,56 +169,18 @@ insurance_contracts <- function() {
 }
 
 insurance_metrics <- function() {
-  list(
-    active_policies = metric(
-      "insurance.active_policies",
-      "insurance.monthly_performance",
-      expr = sum(active_policies, na.rm = TRUE),
-      dimensions = c("company", "channel"),
-      time_column = "month",
-      time_behavior = "stock",
-      unit = "policies",
-      description = "Active policies in one monthly snapshot.",
-      approved = TRUE,
-      code_version = "insurance-example-v2"
-    ),
-    premium_due = metric(
-      "insurance.premium_due",
-      "insurance.monthly_performance",
-      expr = sum(premium_due, na.rm = TRUE),
-      dimensions = c("company", "channel"),
-      time_column = "month",
-      time_behavior = "flow",
-      unit = "EUR",
-      description = "Premium charges due during the selected months.",
-      approved = TRUE,
-      code_version = "insurance-example-v2"
-    ),
-    cash_collected = metric(
-      "insurance.cash_collected",
-      "insurance.monthly_performance",
-      expr = sum(cash_collected, na.rm = TRUE),
-      dimensions = c("company", "channel"),
-      time_column = "month",
-      time_behavior = "flow",
-      unit = "EUR",
-      description = "Cash received during the selected months.",
-      approved = TRUE,
-      code_version = "insurance-example-v2"
-    ),
-    cash_to_due = metric(
-      "insurance.cash_to_due",
-      "insurance.monthly_performance",
-      expr = sum(cash_collected, na.rm = TRUE) / sum(premium_due, na.rm = TRUE),
-      dimensions = c("company", "channel"),
-      time_column = "month",
-      time_behavior = "flow",
-      unit = "ratio",
-      description = "Synthetic cash-to-due ratio of sums; undefined if total due is zero. Not a regulatory arrears measure.",
-      approved = TRUE,
-      code_version = "insurance-example-v2"
-    )
-  )
+  metric_set("insurance.monthly_performance",
+    active_policies = sum(active_policies, na.rm = TRUE),
+    premium_due = sum(premium_due, na.rm = TRUE),
+    cash_collected = sum(cash_collected, na.rm = TRUE),
+    cash_to_due = sum(cash_collected, na.rm = TRUE) / sum(premium_due, na.rm = TRUE),
+    dimensions = c("company", "channel"),
+    time_column = "month",
+    time_behavior = c(active_policies = "stock", premium_due = "flow",
+      cash_collected = "flow", cash_to_due = "flow"),
+    units = c(active_policies = "policies", premium_due = "EUR",
+      cash_collected = "EUR", cash_to_due = "ratio"),
+    approved = TRUE, code_version = "insurance-example-v3")
 }
 ```
 
@@ -370,24 +332,26 @@ there is no separate business-rule language to learn.
 ## 4. Accept the three deliveries
 
 ```{r accept-inputs, eval=isTRUE(knitr::opts_knit$get("tangle")) || run_stack}
-raw <- list(
-  brokers = product("insurance.brokers", inputs$brokers) |>
+deliveries <- list(
+  brokers = product("insurance.brokers", inputs$brokers, execution = execution) |>
     add_contract(contracts$brokers) |>
-    add_quality(~ channel %in% c("broker", "direct", "partner")) |>
-    ingest(execution = execution),
-  policy_months = product("insurance.policy_months", inputs$policy_months) |>
+    add_quality(~ channel %in% c("broker", "direct", "partner")),
+  policy_months = product("insurance.policy_months", inputs$policy_months,
+    execution = execution) |>
     add_contract(contracts$policy_months) |>
-    add_quality(~ status %in% c("active", "pending", "lapsed") & premium_due >= 0) |>
-    ingest(execution = execution),
-  payments = product("insurance.payments", inputs$payments) |>
+    add_quality(~ status %in% c("active", "pending", "lapsed") & premium_due >= 0),
+  payments = product("insurance.payments", inputs$payments, execution = execution) |>
     add_contract(contracts$payments) |>
-    add_quality(~ cash_amount > 0) |>
-    ingest(execution = execution)
+    add_quality(~ cash_amount > 0)
 )
+raw <- lapply(deliveries, ingest)
 quality(raw$payments)
 ```
 
-The execution configuration selects Pointblank once for all these predicates.
+The execution configuration is retained by each delivery definition and selects
+Pointblank once for all these predicates. Changing this execution default does
+not require rewriting the declared contract version; the actual check engine
+is still recorded in execution evidence.
 Omitting that choice uses the native engine; it does not require learning another grammar for a simple
 logical check. Complex Pointblank agents remain available through
 `pointblank_checks()`. Missing logical results fail the check.
@@ -404,7 +368,8 @@ ingestion.
 ## 5. Enrich policies with a checked lookup
 
 ```{r policy-product, eval=isTRUE(knitr::opts_knit$get("tangle")) || run_stack}
-policy_product <- product("insurance.policy_months.enriched", raw$policy_months) |>
+policy_product <- product("insurance.policy_months.enriched", raw$policy_months,
+  source_name = "policy_months", execution = execution) |>
   add_lookup(raw$brokers, by = dplyr::join_by(broker_id)) |>
   add_contract(contracts$enriched_policy_months)
 ```
@@ -427,7 +392,8 @@ databases. Use explicit collection or connection-specific code for that boundary
 policy_attributes <- product("insurance.payment_policy_attributes", raw$policy_months) |>
   dplyr::select(policy_id, month, company, broker_id, policy_status = status)
 
-payment_product <- product("insurance.payments.enriched", raw$payments) |>
+payment_product <- product("insurance.payments.enriched", raw$payments,
+  source_name = "payments", execution = execution) |>
   add_lookup(policy_attributes, by = dplyr::join_by(policy_id, month)) |>
   add_lookup(raw$brokers, by = dplyr::join_by(broker_id)) |>
   add_contract(contracts$enriched_payments)
@@ -449,8 +415,8 @@ An ordinary `add_transform(function(data) ...)` remains the escape hatch.
 
 ```{r publish-staging, eval=isTRUE(knitr::opts_knit$get("tangle")) || run_stack}
 published <- list(
-  policies = policy_product |> publish(layer = "staging", execution = execution),
-  payments = payment_product |> publish(layer = "staging", execution = execution)
+  policies = policy_product |> publish(layer = "staging"),
+  payments = payment_product |> publish(layer = "staging")
 )
 stopifnot(nrow(collect(published$policies)) == 12L,
   nrow(collect(published$payments)) == 10L)
@@ -554,6 +520,10 @@ by_channel <- measure(approved, metrics = metrics["cash_collected"],
 collect(by_channel)
 ```
 
+`metric_set()` defines the shared product, dimensions and time column once.
+Only formulas, units and stock-versus-flow meaning differ. Its result is an
+ordinary named list of metrics, so subsetting remains ordinary R syntax.
+
 `period = "each"` computes every named metric separately for each selected date.
 `collect()` returns one ordinary tidy table with `.metric`, `.period`, `.unit`
 and `value`, plus any grouping columns. `.period` is a list column: each entry
@@ -581,7 +551,7 @@ authorization system. Code versions identify the reviewed calculation.
 ## 10. Issue a report, keeping values and their explanation
 
 ```{r issue-report, eval=isTRUE(knitr::opts_knit$get("tangle")) || run_stack}
-report <- report_release(config, "insurance.report.initial", measures,
+report <- report_release(measures, "insurance.report.initial", to = config,
   code_version = "insurance-report-v1",
   params = list(currency = "EUR", months = c("2026-01", "2026-02")))
 initial <- list(build = built, release = approved, data = collect(approved),
@@ -616,8 +586,8 @@ retained. Now try a structurally valid but unknown broker identifier:
 orphan_policies <- inputs$policy_months
 orphan_policies$broker_id[1] <- "B404"
 orphan_run <- policy_product |>
-  add_source(orphan_policies, replace = TRUE) |>
-  publish(layer = "staging", execution = execution, stop_on_failure = FALSE)
+  publish(sources = list(policy_months = orphan_policies),
+    layer = "staging", stop_on_failure = FALSE)
 stopifnot(status(orphan_run)$outcome == "failed")
 lake <- connect_lake(config, read_only = TRUE)
 current_policy_release <- releases(lake, published$policies$asset)$release_id[[1]]
@@ -648,27 +618,26 @@ full snapshot with eleven transactions. Brokers and policy snapshots are unchang
 ```{r accept-correction, eval=isTRUE(knitr::opts_knit$get("tangle")) || run_stack}
 corrected_inputs <- insurance_corrected_inputs(inputs)
 corrected_raw <- raw
-corrected_raw$payments <- product("insurance.payments", corrected_inputs$payments) |>
-  add_contract(contracts$payments) |>
-  add_quality(~ cash_amount > 0) |>
-  ingest(execution = execution)
+corrected_delivery <- deliveries$payments |>
+  replace_sources(insurance.payments = corrected_inputs$payments)
+corrected_raw$payments <- corrected_delivery |> ingest()
 corrected_products <- published
-corrected_payment_product <- payment_product |>
-  replace_sources(source_1 = corrected_raw$payments)
-corrected_products$payments <- corrected_payment_product |>
-  publish(layer = "staging", execution = execution)
-corrected_project <- project |> replace_sources(payments = corrected_products$payments)
-rebuilt <- corrected_project |> run(echo = FALSE)
+corrected_products$payments <- payment_product |>
+  publish(sources = list(payments = corrected_raw$payments), layer = "staging")
+rebuilt <- project |>
+  run(sources = list(payments = corrected_products$payments), echo = FALSE)
 corrected_release <- rebuilt |> publish("monthly_performance", contract = contracts$mart,
   asset = "insurance.monthly_performance", layer = "marts")
 ```
 
-Replacing the named primary source (`source_1` for this result input) is explicit.
-`replace_sources()` can also replace a nested product by its ID and updates all
-matching graph references without mutating the original definition. Unknown or
-ambiguous names fail early. It does not implicitly refresh pinned results. It keeps the reusable lookups
-and contract. The managed dbt project binds the selected corrected payment release
-and the existing policy release under the same logical source names.
+The delivery definition keeps its RAW checks. The named `payments` source
+reuses the enriched product's lookups and contract, while the dbt project rebinds
+only its logical `payments` input. Brokers and policy releases remain pinned.
+Unknown or ambiguous names fail early; the original definitions remain reusable.
+
+The RAW acceptance, enriched publication, SQL build and approved snapshot are
+visible business steps. Updating an R product graph does not automatically
+execute a separate dbt project, and these writes are not one transaction.
 
 ```{r measure-correction, eval=isTRUE(knitr::opts_knit$get("tangle")) || run_stack}
 corrected_measures <- measure(corrected_release, metrics = metrics,
@@ -679,7 +648,7 @@ corrected_totals <- measure(corrected_release,
 ```
 
 ```{r issue-correction, eval=isTRUE(knitr::opts_knit$get("tangle")) || run_stack}
-corrected_report <- report_release(config, "insurance.report.corrected", corrected_measures,
+corrected_report <- report_release(corrected_measures, "insurance.report.corrected", to = config,
   code_version = "insurance-report-v1",
   params = list(currency = "EUR", months = c("2026-01", "2026-02")))
 preserved <- list(report = report_read(config, report$id, values_only = TRUE),

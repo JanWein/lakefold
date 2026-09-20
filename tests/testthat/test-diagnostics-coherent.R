@@ -83,5 +83,6 @@ test_that("measurement diagnostics retain exact manifests without inventing chec
   expect_equal(lineage(measurements)$from_version, "original-release")
   expect_equal(lineage(measurements)$to_id, "total")
   expect_equal(lineage(measurements)$run_id, NA_character_)
-  expect_snapshot(error = TRUE, quality(measurements))
+  expect_equal(quality(measurements)$status, "not_checked")
+  expect_equal(quality(measurements)$.release, "original-release")
 })

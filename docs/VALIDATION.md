@@ -159,3 +159,73 @@ GitHub Actions defines Linux DuckDB/DuckLake, R 4.2.3, Windows/macOS and core-on
 checks. Consult [Actions](https://github.com/JanWein/tidyweave/actions) for outcomes
 tied to the published commit; this local record does not pre-approve a future CI
 run. Older validation records remain in git history for their respective versions.
+
+## 0.12.0 everyday usability validation
+
+This section records the 0.12.0 usability refactor separately. The 0.11.0
+expectation counts and integration results above are historical evidence, not
+results for this version. Checks use synthetic data. This is API and regression
+verification, not an independent human usability study.
+
+| Check | Confirmed result for 0.12.0 |
+|---|---|
+| R documentation generation | Roxygen completed cleanly |
+| Documentation reference | `pkgdown::check_pkgdown()` passed |
+| Vignettes | All 14 built, their scripts ran, and outputs rebuilt in the final check |
+| Package static checks and public examples | Passed in the final `R CMD check` run |
+| Final read-only implementation review | No remaining blockers identified |
+| Full installed-package regression suite | 2,182 passed expectations; 0 failures, 0 warnings, 2 optional skips |
+| Targeted real insurance integration | 89 passed expectations; 0 failures, 0 warnings, 0 skips |
+| Extracted insurance runner | Passed in the installed suite; January cash changed from EUR 980 to EUR 1,230, while the original report retained EUR 980 |
+| Final `R CMD check --no-manual` status | 0 errors, 0 warnings, 0 notes |
+
+The two optional skips were the OpenMetadata CLI and Python SDK integration
+checks because their environment variables were not set. The 0.11.0 historical
+OpenMetadata results do not count as re-execution for 0.12.0. The final check
+completed on 20 September 2026 and included installed tests, public examples,
+vignette scripts and output rebuilding.
+
+The implementation is published for review in [PR #13](https://github.com/JanWein/tidyweave/pull/13).
+This local validation does not assert that its GitHub checks passed or that it
+was merged.
+
+The everyday tutorial now follows one definition through a trial, failed input,
+publication, correction, comparison, related calculations and report readback.
+The insurance tutorial uses named sources and shared metric definitions while
+keeping receipt acceptance, enriched publication, dbt execution and the final
+approved snapshot visible. These executable tutorials exercise the documented
+path; they do not measure how quickly an unfamiliar user learns it.
+
+### Numeric presentation and report integrity
+
+DuckDB can return whole-number aggregates as `integer64`, while other metrics
+return R doubles. Mixed numeric measurement collection and numeric report
+serialization guard the exact integer range from `-2^53` through `2^53` before
+conversion. Values beyond this boundary are rejected where conversion would
+otherwise risk losing integer precision. This safeguard does not make every
+arithmetic operation exact, and it does not change the separate handling of
+BIGINT identifiers in stored tables.
+
+### Remaining operating and usability boundaries
+
+A product with a configured destination can write when `run()` executes. The
+introductory trial uses an untargeted definition, and `publish()` makes the
+intent to persist explicit. Stored configuration is an ordinary value, not a
+mutable global context.
+
+Source replacement updates the known R product graph and preserves its checks;
+it does not automatically execute a separate dbt project. Managed dbt source
+bindings can be replaced explicitly at execution. dbt may write intermediate
+models before a later test fails, and independent lake publications are not a
+single distributed transaction.
+
+Business keys, complete-table versus complete-partition delivery, stock-versus-
+flow meaning and approval of metric definitions remain explicit decisions.
+Exploration can omit approval and code version, but issued reports require
+approved, versioned calculation definitions and retained source evidence.
+
+One coordinated writer and sufficient memory for a complete lake candidate are
+still required. Remote-storage connectivity, production deployment, distributed
+locking and independent user testing are not established by these local checks.
+GitHub CI status belongs to the exact published commit and is not implied by this
+record.

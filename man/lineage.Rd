@@ -12,7 +12,7 @@ lineage(
 )
 }
 \arguments{
-\item{x}{Connected lake, run result, measurement set, dbt result or dbt
+\item{x}{Connected lake, run result, measurement, measurement set, dbt result or dbt
 artifact directory. Measurement edges describe the input release and
 metric version; they have no execution run ID.}
 

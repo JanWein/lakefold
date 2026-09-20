@@ -25,7 +25,9 @@ An ordinary execution configuration value. No global state is changed.
 }
 \description{
 Define execution choices once and pass the value to \code{\link[=run]{run()}}, \code{\link[=publish]{publish()}} or
-\code{\link[=ingest]{ingest()}}. Construction neither reads sources nor opens destinations.
+\code{\link[=ingest]{ingest()}}, or store it once with \code{product(execution = )}. Construction
+neither reads sources nor opens destinations. Stored defaults require
+connection-free destinations and are used only for the root definition.
 Engine defaults apply recursively to dependencies without changing the
 original definitions. Explicit rule and lookup engines always win. Only
 ordinary formula rules inherit the quality default; custom functions and

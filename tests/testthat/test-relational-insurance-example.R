@@ -143,7 +143,13 @@ test_that("the insurance example preserves business grains and issued reports", 
   invalid$month[[1]] <- as.Date("2026-03-01")
   failed <- demo$definitions$payments |>
     add_source(invalid, replace = TRUE) |>
-    run(stop_on_failure = FALSE)
+    run(
+      execution = execution_config(
+        quality = "pointblank",
+        relationships = "dm"
+      ),
+      stop_on_failure = FALSE
+    )
   expect_identical(failed$status, "error")
   expect_null(failed$outputs)
   expect_s3_class(failed$error, "tw_transform_failed")

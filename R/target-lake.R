@@ -246,7 +246,7 @@ tw_execute_target.tw_lake_target <- function(
           class = "tw_contract"
         )
       } else {
-        combine_quality(product$contract, product$quality)
+        combine_quality(effective_product_contract(product), product$quality)
       }
       pipeline <- tw_pipeline(
         paste0(product$id, ".compose"),

@@ -8,7 +8,7 @@ status(x, asset = NULL)
 }
 \arguments{
 \item{x}{A connected lake, \code{\link[=run]{run()}} result, \code{\link[=dbt_build]{dbt_build()}} result or a
-measurement set from \code{\link[=measure]{measure()}}.}
+measurement or measurement set from \code{\link[=measure]{measure()}}.}
 
 \item{asset}{Optional asset ID when querying a lake.}
 }

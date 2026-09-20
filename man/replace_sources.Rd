@@ -23,8 +23,9 @@ or rebuild its \code{\link[=as_targets]{as_targets()}} graph to let targets cach
 \details{
 For products, names select a root source alias (including the qualified
 transformation aliases shown by internal dependency inspection) or a nested
-product ID. A product ID updates the sole primary input of that product,
-retaining its transforms, checks and target in every reference, including
+product ID. A product ID updates the ordinary delivery at the end of its
+single-primary-input chain, retaining every product's transforms, checks and
+target in every reference, including
 lookups. Products with multiple primary inputs need an explicit edited
 definition instead. A replacement product with the same ID explicitly
 replaces the whole definition. If a root alias also names that same product, the product

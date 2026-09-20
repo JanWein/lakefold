@@ -2,11 +2,11 @@
 % Please edit documentation in R/quality-reports.R
 \name{quality_report}
 \alias{quality_report}
-\title{Export a portable quality report}
+\title{Inspect or export a portable quality report}
 \usage{
 quality_report(
   x,
-  path,
+  path = NULL,
   format = c("html", "json"),
   title = "tidyweave quality report",
   overwrite = FALSE
@@ -15,7 +15,7 @@ quality_report(
 \arguments{
 \item{x}{Quality tibble or a run/dbt result accepted by \code{\link[=quality]{quality()}}.}
 
-\item{path}{Output file path.}
+\item{path}{Optional output file path. Omit it to inspect a compact table.}
 
 \item{format}{HTML or JSON.}
 
@@ -24,7 +24,8 @@ quality_report(
 \item{overwrite}{Replace an existing file only when explicitly requested.}
 }
 \value{
-The normalized output path, invisibly.
+A diagnostic tibble when \code{path} is omitted; otherwise the normalized
+output path, invisibly.
 }
 \description{
 Exports persisted check metadata, counts and segment labels. No source rows

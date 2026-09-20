@@ -27,9 +27,10 @@ initial values after a new release is issued.
 ## Composition decisions
 
 An execution configuration is a small value, not an engine registry or mutable
-platform. Quality engine selection participates in stored contract fingerprints,
-so switching engines on an already registered explicit contract can require a
-new contract version. Contract composition is an explicit change to a promise,
+platform. Selecting a quality engine through execution defaults leaves the
+declared contract fingerprint unchanged. Execution evidence records the resolved
+engine separately, while explicit product code identity reflects execution
+changes. Contract composition is an explicit change to a promise,
 not automatic semantic inference through arbitrary dplyr. Source replacement traverses the
 known dependency graph without executing it; it does not add a scheduler.
 Measurement sets hold the individual manifests needed for report integrity while

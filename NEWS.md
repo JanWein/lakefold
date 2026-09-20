@@ -1,3 +1,30 @@
+# tidyweave 0.12.0
+
+* Products built from published results reuse a retained open lake connection
+  and can reopen the pinned release after that connection closes. This avoids
+  opening the same DuckDB file twice on Windows.
+* `filter()` re-exports the dplyr generic, so method discovery also resolves the
+  correct generic in R 4.2 checks.
+* Product definitions retain explicit execution defaults. Stable primary source
+  names and execution-time `data` or named `sources` replacements reuse the
+  existing transformations, checks and dependencies for another delivery.
+* Managed dbt execution accepts named replacement bindings without reconstructing
+  the project; its SQL build and final publication remain explicit steps.
+* Failed-result diagnostics explain blocked work through result-level evidence.
+  `quality_report()` returns a diagnostic table when no output path is supplied.
+* `metric_set()` shares product, dimensions, time settings and version metadata
+  across named calculations. Exploratory calculations can omit approval and code
+  version; issued reports still require approved, versioned definitions.
+* Measurement diagnostics resolve their exact retained source releases.
+  `report_release()` accepts results first and can infer a common source lake.
+* Selecting an execution quality engine no longer changes the declared contract
+  fingerprint. Execution evidence still records the effective checking engine.
+* The README and everyday guide recommend one task path. The insurance example
+  reuses named inputs and shared metric definitions for corrections.
+
+This is a development version. Validation results are recorded separately after
+execution; these release notes do not claim production or infrastructure coverage.
+
 # tidyweave 0.11.0
 
 * `contract_update()` derives a new explicit contract identity while reusing

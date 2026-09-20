@@ -6,12 +6,18 @@ home:
 template:
   bootstrap: 5
 reference:
-  - title: Everyday - define and execute a product
-    contents: [tidyweave-package, product, product-dplyr, add_source, add_lookup, ingest, run, publish, collect, inspect, plan, validate, execution_config, replace_sources]
-  - title: Everyday - expectations and diagnostics
-    contents: [contract, contract_update, contract_from, contract_confirm, contract_diff, quality_rule, quality_reference, quality, expect_quality, profile_data, quality_report, quality_errors, pointblank_report, contract_yaml, status, lineage]
-  - title: Everyday - metrics and issued reports
-    contents: [model, metric, measure, report_release, report_read, commons_yaml]
+  - title: Start here - define, try and publish
+    contents: [tidyweave-package, product, product-dplyr, run, publish, collect]
+  - title: Everyday - checks and explanations
+    contents: [contract, add_lookup, status, quality, quality_report, lineage]
+  - title: Everyday - calculations and reports
+    contents: [metric_set, metric, measure, report_release, report_read]
+  - title: Configure and reuse
+    contents: [execution_config, add_source, replace_sources, inspect, plan, validate, contract_update]
+  - title: Integration - detailed expectations and diagnostics
+    contents: [contract_from, contract_confirm, contract_diff, quality_rule, quality_reference, expect_quality, profile_data, quality_errors, pointblank_report, contract_yaml, model, commons_yaml]
+  - title: Integration - checked receipts
+    contents: [ingest]
   - title: Integration - sources and transformations
     contents: [source_file, source_database, source_release, source_parquet, source_api, source_pins, sql_transform, transform_dbt]
   - title: Integration - destinations
@@ -29,10 +35,10 @@ reference:
 articles:
   - title: Start here
     navbar: Start here
-    contents: [why-tidyweave, composing-products, getting-started]
+    contents: [why-tidyweave, everyday-workflows, composing-products]
   - title: Add capabilities
     navbar: Guides
-    contents: [layered-data-stack, relational-insurance, optional-integrations, everyday-workflows, quality-gates, quality-history, products-metrics, dbt-workflows]
+    contents: [getting-started, layered-data-stack, relational-insurance, optional-integrations, quality-gates, quality-history, products-metrics, dbt-workflows]
   - title: Understand and extend
     navbar: Architecture
     contents: [workflow-design, extending-tidyweave, design-review]

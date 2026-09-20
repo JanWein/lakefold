@@ -34,7 +34,8 @@ or ID, or the data variable name; expressions use \code{"data"}.}
 
 \item{reader}{Optional file reader. CSV, TSV, RDS and Excel have defaults.}
 
-\item{execution}{Optional \code{\link[=execution_config]{execution_config()}} defaults. Its layer must be
+\item{execution}{Optional \code{\link[=execution_config]{execution_config()}} defaults, overriding defaults
+stored on a product. Its layer must be
 \code{NULL} or \code{"raw"}; an explicit \code{to} overrides its destination.}
 
 \item{...}{Named execution options: \code{stop_on_failure} (default \code{TRUE}),

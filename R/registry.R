@@ -165,11 +165,16 @@ register <- function(lake, object) {
           "tw_legacy_metric"
         )
       }
-      abort(paste(
-        "Definition changed without a version bump:",
-        object$id,
-        object$version
-      ))
+      abort(
+        paste(
+          "Definition changed without a version bump:",
+          object$id,
+          object$version
+        ),
+        "tw_definition_changed",
+        definition_id = object$id,
+        definition_version = object$version
+      )
     }
   } else {
     insert_meta(

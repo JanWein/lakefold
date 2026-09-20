@@ -6,8 +6,9 @@
 #'
 #' For products, names select a root source alias (including the qualified
 #' transformation aliases shown by internal dependency inspection) or a nested
-#' product ID. A product ID updates the sole primary input of that product,
-#' retaining its transforms, checks and target in every reference, including
+#' product ID. A product ID updates the ordinary delivery at the end of its
+#' single-primary-input chain, retaining every product's transforms, checks and
+#' target in every reference, including
 #' lookups. Products with multiple primary inputs need an explicit edited
 #' definition instead. A replacement product with the same ID explicitly
 #' replaces the whole definition. If a root alias also names that same product, the product
@@ -34,7 +35,10 @@
 #' corrected <- totals |> replace_sources(orders = data.frame(amount = 20))
 #' corrected |> run() |> collect()
 replace_sources <- function(x, ...) {
-  replacements <- list(...)
+  replace_sources_list(x, list(...))
+}
+
+replace_sources_list <- function(x, replacements) {
   nms <- names(replacements)
   if (
     !length(replacements) ||
@@ -59,7 +63,13 @@ replace_sources <- function(x, ...) {
     alias <- name %in% names(sources)
     id <- name %in% ids
     if (!alias && !id) {
-      abort(paste("Unknown replacement source:", name))
+      abort(paste0(
+        "Unknown replacement source: ",
+        name,
+        ". Available names: ",
+        paste(sort(unique(c(names(sources), ids))), collapse = ", "),
+        "."
+      ))
     }
     if (
       alias &&
@@ -82,15 +92,18 @@ replace_sources <- function(x, ...) {
           ))
         }
       } else {
-        original <- definitions[[name]]
-        if (length(original$sources) != 1L) {
-          abort(paste(
-            "Replacing a product input requires exactly one primary source; supply an edited product definition:",
-            name
-          ))
-        }
-        replacement <- add_source(original, replacement, replace = TRUE)
+        replacement <- replace_primary_delivery(
+          definitions[[name]],
+          replacement
+        )
       }
+    }
+    if (
+      !id &&
+        inherits(sources[[name]], "tw_product") &&
+        !inherits(replacement, "tw_product")
+    ) {
+      replacement <- replace_primary_delivery(sources[[name]], replacement)
     }
     replacements[[name]] <- normalize_source(replacement, x$id, name)
   }
@@ -129,6 +142,21 @@ replace_sources <- function(x, ...) {
   }
   replacement_graph(out)
   out
+}
+
+replace_primary_delivery <- function(product, replacement) {
+  if (length(product$sources) != 1L) {
+    abort(paste0(
+      "Replacing a product input requires exactly one primary source at `",
+      product$id,
+      "`. Use sources = list(name = value) to select a deeper input or supply an edited product definition."
+    ))
+  }
+  source <- product$sources[[1L]]
+  if (inherits(source, "tw_product")) {
+    replacement <- replace_primary_delivery(source, replacement)
+  }
+  add_source(product, replacement, replace = TRUE)
 }
 
 replacement_graph <- function(x) {
@@ -179,7 +207,20 @@ replace_dbt_sources <- function(x, replacements) {
       logical(1)
     ))
     if (!length(matches)) {
-      abort(paste("Unknown dbt source binding:", name))
+      abort(paste0(
+        "Unknown dbt source binding: ",
+        name,
+        ". Available names: ",
+        paste(
+          vapply(
+            slots,
+            function(slot) paste(slot, collapse = "."),
+            character(1)
+          ),
+          collapse = ", "
+        ),
+        "."
+      ))
     }
     if (length(matches) != 1L) {
       abort(paste("Ambiguous dbt source binding; use group.table:", name))
