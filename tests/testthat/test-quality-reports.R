@@ -7,7 +7,9 @@ test_that("reports escape metadata, expose the gate and never include retained a
     "One order",
     c(id = "integer"),
     key = "id",
-    rules = list(quality_rule("<script>alert(1)</script>", function(data) FALSE))
+    rules = list(quality_rule("<script>alert(1)</script>", function(data) {
+      FALSE
+    }))
   )
   quality <- validate(data.frame(id = 1L), contract)
   root <- withr::local_tempdir()

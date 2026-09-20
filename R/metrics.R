@@ -110,7 +110,13 @@ metric <- function(
 #' lake is borrowed when available. Otherwise the saved configuration opens an
 #' owned read-only connection that closes before returning, including on errors.
 #' @param x Connected lake or successful published `tw_run_result`.
-#' @param metric Metric definition.
+#' @param metric Single metric definition.
+#' @param metrics Nonempty list of metric definitions for a measurement set.
+#'   Optional unique names label metrics in the collected table. Supply either
+#'   `metric` or `metrics`.
+#' @param period For `metrics`, `"each"` calculates each selected date separately;
+#'   `"aggregate"` calculates across selected dates. Stock metrics still require
+#'   one date. With `at = NULL`, dates are not split automatically.
 #' @param by Grouping columns.
 #' @param at Business date, or a vector for flow metrics.
 #' @param release Optional explicit product release id for a connected lake.
@@ -121,7 +127,10 @@ metric <- function(
 #'   lake and `FALSE` on a read-only lake or publication result. Use a connected
 #'   writable lake for `record = TRUE`. Unrecorded results still carry their
 #'   complete metric definition and pinned release in the manifest.
-#' @return Tibble with a tw_manifest attribute for report reproducibility.
+#' @return For `metric`, a tibble with a tw_manifest attribute. For `metrics`,
+#'   a `tw_measurement_set` retaining each original result and manifest.
+#'   `collect()` returns an ordinary long tibble with grouping columns,
+#'   `.metric`, `.period` (a list column of selected dates), `.unit` and `value`.
 #'   Grouped results are ordered by the requested dimensions using C collation
 #'   so database row order does not change report identity.
 #' @export
@@ -153,14 +162,35 @@ metric <- function(
 #' unlink(root, recursive = TRUE)
 measure <- function(
   x,
-  metric,
+  metric = NULL,
   by = character(),
   at = NULL,
   release = NULL,
   filters = list(),
   params = list(),
-  record = NULL
+  record = NULL,
+  metrics = NULL,
+  period = c("each", "aggregate")
 ) {
+  if (!is.null(metrics)) {
+    if (!is.null(metric)) {
+      abort("Supply either metric or metrics, not both.")
+    }
+    return(measure_set(
+      x,
+      metrics,
+      by,
+      at,
+      release,
+      filters,
+      params,
+      record,
+      match.arg(period)
+    ))
+  }
+  if (!missing(period)) {
+    abort("period applies only when using metrics.")
+  }
   if (!inherits(metric, "tw_metric")) {
     abort("metric must be a metric.")
   }
@@ -397,9 +427,10 @@ measure <- function(
 }
 
 #' Freeze metric results and input versions for a report
-#' @param lake Connected lake.
+#' @param lake Connected lake, lake configuration or local lake folder.
+#'   Supplied connections remain open; internally opened connections always close.
 #' @param id Immutable report release id.
-#' @param results Named list of measure results.
+#' @param results Named list of measure results, or a measurement set.
 #' @param code_version Reporting code version.
 #' @param params Report parameters.
 #' @return Report manifest including result values as data frames, both on
@@ -439,6 +470,16 @@ report_release <- function(
   code_version,
   params = list()
 ) {
+  set_metadata <- NULL
+  if (inherits(results, "tw_measurement_set")) {
+    validate_measurement_set(results)
+    set_metadata <- attr(results, "tw_set_metadata")
+    results <- unclass(results)
+  }
+  if (!inherits(lake, "tw_lake")) {
+    lake <- report_connection(lake, read_only = FALSE)
+    on.exit(disconnect_lake(lake), add = TRUE)
+  }
   assert_writable(lake)
   scalar(id, "id")
   scalar(code_version, "code_version")
@@ -471,6 +512,9 @@ report_release <- function(
     params = params,
     measures = measures
   )
+  if (!is.null(set_metadata)) {
+    manifest$measurement_set <- set_metadata
+  }
   old <- query(
     lake,
     paste("SELECT manifest FROM", meta(lake, "reports"), "WHERE id=?"),
@@ -576,16 +620,24 @@ report_identity <- function(json) {
 #' Reads the saved manifest without recalculating any metric. It preserves the
 #' original calculation times. Works on read-only lakes, including reports
 #' created before version 0.6.0. Values use the JSON representation stored in
-#' the report; dates are ISO strings. Use `values_only` for named result tibbles.
-#' @param lake Connected lake.
+#' the report; dates are ISO strings. With `values_only`, ordinary reports return
+#' named result tibbles; batch reports return the long measurement table, with
+#' Date selections restored in the `.period` list column.
+#' @param lake Connected lake, lake configuration or local lake folder.
+#'   Supplied connections remain open; internally opened connections always close.
 #' @param id Report release ID.
 #' @param values_only Return only the named result tables.
-#' @returns A manifest list, or a named list of tibbles.
+#' @returns A manifest list; with `values_only`, a named list of tibbles for
+#'   ordinary reports or a long tibble for batch reports.
 #' @export
 #' @examples
 #' # After saving report.v1 with report_release():
 #' # report_read(lake, "report.v1", values_only = TRUE)
 report_read <- function(lake, id, values_only = FALSE) {
+  if (!inherits(lake, "tw_lake")) {
+    lake <- report_connection(lake, read_only = TRUE)
+    on.exit(disconnect_lake(lake), add = TRUE)
+  }
   assert_lake(lake)
   scalar(id, "id")
   flag(values_only, "values_only")
@@ -601,7 +653,7 @@ report_read <- function(lake, id, values_only = FALSE) {
   if (!values_only) {
     return(manifest)
   }
-  lapply(manifest$measures, function(x) {
+  values <- lapply(manifest$measures, function(x) {
     tibble::as_tibble(lapply(x$values, function(column) {
       if (is.null(column)) {
         return(NA)
@@ -615,4 +667,20 @@ report_read <- function(lake, id, values_only = FALSE) {
       column
     }))
   })
+  if (is.null(manifest$measurement_set)) {
+    return(values)
+  }
+  metadata <- lapply(manifest$measurement_set, function(x) {
+    x["period"] <- list(unlist(x[["period"]], use.names = FALSE))
+    if ("Date" %in% unlist(x$period_class)) {
+      x$period <- as.Date(x$period)
+    }
+    x
+  })
+  for (i in seq_along(values)) {
+    attr(values[[i]], "tw_manifest") <- manifest$measures[[i]]$manifest
+    attr(values[[i]], "tw_manifest")$by <-
+      unlist(manifest$measures[[i]]$manifest$by, use.names = FALSE)
+  }
+  measurement_set_table(values, metadata)
 }

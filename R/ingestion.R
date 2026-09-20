@@ -32,6 +32,8 @@
 #' @param contract Optional contract, named type vector or prototype list.
 #' @param quality Optional input checks accepted by [add_quality()].
 #' @param reader Optional file reader. CSV, TSV, RDS and Excel have defaults.
+#' @param execution Optional [execution_config()] defaults. Its layer must be
+#'   `NULL` or `"raw"`; an explicit `to` overrides its destination.
 #' @param ... Named execution options: `stop_on_failure` (default `TRUE`),
 #'   `business_date`, `notify`, `code_version`, and `cache` (default `FALSE`).
 #'   Reusing a cached raw release requires an explicit `code_version`; live
@@ -52,14 +54,28 @@
 #' unlink(root, recursive = TRUE)
 ingest <- function(
   x,
-  to = "tidyweave",
+  to = NULL,
   name = NULL,
   contract = NULL,
   quality = NULL,
   reader = NULL,
+  execution = NULL,
   ...
 ) {
   expression <- substitute(x)
+  execution <- validate_execution_config(execution)
+  if (!is.null(execution$layer) && execution$layer != "raw") {
+    abort("Ingestion requires execution layer = 'raw' or NULL.")
+  }
+  if (is.null(to)) {
+    to <- execution$to %||% "tidyweave"
+    if (inherits(to, "tw_lake_target")) {
+      if (length(to$partition_by)) {
+        abort("Ingestion does not accept partitioned targets.")
+      }
+      to <- to$destination
+    }
+  }
   options <- ingestion_options(list(...))
   if (inherits(x, "tw_product")) {
     if (
@@ -101,6 +117,11 @@ ingest <- function(
   }
   if (!is.null(quality)) {
     definition <- add_quality(definition, quality)
+  }
+  quality_defaults <- execution
+  if (!is.null(quality_defaults)) {
+    quality_defaults[c("to", "layer")] <- list(NULL, NULL)
+    definition <- apply_execution_defaults(definition, quality_defaults)
   }
   validate(definition)
   if (is.character(to)) {

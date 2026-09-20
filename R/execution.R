@@ -98,6 +98,7 @@ publish_metadata.default <- function(catalog, metadata, ...) {
 #'   to the `tidyweave` folder in the working directory when the product has none.
 #'   For dbt builds it defaults to the project's configured lake.
 #' @param layer Optional publication layer for a lake target.
+#' @param execution Optional [execution_config()] defaults for products.
 #' @param ... Execution options, including `stop_on_failure` and, for lake
 #'   targets, `business_date`, `notify` and `cache`. dbt builds accept
 #'   [dbt_publish()] options such as `contract`, `asset` and `layer`.
@@ -123,18 +124,34 @@ publish.data.frame <- function(x, name = NULL, to = NULL, ...) {
 }
 #' @rdname publish
 #' @export
-publish.tw_product <- function(x, name = NULL, to = NULL, layer = NULL, ...) {
+publish.tw_product <- function(
+  x,
+  name = NULL,
+  to = NULL,
+  layer = NULL,
+  execution = NULL,
+  ...
+) {
   if (!is.null(name)) {
     abort(
       "The product already has a name. Omit name or create product(name)."
     )
   }
+  execution <- validate_execution_config(execution)
   x <- editable_product(x)
   if (!is.null(to)) {
     x <- set_target(x, to)
+    if (
+      is.null(layer) &&
+        !is.null(execution$layer) &&
+        !inherits(to, "tw_lake_target")
+    ) {
+      layer <- execution$layer
+    }
   }
   if (is.null(x$target)) {
-    x <- set_target(x, "tidyweave")
+    x <- set_target(x, execution$to %||% "tidyweave")
+    layer <- layer %||% execution$layer
   }
   if (!is.null(layer)) {
     if (!inherits(x$target, "tw_lake_target")) {
@@ -142,7 +159,7 @@ publish.tw_product <- function(x, name = NULL, to = NULL, layer = NULL, ...) {
     }
     x$target$layer <- ident(layer)
   }
-  run(x, ...)
+  run(x, execution = execution, ...)
 }
 #' @export
 publish.default <- function(x, name = NULL, to = NULL, ...) {
@@ -204,6 +221,7 @@ run.tw_product <- function(
   stop_on_failure = TRUE,
   evidence = getOption("tidyweave.evidence"),
   .context = NULL,
+  execution = NULL,
   ...
 ) {
   object <- pipeline
@@ -214,6 +232,7 @@ run.tw_product <- function(
   if (!is.null(lake)) {
     object <- set_target(object, lake)
   }
+  object <- apply_execution_defaults(object, execution)
   object <- validate(object)
   context <- .context %||% new_product_context(evidence)
   if (exists(object$id, context$results, inherits = FALSE)) {

@@ -29,6 +29,10 @@ the same execution. Without a target, the result retains its checked table;
 \details{
 Product execution options passed through \code{...} include:
 \itemize{
+\item \code{execution}: an optional \code{\link[=execution_config]{execution_config()}} value. Engine defaults
+propagate through dependencies; explicit step choices win. Destination and
+layer defaults apply only to the root product. Untargeted dependencies stay
+in memory, and existing dependency targets are preserved.
 \item \code{stop_on_failure}: defaults to \code{TRUE}. Set \code{FALSE} to receive failed or
 blocked run results for programmatic inspection.
 \item \code{evidence}: an optional directory for durable run records. Defaults to
@@ -39,6 +43,10 @@ quality checks cannot reuse cached releases.
 \item \code{business_date} and \code{notify}: optional lake publication context and an
 existing notification callback.
 }
+
+Quality engine selection participates in a stored contract's fingerprint.
+Changing engines for an already registered explicit contract can require a
+new contract version; an immutable registered version is not rewritten.
 
 Metrics and dbt project specifications also have execution methods; see
 \code{\link[=measure]{measure()}} and \code{\link[=dbt_build]{dbt_build()}} for their operation-specific options/results.

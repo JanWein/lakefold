@@ -1,8 +1,10 @@
 #' Inspect execution status across R and dbt workflows
-#' @param x A connected lake, [run()] result or [dbt_build()] result.
+#' @param x A connected lake, [run()] result, [dbt_build()] result or a
+#'   measurement set from [measure()].
 #' @param asset Optional asset ID when querying a lake.
 #' @returns A tibble with `engine`, `id`, `status`, `success`, `release_id`,
-#'   `asset` and `message`. A dbt process failure remains visible even when
+#'   `asset`, `outcome` and `message`. `outcome` normalizes native statuses to
+#'   `succeeded`, `blocked`, `failed` or `skipped` (unknown states are `NA`). A dbt process failure remains visible even when
 #'   individual nodes passed. No raw stdout or stderr is included.
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
@@ -14,6 +16,22 @@
 #' disconnect_lake(lake)
 #' unlink(root, recursive = TRUE)
 status <- function(x, asset = NULL) {
+  if (inherits(x, "tw_measurement_set")) {
+    validate_measurement_set(x)
+    return(dplyr::bind_rows(lapply(x, function(value) {
+      manifest <- attr(value, "tw_manifest")
+      tibble::tibble(
+        engine = "tidyweave",
+        id = manifest$metric,
+        status = "completed",
+        outcome = "succeeded",
+        success = TRUE,
+        release_id = manifest$release_id,
+        asset = manifest$product,
+        message = ""
+      )
+    })))
+  }
   if (inherits(x, "tw_lake")) {
     runs <- metadata_filter(x, "runs", asset = asset)
     runs <- runs[order(runs$started_at, decreasing = TRUE), ]
@@ -21,6 +39,7 @@ status <- function(x, asset = NULL) {
       engine = rep("tidyweave", nrow(runs)),
       id = runs$run_id,
       status = runs$status,
+      outcome = status_outcome(runs$status),
       success = runs$status %in% c("published", "cached"),
       release_id = runs$release_id,
       asset = runs$asset,
@@ -32,6 +51,7 @@ status <- function(x, asset = NULL) {
       engine = "tidyweave",
       id = x$run_id,
       status = x$status,
+      outcome = status_outcome(x$status),
       success = x$status %in% c("completed", "published", "cached"),
       release_id = x$release_id,
       asset = x$asset %||% NA_character_,
@@ -44,6 +64,7 @@ status <- function(x, asset = NULL) {
       engine = rep("dbt", nrow(nodes)),
       id = nodes$unique_id,
       status = nodes$status,
+      outcome = status_outcome(nodes$status),
       success = nodes$status %in% c("success", "pass", "warn"),
       release_id = rep(NA_character_, nrow(nodes)),
       asset = nodes$unique_id,
@@ -56,6 +77,7 @@ status <- function(x, asset = NULL) {
           engine = "dbt",
           id = ".process",
           status = "error",
+          outcome = "failed",
           success = FALSE,
           release_id = NA_character_,
           asset = NA_character_,
@@ -65,7 +87,9 @@ status <- function(x, asset = NULL) {
     }
     return(rows)
   }
-  abort("x must be a lake, tidyweave run result or dbt result.")
+  abort(
+    "x must be a lake, tidyweave run result, measurement set or dbt result."
+  )
 }
 
 metadata_filter <- function(lake, table, asset = NULL, run_id = NULL) {
@@ -109,6 +133,11 @@ metadata_filter <- function(lake, table, asset = NULL, run_id = NULL) {
 #'   c(id = "integer"), key = "id")
 #' quality(validate(data.frame(id = c(1L, 1L)), contract))
 quality <- function(x, run_id = NULL, asset = NULL, release = NULL) {
+  if (inherits(x, "tw_measurement_set")) {
+    abort(
+      "Measurement sets retain input quality summaries, not full checks. Use quality(lake, asset = ..., release = ...) for the exact input release."
+    )
+  }
   if (inherits(x, "tw_lake")) {
     if (
       is.null(run_id) == is.null(asset) || (!is.null(release) && is.null(asset))
@@ -214,7 +243,11 @@ releases <- function(lake, asset = NULL) {
 #'
 #' Traverses dataset IDs while retaining version IDs on each returned edge.
 #' It does not infer column lineage or reconstruct a single historical DAG.
-#' @param x Connected lake, dbt result or dbt artifact directory.
+#' Run results expose only recorded inputs for that exact execution, without
+#' querying the latest lake state or inferring unrecorded upstream edges.
+#' @param x Connected lake, run result, measurement set, dbt result or dbt
+#'   artifact directory. Measurement edges describe the input release and
+#'   metric version; they have no execution run ID.
 #' @param asset Optional starting dataset ID (dbt unique ID for dbt inputs).
 #' @param direction Follow upstream inputs or downstream consumers.
 #' @param recursive Follow all reachable edges, with cycle protection.
@@ -234,6 +267,21 @@ lineage <- function(
   flag(recursive, "recursive")
   if (inherits(x, "tw_lake")) {
     edges <- registry(x, "lineage_edges")
+  } else if (inherits(x, "tw_run_result")) {
+    edges <- run_result_lineage(x)
+  } else if (inherits(x, "tw_measurement_set")) {
+    validate_measurement_set(x)
+    edges <- unique(dplyr::bind_rows(lapply(x, function(value) {
+      manifest <- attr(value, "tw_manifest")
+      tibble::tibble(
+        run_id = NA_character_,
+        from_id = manifest$product,
+        from_version = manifest$release_id,
+        to_id = manifest$metric,
+        to_version = manifest$metric_version,
+        relation = "measured_from"
+      )
+    })))
   } else {
     source <- dbt_lineage(x)
     edges <- tibble::tibble(
@@ -264,4 +312,59 @@ lineage <- function(
     frontier <- setdiff(unique(edges[[end]][found]), seen)
   }
   edges[selected, ]
+}
+
+
+status_outcome <- function(status) {
+  out <- rep(NA_character_, length(status))
+  out[
+    status %in% c("completed", "published", "cached", "success", "pass", "warn")
+  ] <- "succeeded"
+  out[status %in% c("blocked", "fail")] <- "blocked"
+  out[status %in% c("error", "failed", "runtime error")] <- "failed"
+  out[status %in% c("skipped", "skip")] <- "skipped"
+  out
+}
+
+empty_lineage <- function() {
+  tibble::tibble(
+    run_id = character(),
+    from_id = character(),
+    from_version = character(),
+    to_id = character(),
+    to_version = character(),
+    relation = character()
+  )
+}
+
+run_result_lineage <- function(x) {
+  recorded <- x$metadata$lineage
+  if (is.data.frame(recorded)) {
+    return(tibble::as_tibble(recorded)[names(empty_lineage())])
+  }
+  inputs <- x$source_inputs %||% x$inputs
+  destination <- x$asset %||% x$metadata$product
+  if (
+    !is.data.frame(inputs) ||
+      !all(c("asset", "run_id", "release_id") %in% names(inputs)) ||
+      is.null(destination)
+  ) {
+    return(empty_lineage())
+  }
+  known <- !is.na(inputs$asset) & nzchar(inputs$asset)
+  inputs <- inputs[known, , drop = FALSE]
+  if (!nrow(inputs)) {
+    return(empty_lineage())
+  }
+  version <- function(release, run) {
+    ifelse(!is.na(release) & nzchar(release), release, run)
+  }
+  unique(tibble::tibble(
+    run_id = rep(x$run_id, nrow(inputs)),
+    from_id = inputs$asset,
+    from_version = version(inputs$release_id, inputs$run_id),
+    to_id = rep(destination, nrow(inputs)),
+    to_version = rep(version(x$release_id, x$run_id), nrow(inputs)),
+    relation = rep("consumed_from", nrow(inputs))
+  ))
 }

@@ -1,0 +1,204 @@
+test_that("batch measurements separate stock dates and aggregate flows explicitly", {
+  f <- fixture()
+  on.exit(fixture_cleanup(f))
+  dates <- as.Date(c("2026-08-31", "2026-09-30"))
+  f$write(rbind(
+    f$good,
+    transform(f$good, date = dates[2], reserve = reserve * 2)
+  ))
+  published <- run(f$pipeline, f$lake)
+  stock <- reserve_metric()
+  flow <- metric(
+    "risk.flow",
+    "risk.validated",
+    expr = sum(reserve),
+    dimensions = "company",
+    time_column = "date",
+    time_behavior = "flow",
+    unit = "EUR",
+    approved = TRUE,
+    code_version = "v1"
+  )
+  set <- measure(
+    f$lake,
+    metrics = list(reserve = stock, cash = flow),
+    by = "company",
+    at = dates
+  )
+  values <- collect(set)
+  expect_s3_class(set, "tw_measurement_set")
+  expect_output(
+    tidyweave:::print.tw_measurement_set(set),
+    "4 pinned calculations"
+  )
+  expect_identical(class(values), c("tbl_df", "tbl", "data.frame"))
+  expect_named(values, c("company", ".metric", ".period", ".unit", "value"))
+  expect_equal(values$value, c(100, 200, 200, 400, 100, 200, 200, 400))
+  expect_identical(values$.period[[3]], dates[2])
+  report_release(f$lake, "grouped", set, "v1")
+  expect_equal(report_read(f$lake, "grouped", values_only = TRUE), values)
+  expect_equal(
+    vapply(set, function(x) attr(x, "tw_manifest")$release_id, character(1)),
+    rep(published$release_id, 4),
+    ignore_attr = TRUE
+  )
+  aggregate <- measure(
+    f$lake,
+    metrics = list(flow),
+    at = dates,
+    period = "aggregate"
+  )
+  expect_equal(collect(aggregate)$value, 900)
+  expect_identical(collect(aggregate)$.period[[1]], dates)
+  expect_equal(measure(f$lake, flow, at = dates)$value, 900)
+  expect_snapshot(
+    error = TRUE,
+    measure(f$lake, metrics = list(stock), at = dates, period = "aggregate")
+  )
+})
+
+test_that("measurement sets retain pinned inputs and report evidence", {
+  f <- fixture()
+  on.exit(fixture_cleanup(f))
+  published <- run(f$pipeline, f$lake)
+  # A product publication supplies the exact immutable result reference.
+  original <- product(
+    "risk.product",
+    contract = f$contract,
+    code_version = "v1"
+  ) |>
+    add_source(source_release(f$lake, "risk.validated")) |>
+    publish(to = f$lake)
+  metric <- reserve_metric("risk.product")
+  before <- measure(original, metrics = list(reserve = metric))
+  f$write(transform(f$good, reserve = reserve * 2))
+  run(f$pipeline, f$lake)
+  corrected <- product(
+    "risk.product",
+    contract = f$contract,
+    code_version = "v1"
+  ) |>
+    add_source(source_release(f$lake, "risk.validated")) |>
+    publish(to = f$lake)
+  expect_equal(collect(measure(original, metrics = list(metric)))$value, 300)
+  expect_equal(collect(measure(corrected, metrics = list(metric)))$value, 600)
+  saved <- report_release(f$lake, "monthly", before, "v1")
+  retry <- report_release(
+    f$lake,
+    "monthly",
+    measure(original, metrics = list(reserve = metric)),
+    "v1"
+  )
+  expect_identical(retry, saved)
+  expect_equal(
+    report_read(f$lake, "monthly", values_only = TRUE),
+    collect(before)
+  )
+  expect_snapshot(
+    error = TRUE,
+    report_release(
+      f$lake,
+      "monthly",
+      measure(original, metrics = list(renamed = metric)),
+      "v1"
+    )
+  )
+  expect_identical(DBI::dbIsValid(f$lake$con), TRUE)
+  changed <- before
+  changed[[1]]$value <- 123
+  expect_snapshot(error = TRUE, report_release(f$lake, "bad", changed, "v1"))
+  expect_identical(DBI::dbIsValid(f$lake$con), TRUE)
+  changed <- before
+  attr(changed[[1]], "tw_manifest")$release_id <- corrected$release_id
+  expect_snapshot(error = TRUE, collect(changed))
+  changed <- before
+  attr(changed, "tw_set_metadata")[[1]]$unit <- "USD"
+  expect_snapshot(error = TRUE, report_release(f$lake, "bad", changed, "v1"))
+})
+
+test_that("managed report connections close on success and failure", {
+  root <- withr::local_tempdir()
+  lake <- open_lake(root)
+  on.exit(if (DBI::dbIsValid(lake$con)) close_lake(lake), add = TRUE)
+  write_data(lake, data.frame(id = 1:2, amount = c(10, 20)), "orders")
+  total <- metric(
+    "orders.total",
+    "orders",
+    expr = sum(amount),
+    approved = TRUE,
+    code_version = "v1"
+  )
+  measured <- measure(lake, metrics = list(total))
+  config <- lake$config
+  close_lake(lake)
+  saved <- report_release(config, "one", measured, "v1")
+  expect_equal(report_read(root, "one", values_only = TRUE)$value, 30)
+  expect_equal(report_release(root, "one", measured, "v1"), saved)
+  expect_snapshot(error = TRUE, report_release(config, "one", measured, "v2"))
+  expect_snapshot(error = TRUE, report_read(config, "missing"))
+  # Reopening in the other access mode fails if a managed connection leaked.
+  lake <- open_lake(root)
+  expect_equal(report_read(lake, "one")$id, "one")
+  expect_identical(DBI::dbIsValid(lake$con), TRUE)
+  expect_equal(nrow(registry(lake, "reports")), 1)
+})
+
+test_that("batch measurement rejects ambiguous labels and grouping columns", {
+  metric <- reserve_metric()
+  expect_snapshot(
+    error = TRUE,
+    measure(NULL, metrics = list(x = metric, x = metric))
+  )
+  expect_snapshot(error = TRUE, measure(NULL, metric, metrics = list(metric)))
+  expect_snapshot(
+    error = TRUE,
+    measure(NULL, metrics = list(metric), by = ".metric")
+  )
+  expect_snapshot(
+    error = TRUE,
+    measure(NULL, metrics = list(metric), at = c(1, 1))
+  )
+})
+
+test_that("batch calculation manages one owned connection and preserves closed result pins", {
+  root <- withr::local_tempdir()
+  dates <- as.Date(c("2026-08-31", "2026-09-30"))
+  original <- product(
+    "balances",
+    data.frame(date = dates, amount = c(10, 20))
+  ) |>
+    publish(to = root)
+  stock <- metric(
+    "balances.total",
+    "balances",
+    expr = sum(amount),
+    time_column = "date",
+    approved = TRUE,
+    code_version = "v1"
+  )
+  actual_connect <- tidyweave:::connect_lake
+  opened <- list()
+  testthat::local_mocked_bindings(
+    connect_lake = function(...) {
+      lake <- actual_connect(...)
+      opened[[length(opened) + 1L]] <<- lake
+      lake
+    },
+    .package = "tidyweave"
+  )
+  measured <- measure(original, metrics = list(stock), at = dates)
+  expect_equal(collect(measured)$value, c(10, 20))
+  expect_length(opened, 1L)
+  expect_identical(DBI::dbIsValid(opened[[1]]$con), FALSE)
+  expect_snapshot(
+    error = TRUE,
+    measure(original, metrics = list(stock), at = dates, period = "aggregate")
+  )
+  expect_length(opened, 2L)
+  expect_identical(DBI::dbIsValid(opened[[2]]$con), FALSE)
+  lake <- open_lake(root)
+  on.exit(close_lake(lake), add = TRUE)
+  expect_equal(measure(lake, stock, at = dates[1])$value, 10)
+  expect_snapshot(error = TRUE, collect(measured, unused = TRUE))
+  expect_identical(DBI::dbIsValid(lake$con), TRUE)
+})

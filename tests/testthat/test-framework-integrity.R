@@ -158,7 +158,10 @@ test_that("custom metric input declarations are optional and validated", {
 
 test_that("read-only attachments protect data and metadata while supporting analyses", {
   root <- tempfile("tidyweave-read-only-")
-  lake <- open_lake(root, backend = Sys.getenv("TIDYWEAVE_TEST_BACKEND", "duckdb"))
+  lake <- open_lake(
+    root,
+    backend = Sys.getenv("TIDYWEAVE_TEST_BACKEND", "duckdb")
+  )
   on.exit({
     close_lake(lake)
     unlink(root, recursive = TRUE)

@@ -19,7 +19,7 @@ test_that("the insurance grammar preserves transaction grain without infrastruct
     add_contract(contracts$enriched_payments)
   data <- collect(run(payments))
   expect_equal(nrow(data), 10L)
-  expect_false("premium_due" %in% names(data))
+  expect_equal(intersect("premium_due", names(data)), character())
   expect_equal(anyDuplicated(data$payment_id), 0L)
   first <- data$policy_id == "P1" & data$month == as.Date("2026-01-01")
   expect_equal(sum(first), 2L)
@@ -103,14 +103,27 @@ test_that("the insurance example preserves business grains and issued reports", 
   }
 
   # Ratios aggregate the numerator and denominator, not individual percentages.
-  expect_equal(demo$initial$measures$ratio_total$value, 2280 / 2850)
+  expect_equal(
+    dplyr::filter(collect(demo$initial$totals), .metric == "cash_to_due")$value,
+    2280 / 2850
+  )
   expect_gt(
     abs(
-      demo$initial$measures$ratio_total$value - mean(c(980 / 1500, 1300 / 1350))
+      dplyr::filter(
+        collect(demo$initial$totals),
+        .metric == "cash_to_due"
+      )$value -
+        mean(c(980 / 1500, 1300 / 1350))
     ),
     0.001
   )
-  expect_equal(demo$corrected$measures$ratio_total$value, 2530 / 2850)
+  expect_equal(
+    dplyr::filter(
+      collect(demo$corrected$totals),
+      .metric == "cash_to_due"
+    )$value,
+    2530 / 2850
+  )
   expect_identical(demo$failures$pointblank$status, "blocked")
   expect_null(demo$failures$pointblank$outputs)
   expect_identical(unique(quality(demo$failures$pointblank)$stage), "ingest")
@@ -201,12 +214,28 @@ test_that("the insurance example preserves business grains and issued reports", 
     expect_identical(unname(unique(pins)), demo[[phase]]$release$release_id)
   }
   saved <- report_read(lake, demo$initial$report$id, values_only = TRUE)
-  expect_equal(saved$cash_jan$value, 980)
-  expect_equal(saved$cash_feb$value, 1300)
-  expect_equal(saved$active_jan$value, 5L)
-  expect_equal(saved$active_feb$value, 5L)
-  expect_equal(saved$due_jan$value, 1500)
-  expect_equal(saved$due_feb$value, 1350)
+  expect_equal(saved, demo$initial$summary)
+  expect_equal(
+    dplyr::filter(saved, .metric == "cash_collected")$value,
+    c(980, 1300)
+  )
+  expect_equal(
+    dplyr::filter(saved, .metric == "active_policies")$value,
+    c(5, 5)
+  )
+  expect_equal(
+    dplyr::filter(saved, .metric == "premium_due")$value,
+    c(1500, 1350)
+  )
+  expect_equal(
+    dplyr::filter(saved, .metric == "cash_collected")$.period,
+    list(as.Date("2026-01-01"), as.Date("2026-02-01"))
+  )
+  expect_equal(collect(demo$initial$by_channel)$value, c(400, 280, 300))
+  expect_equal(
+    dplyr::filter(demo$corrected$summary, .metric == "cash_collected")$value,
+    c(1230, 1300)
+  )
   stock_error <- tryCatch(
     measure(
       demo$initial$release,

@@ -7,11 +7,12 @@
 report_release(lake, id, results, code_version, params = list())
 }
 \arguments{
-\item{lake}{Connected lake.}
+\item{lake}{Connected lake, lake configuration or local lake folder.
+Supplied connections remain open; internally opened connections always close.}
 
 \item{id}{Immutable report release id.}
 
-\item{results}{Named list of measure results.}
+\item{results}{Named list of measure results, or a measurement set.}
 
 \item{code_version}{Reporting code version.}
 

@@ -184,49 +184,15 @@ add_contract <- function(x, contract) {
 #' @export
 add_quality <- function(x, quality, name = NULL, engine = NULL) {
   x <- editable_product(x)
-  if (!is.null(engine)) {
-    normalize_quality_engine(engine)
-  }
-  if (is.list(quality) && !inherits(quality, "tw_rule")) {
-    if (!is.null(name)) {
-      abort("Name individual rules in the quality list.")
-    }
-    for (i in seq_along(quality)) {
-      label <- names(quality)[i]
-      if (is.null(label) || is.na(label) || !nzchar(label)) {
-        label <- NULL
-      }
-      x <- add_quality(x, quality[[i]], label, engine = engine)
-    }
-    return(x)
-  }
-  if (!inherits(quality, "tw_rule")) {
-    quality <- quality_rule(
-      name %||% paste0("quality_", length(x$quality) + 1L),
-      quality,
-      engine = engine %||% "native"
-    )
-  } else if (!is.null(name)) {
-    quality$name <- scalar(name, "name")
-  }
-  if (!is.null(engine) && inherits(quality, "tw_rule")) {
-    selected <- normalize_quality_engine(engine)
-    if (
-      !identical(quality$engine, selected) &&
-        !inherits(quality$check, "formula")
-    ) {
-      abort(
-        "Only formula rules can change engines. Keep custom functions native or use pointblank_checks() for an agent builder."
-      )
-    }
-    quality$engine <- selected
-  }
-  if (quality$name %in% vapply(x$quality, `[[`, character(1), "name")) {
-    abort("Quality rule names must be unique.")
-  }
-  x$quality <- c(x$quality, list(quality))
+  x$quality <- normalize_quality_rules(
+    quality,
+    name,
+    engine,
+    existing = x$quality
+  )
   x
 }
+
 #' @rdname add_source
 #' @export
 set_target <- function(x, target) {

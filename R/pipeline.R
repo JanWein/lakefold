@@ -414,6 +414,10 @@ publish_candidate <- function(
 #' [collect()] materializes lazy output when it is needed.
 #'
 #' Product execution options passed through `...` include:
+#' * `execution`: an optional [execution_config()] value. Engine defaults
+#'   propagate through dependencies; explicit step choices win. Destination and
+#'   layer defaults apply only to the root product. Untargeted dependencies stay
+#'   in memory, and existing dependency targets are preserved.
 #' * `stop_on_failure`: defaults to `TRUE`. Set `FALSE` to receive failed or
 #'   blocked run results for programmatic inspection.
 #' * `evidence`: an optional directory for durable run records. Defaults to
@@ -423,6 +427,10 @@ publish_candidate <- function(
 #'   quality checks cannot reuse cached releases.
 #' * `business_date` and `notify`: optional lake publication context and an
 #'   existing notification callback.
+#'
+#' Quality engine selection participates in a stored contract's fingerprint.
+#' Changing engines for an already registered explicit contract can require a
+#' new contract version; an immutable registered version is not rewritten.
 #'
 #' Metrics and dbt project specifications also have execution methods; see
 #' [measure()] and [dbt_build()] for their operation-specific options/results.

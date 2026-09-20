@@ -12,7 +12,9 @@ lineage(
 )
 }
 \arguments{
-\item{x}{Connected lake, dbt result or dbt artifact directory.}
+\item{x}{Connected lake, run result, measurement set, dbt result or dbt
+artifact directory. Measurement edges describe the input release and
+metric version; they have no execution run ID.}
 
 \item{asset}{Optional starting dataset ID (dbt unique ID for dbt inputs).}
 
@@ -27,6 +29,8 @@ have empty version fields because a manifest declares dependencies.
 \description{
 Traverses dataset IDs while retaining version IDs on each returned edge.
 It does not infer column lineage or reconstruct a single historical DAG.
+Run results expose only recorded inputs for that exact execution, without
+querying the latest lake state or inferring unrecorded upstream edges.
 }
 \examples{
 path <- system.file("extdata", "dbt-artifacts", package = "tidyweave")
