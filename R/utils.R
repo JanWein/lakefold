@@ -1,5 +1,5 @@
 `%||%` <- function(x, y) if (is.null(x)) y else x
-abort <- function(message, class = "dl_error", ...) {
+abort <- function(message, class = "tw_error", ...) {
   rlang::abort(message, class = class, ...)
 }
 need <- function(package) {
@@ -18,7 +18,28 @@ absolute_path <- function(path) {
   if (!grepl("^(/|[A-Za-z]:[/\\\\]|\\\\\\\\)", path)) {
     path <- file.path(getwd(), path)
   }
-  normalizePath(path, winslash = "/", mustWork = FALSE)
+  # Canonicalize the existing ancestor before appending missing components.
+  # Normalizing a nonexistent path directly can retain Windows short names or
+  # separators that change after creation, invalidating an unchanged targets DAG.
+  suffix <- character()
+  while (!file.exists(path)) {
+    parent <- dirname(path)
+    if (identical(parent, path)) {
+      break
+    }
+    suffix <- c(basename(path), suffix)
+    path <- parent
+  }
+  path <- normalizePath(path, winslash = "/", mustWork = FALSE)
+  for (component in suffix) {
+    path <- switch(
+      component,
+      "." = path,
+      ".." = dirname(path),
+      file.path(path, component)
+    )
+  }
+  path
 }
 ident <- function(x) {
   scalar(x, "Identifier")
@@ -33,7 +54,7 @@ assert_writable <- function(lake) {
   if (isTRUE(lake$config$read_only)) {
     abort(
       "This lake is read-only. Open a writable connection for this operation.",
-      "dl_read_only"
+      "tw_read_only"
     )
   }
 }
@@ -50,7 +71,7 @@ uid <- function() {
     "r",
     substr(
       digest::digest(
-        list(now(), Sys.getpid(), tempfile("lakefold-id-")),
+        list(now(), Sys.getpid(), tempfile("tidyweave-id-")),
         algo = "sha256"
       ),
       1,
@@ -141,12 +162,15 @@ insert_meta <- function(lake, name, values) {
   )
 }
 assert_lake <- function(lake) {
-  if (!inherits(lake, "dl_lake") || !DBI::dbIsValid(lake$con)) {
-    abort("A connected dl_lake is required.")
+  if (!inherits(lake, "tw_lake") || !DBI::dbIsValid(lake$con)) {
+    abort("A connected tw_lake is required.")
   }
 }
 count_rows <- function(x) {
-  as.numeric(dplyr::collect(dplyr::summarise(x, n = dplyr::n()))$n[[1]])
+  as.numeric(dplyr::collect(dplyr::summarise(
+    dplyr::ungroup(x),
+    n = dplyr::n()
+  ))$n[[1]])
 }
 materialize <- function(lake, data, schema, name) {
   dest <- table_sql(lake, schema, name)
@@ -168,25 +192,26 @@ materialize <- function(lake, data, schema, name) {
 
 
 null_counts <- function(data, columns) {
+  data <- dplyr::ungroup(data)
   if (!length(columns)) {
-    return(setNames(numeric(), character()))
+    return(stats::setNames(numeric(), character()))
   }
   if (!inherits(data, "tbl_sql")) {
     return(vapply(data[columns], function(x) sum(is.na(x)), numeric(1)))
   }
-  expressions <- setNames(
+  expressions <- stats::setNames(
     lapply(columns, function(column) {
       rlang::expr(sum(as.integer(is.na(!!rlang::sym(column))), na.rm = TRUE))
     }),
     columns
   )
   result <- dplyr::collect(dplyr::summarise(data, !!!expressions))
-  setNames(as.numeric(result[1, ]), columns)
+  stats::setNames(as.numeric(result[1, ]), columns)
 }
 
 flag <- function(value, name) {
   if (!is.logical(value) || length(value) != 1L || is.na(value)) {
-    abort(paste(name, "must be TRUE or FALSE."), "dl_invalid_argument")
+    abort(paste(name, "must be TRUE or FALSE."), "tw_invalid_argument")
   }
   value
 }

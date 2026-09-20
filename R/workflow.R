@@ -11,17 +11,17 @@
 #'   data frame.
 #' @param id Unique step identifier within this pipeline.
 #' @return An updated pipeline specification.
-#' @export
 #' @examples
-#' pipeline <- dl_pipeline("orders.import", dl_config(backend = "duckdb"),
+#' pipeline <- tw_pipeline("orders.import", lake_config(backend = "duckdb"),
 #'   code_version = "v1") |>
-#'   dl_step_land(dl_source("orders.file", "orders.csv", utils::read.csv)) |>
-#'   dl_step_extract() |>
-#'   dl_step_transform(function(data) dplyr::filter(data, amount > 0), "positive")
-#' dl_plan(pipeline)
-dl_step_transform <- function(pipeline, transform, id) {
-  if (!inherits(pipeline, "dl_pipeline")) {
-    abort("Use dl_pipeline() first.")
+#'   tw_step_land(source_file("orders.file", "orders.csv", utils::read.csv)) |>
+#'   tw_step_extract() |>
+#'   tw_step_transform(function(data) dplyr::filter(data, amount > 0), "positive")
+#' plan(pipeline)
+#' @noRd
+tw_step_transform <- function(pipeline, transform, id) {
+  if (!inherits(pipeline, "tw_pipeline")) {
+    abort("Use tw_pipeline() first.")
   }
   scalar(id, "id")
   if (!is.function(transform)) {
@@ -35,7 +35,7 @@ dl_step_transform <- function(pipeline, transform, id) {
   ) {
     abort(
       "Add transforms after extraction and before validation.",
-      "dl_pipeline_invalid"
+      "tw_pipeline_invalid"
     )
   }
   previous <- pipeline$steps$transform
@@ -49,26 +49,27 @@ dl_step_transform <- function(pipeline, transform, id) {
   pipeline
 }
 
-#' Inspect a pipeline without executing it
+#' Inspect the execution plan without running a product
 #'
-#' Does not connect, read source files, execute user functions or write
-#'   metadata.
-#' Incomplete specifications can be inspected. This is a declared plan, not a
-#' dry-run of SQL, file availability, permissions or data quality.
-#' @param pipeline A pipeline or composed product specification.
-#' @return A tibble with position, step, id and target columns. The `complete`
-#'   attribute indicates whether the mandatory steps and configured layers
-#'   validate.
+#' Shows ordered source, transformation, validation, publication and catalog
+#' steps. No source is read and no callback is called. A materialization value
+#' of `NA` means the component has not declared its lazy behavior; ordinary
+#' functions may support either lazy or in-memory tables.
+#' @param pipeline Product specification, including an incomplete definition.
+#' @returns A tibble with position, step, id, target and materializes columns.
+#'   The `complete` attribute reports whether structural validation succeeds.
 #' @export
 #' @examples
-#' dl_pipeline("orders.import", dl_config(backend = "duckdb"),
-#'   code_version = "v1") |> dl_plan()
-dl_plan <- function(pipeline) {
-  if (inherits(pipeline, "dl_product_spec")) {
+#' product("orders") |>
+#'   add_source(data.frame(id = 1:2)) |>
+#'   add_transform(function(data) dplyr::filter(data, id > 1)) |>
+#'   plan()
+plan <- function(pipeline) {
+  if (inherits(pipeline, "tw_product")) {
     return(product_plan(pipeline))
   }
-  if (!inherits(pipeline, "dl_pipeline")) {
-    abort("Use dl_pipeline() first.")
+  if (!inherits(pipeline, "tw_pipeline")) {
+    abort("Use tw_pipeline() first.")
   }
   rows <- list()
   add <- function(step, id, target) {
@@ -120,68 +121,66 @@ dl_plan <- function(pipeline) {
 #' Execute a pipeline, product, metric or dbt project with a consistent
 #'   object-first API
 #'
-#' Pipelines delegate to dl_run(), products to dl_build() and metrics to
-#' dl_measure(). Their original functions remain supported. Products and metrics
-#' require an explicit lake or dl_config. A connection opened here is closed on
+#' Internal dispatch for legacy lake pipelines, metrics and dbt projects.
+#' The public entry point is [run()]. A connection opened here is closed on
 #' exit; an existing connection remains owned by its caller.
 #' @param object Pipeline, composed or derived product, metric or dbt project
-#'   specification. Composed products use [dl_run()] as the shorter equivalent.
-#' @param lake Connected lake or dl_config. NULL uses a pipeline's stored
+#'   specification. Composed products use [run()] as the shorter equivalent.
+#' @param lake Connected lake or lake_config. NULL uses a pipeline's stored
 #'   config.
 #' @param ... Arguments forwarded to the underlying execution function.
-#' @return For pipelines and products, a dl_run_result. For metrics, a tibble
-#'   with a dl_manifest attribute. Return types intentionally reflect the
+#' @return For pipelines and products, a tw_run_result. For metrics, a tibble
+#'   with a tw_manifest attribute. Return types intentionally reflect the
 #'   operation.
-#' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
-#' root <- tempfile("lakefold-example-")
-#' config <- dl_config(
-#'   dl_catalog_duckdb(file.path(root, "lake.db")),
-#'   dl_storage_local(file.path(root, "data")),
+#' root <- tempfile("tidyweave-example-")
+#' config <- lake_config(
+#'   registry_duckdb(file.path(root, "lake.db")),
+#'   storage_local(file.path(root, "data")),
 #'   landing = file.path(root, "landing"), backend = "duckdb"
 #' )
-#' lake <- dl_connect(config)
+#' lake <- connect_lake(config)
 #' path <- file.path(root, "orders.csv")
 #' utils::write.csv(data.frame(order_id = 1:2, amount = c(25, 75)), path,
 #'   row.names = FALSE)
-#' source <- dl_source("orders.file", path, reader = utils::read.csv)
-#' contract <- dl_contract(
+#' source <- source_file("orders.file", path, reader = utils::read.csv)
+#' contract <- contract(
 #'   "orders", "1.0.0", "Analytics", "Order amounts", "One order",
 #'   c(order_id = "integer", amount = "numeric"), key = "order_id"
 #' )
-#' pipeline <- dl_pipeline("orders.import", config, code_version = "v1") |>
-#'   dl_step_land(source) |>
-#'   dl_step_extract() |>
-#'   dl_step_validate(contract) |>
-#'   dl_step_publish("orders")
-#' dl_execute(pipeline, lake)
-#' dl_disconnect(lake)
+#' pipeline <- tw_pipeline("orders.import", config, code_version = "v1") |>
+#'   tw_step_land(source) |>
+#'   tw_step_extract() |>
+#'   tw_step_validate(contract) |>
+#'   tw_step_publish("orders")
+#' tw_execute(pipeline, lake)
+#' disconnect_lake(lake)
 #' unlink(root, recursive = TRUE)
-dl_execute <- function(object, lake = NULL, ...) UseMethod("dl_execute")
+#' @noRd
+tw_execute <- function(object, lake = NULL, ...) UseMethod("tw_execute")
 #' @export
-dl_execute.dl_pipeline <- function(object, lake = NULL, ...) {
+#' @noRd
+tw_execute.tw_pipeline <- function(object, lake = NULL, ...) {
   with_execution_lake(
     lake,
-    function(con) dl_run(object, con, ...),
+    function(con) run(object, con, ...),
     allow_null = TRUE
   )
 }
 #' @export
-dl_execute.dl_product <- function(object, lake = NULL, ...) {
-  with_execution_lake(lake, function(con) dl_build(con, object, ...))
+#' @noRd
+tw_execute.tw_metric <- function(object, lake = NULL, ...) {
+  with_execution_lake(lake, function(con) measure(con, object, ...))
 }
 #' @export
-dl_execute.dl_metric <- function(object, lake = NULL, ...) {
-  with_execution_lake(lake, function(con) dl_measure(con, object, ...))
-}
-#' @export
-dl_execute.default <- function(object, lake = NULL, ...) {
-  abort("dl_execute() supports pipelines, products, metrics and dbt projects.")
+#' @noRd
+tw_execute.default <- function(object, lake = NULL, ...) {
+  abort("run() supports products, metrics and dbt projects.")
 }
 with_execution_lake <- function(lake, fn, allow_null = FALSE) {
-  if (inherits(lake, "dl_config")) {
-    lake <- dl_connect(lake)
-    on.exit(dl_disconnect(lake), add = TRUE)
+  if (inherits(lake, "tw_config")) {
+    lake <- connect_lake(lake)
+    on.exit(disconnect_lake(lake), add = TRUE)
   }
   if (is.null(lake) && allow_null) {
     return(fn(NULL))
@@ -191,9 +190,9 @@ with_execution_lake <- function(lake, fn, allow_null = FALSE) {
 }
 
 #' @export
-print.dl_config <- function(x, ...) {
+print.tw_config <- function(x, ...) {
   cat(
-    "<dl_config>",
+    "<lake_config>",
     x$backend,
     "| catalog:",
     x$catalog$type,
@@ -205,9 +204,9 @@ print.dl_config <- function(x, ...) {
   invisible(x)
 }
 #' @export
-print.dl_pipeline <- function(x, ...) {
-  cat("<dl_pipeline>", x$id, "@", x$version, "| code:", x$code_version, "\n")
-  plan <- dl_plan(x)
+print.tw_pipeline <- function(x, ...) {
+  cat("<tw_pipeline>", x$id, "@", x$version, "| code:", x$code_version, "\n")
+  plan <- plan(x)
   print(plan)
   cat(
     if (isTRUE(attr(plan, "complete"))) {
@@ -219,8 +218,8 @@ print.dl_pipeline <- function(x, ...) {
   invisible(x)
 }
 #' @export
-print.dl_contract <- function(x, ...) {
-  cat("<dl_contract>", x$id, "@", x$version, "\n")
+print.tw_contract <- function(x, ...) {
+  cat("<contract>", x$id, "@", x$version, "\n")
   cat("Grain:", x$grain, "| Owner:", x$owner, "\n")
   cat(
     "Columns:",
@@ -231,28 +230,14 @@ print.dl_contract <- function(x, ...) {
   invisible(x)
 }
 #' @export
-print.dl_source <- function(x, ...) {
-  cat("<dl_source>", x$id, "@", x$version, "| local file reader\n")
+print.tw_source <- function(x, ...) {
+  cat("<source_file>", x$id, "@", x$version, "| local file reader\n")
   invisible(x)
 }
 #' @export
-print.dl_product <- function(x, ...) {
+print.tw_metric <- function(x, ...) {
   cat(
-    "<dl_product>",
-    x$id,
-    "@",
-    x$version,
-    "\nInputs:",
-    paste(names(x$inputs), unlist(x$inputs), sep = "=", collapse = ", "),
-    "\n"
-  )
-  cat("Output layer:", x$layer, "| Contract:", x$contract$id, "\n")
-  invisible(x)
-}
-#' @export
-print.dl_metric <- function(x, ...) {
-  cat(
-    "<dl_metric>",
+    "<metric>",
     x$id,
     "@",
     x$version,

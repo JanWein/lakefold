@@ -15,14 +15,14 @@
 #'   enclosed in one catalog transaction and eligibility is checked again.
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
-#' root <- tempfile("lakefold-")
-#' lake <- dl_connect(dl_config(dl_catalog_duckdb(file.path(root, "lake.db")),
-#'   dl_storage_local(file.path(root, "data")),
+#' root <- tempfile("tidyweave-")
+#' lake <- connect_lake(lake_config(registry_duckdb(file.path(root, "lake.db")),
+#'   storage_local(file.path(root, "data")),
 #'   landing = file.path(root, "landing"), backend = "duckdb"))
-#' dl_cleanup(lake)
-#' dl_disconnect(lake)
+#' cleanup(lake)
+#' disconnect_lake(lake)
 #' unlink(root, recursive = TRUE)
-dl_cleanup <- function(
+cleanup <- function(
   lake,
   older_than_days = 30,
   dry_run = TRUE,
@@ -47,7 +47,7 @@ dl_cleanup <- function(
     abort("at must be one POSIXct value.")
   }
   plan <- function() {
-    runs <- dl_registry(lake, "runs")
+    runs <- registry(lake, "runs")
     age <- as.numeric(difftime(
       at,
       as.POSIXct(runs$finished_at, format = "%Y-%m-%dT%H:%M:%OSZ", tz = "UTC"),
@@ -66,7 +66,7 @@ dl_cleanup <- function(
         "WHERE table_catalog = 'lake' AND table_type = 'BASE TABLE'"
       )
     )
-    releases <- dl_releases(lake)
+    releases <- releases(lake)
     protected <- paste(releases$schema_name, releases$table_name, sep = ".")
     rows <- lapply(seq_len(nrow(runs)), function(i) {
       candidates <- tables[

@@ -1,31 +1,38 @@
 ---
-title: "dbt workflows and relational models"
+title: "Use dbt for SQL transformations"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{dbt workflows and relational models}
+  %\VignetteIndexEntry{Use dbt for SQL transformations}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
-library(lakefold)
-knitr::opts_chunk$set(eval = requireNamespace("duckdb", quietly = TRUE))
+library(tidyweave)
+root <- tempfile("tidyweave-dbt-guide-")
 ```
 
-This storage guide uses optional DuckDB >= 1.5.5. For a database-free start,
-see [composing products](composing-products.html).
+Use ordinary R functions until SQL models, dbt tests or incremental strategies
+make dbt useful. tidyweave connects a product to dbt; dbt keeps responsibility for
+its SQL graph. Choose the entry point that matches your work:
 
+| Your task | Entry point | Result |
+|---|---|---|
+| Run an existing dbt project | `dbt_build()` | dbt result and invocation artifacts |
+| Transform a product's incoming table with a dbt model | `transform_dbt()` | Staged input, selected dbt build and materialized output |
+| Inspect current dbt relations and declared keys | `dbt_model()` | Lazy `dm` model borrowing your lake connection |
+| Publish one successful dbt relation as an immutable release | `dbt_publish()` | A quality-gated governed release |
 
-Use R to configure and ingest, dbt to build and test SQL models, and `dm` to
-inspect and query their relationships. dbt owns its DAG and incremental model
-strategies. lakefold invokes its CLI through `processx`, never an internal
-Python API. Existing dbt projects can be used without changing their SQL.
+The first three operations do not make dbt tables immutable. A product can add a
+lake target for a governed snapshot of its final output. Data quality failures
+prevent that publication; they do not undo dbt's earlier external writes.
 
-## Install an external engine
+## Install dbt separately
 
-Install dbt separately from the R package. A tested classic engine combination
-is `dbt-core==1.12.5`, `dbt-duckdb==1.10.1` and `duckdb==1.5.5`:
+The integration uses the CLI through processx and reads its JSON artifacts. A
+tested engine combination is `dbt-core==1.12.5`, `dbt-duckdb==1.10.1` and Python
+`duckdb==1.5.5`. These are test pins, not a claim that they are the latest releases.
 
 ```sh
 python -m venv .venv
@@ -33,147 +40,205 @@ python -m venv .venv
 .venv/bin/dbt --version
 ```
 
-On Windows use `.venv/Scripts/python.exe` and `.venv/Scripts/dbt.exe`.
-These are reproducibility pins, not a claim to be the latest versions. The
-wrapper uses standard CLI arguments and JSON artifacts. It disables anonymous
-usage telemetry for the child process using both classic and v2 dbt settings. dbt v2 projects can be
-supplied explicitly, but their engine, adapter and catalog combinations require
-separate integration validation. The generated starter uses dbt-duckdb profiles;
-it does not generate a v2 `catalogs.yml` or promise interchangeable engines.
+On Windows use `.venv/Scripts/python.exe` and `.venv/Scripts/dbt.exe`. Keep the R
+and Python DuckDB engines compatible. Configure other dbt engines and adapters
+independently; the local starter below generates dbt-duckdb profiles, not a dbt v2
+catalog configuration. Their production behavior requires separate verification.
 
-## Generate a local starter
+## Start with an existing project or generate an example
 
-The following chunks execute without dbt; generating files is independent of
-running the external engine.
+```{r existing-project}
+existing <- dbt_project("analytics", profiles_dir = "analytics")
+existing
+```
 
-```{r scaffold}
-root <- tempfile("lakefold-dbt-guide-")
-config <- dl_config(
-  dl_catalog_duckdb(file.path(root, "lake.duckdb")),
-  dl_storage_local(file.path(root, "data")),
+Construction does not run dbt. The following optional starter creates only files:
+
+```{r scaffold, eval=requireNamespace("duckdb", quietly=TRUE) && requireNamespace("yaml", quietly=TRUE)}
+config <- lake_config(
+  registry_duckdb(file.path(root, "lake.duckdb")),
+  storage_local(file.path(root, "data")),
   landing = file.path(root, "landing"), backend = "duckdb"
 )
-project <- dl_dbt_init(file.path(root, "dbt"), config)
-project
+project <- dbt_init(file.path(root, "dbt"), config)
 list.files(project$path, recursive = TRUE)
 ```
 
-The starter builds `raw.raw_orders` from a synthetic seed,
-`staging.stg_orders`, then `marts.customer_revenue`, with five key/null tests.
-It attaches the configured catalog under the same `lake` name used in R. The
-schema macro uses exact layer names; use separate catalogs for dev and production.
+The starter has synthetic orders, a staging model, customer revenue and key/null
+tests. Its profile attaches the configured catalog as `lake`. Its schema macro
+uses exact schema names; keep development and production in separate catalogs.
 
-## Build, test and inspect
-
-The next chunks require your installed dbt executable and are shown without
-execution during ordinary vignette builds. The repository integration tests run
-these operations against real dbt. Replace `"dbt"` with the executable path if it
-is not on `PATH`.
+These CLI examples are displayed without execution during vignette builds.
+Set `executable` in `dbt_project()` when dbt is not on your `PATH`.
 
 ```{r build, eval=FALSE}
-# Create catalog folders, then release the local database lock.
-lake <- dl_connect(config)
-dl_disconnect(lake)
+# Initialize schemas, then release the local catalog lock before dbt starts.
+lake <- connect_lake(config)
+close_lake(lake)
 
-result <- project |> dl_execute(echo = FALSE)
-dl_dbt_status(result)
-dl_dbt_test(project, select = "customer_revenue", echo = FALSE)
-dl_dbt_lineage(result)
+built <- dbt_build(project, echo = FALSE)
+dbt_status(built)
+dbt_lineage(built)
+dbt_test(project, select = "customer_revenue", echo = FALSE)
 ```
 
-`select` and `exclude` accept dbt expressions such as `"+customer_revenue"` and
-`"tag:reporting"`. `vars` is a named R list; use environment-based credentials in
-your profile instead of passing secrets as variables. `full_refresh = TRUE`
-requests dbt's full refresh. `timeout` is measured in seconds.
+`select` and `exclude` use dbt selection expressions, such as
+`"+customer_revenue"`. `vars` accepts a named R list; credentials belong in the
+profile's environment settings. `full_refresh = TRUE` requests a full refresh,
+and `timeout` limits the child process. dbt owns dependencies, test selection and
+incremental logic.
 
-Each invocation writes to its own `.lakefold/runs/<id>` directory. The result
-retains the exit code, stdout/stderr, node statuses and parsed manifest. Old
-artifacts cannot become the outcome of a new failed invocation. dbt warnings
-remain visible; configure warning severity in dbt itself if they should fail CI.
+## Put dbt inside a product
+
+`transform_dbt()` requires an explicit staging table. This makes its input
+meaningful: incoming rows are written there before the selected model runs.
+The model must read that staging table. Use a dedicated table that no seed or dbt
+model overwrites, and coordinate writers to it.
+
+For the generated project, add a new source definition and model. These are dbt
+files, with no hidden copy of dbt's dependency engine inside tidyweave:
+
+```{r staged-model, eval=requireNamespace("duckdb", quietly=TRUE) && requireNamespace("yaml", quietly=TRUE)}
+yaml::write_yaml(
+  list(version = 2L, sources = list(list(
+    name = "tidyweave_input", database = "lake", schema = "raw",
+    tables = list(list(name = "orders", identifier = "staged_orders"))
+  ))),
+  file.path(project$path, "models", "product_sources.yml")
+)
+writeLines(c(
+  "select customer_id, sum(amount) as revenue",
+  "from {{ source('tidyweave_input', 'orders') }}",
+  "group by customer_id"
+), file.path(project$path, "models", "marts", "staged_customer_revenue.sql"))
+```
+
+Define a connection factory returning a **new** connection each time. The adapter
+closes its staging connection before invoking dbt, then opens another connection
+to read the successful relation. All factory-owned connections close, including
+after failure. The returned output is an ordinary table.
+
+```{r dbt-transform, eval=FALSE}
+connection <- function() {
+  DBI::dbConnect(duckdb::duckdb(), dbdir = config$catalog$path,
+    bigint = "integer64")
+}
+orders <- data.frame(order_id = 1:3, customer_id = c(101L, 101L, 102L),
+  amount = c(25, 75, 50))
+
+revenue <- product("customer.revenue") |>
+  add_source(orders) |>
+  add_transform(transform_dbt(
+    project, model = "model.tidyweave_demo.staged_customer_revenue",
+    connection = connection,
+    input = DBI::Id(schema = "raw", table = "staged_orders")
+  ), name = "dbt") |>
+  add_quality(~ revenue >= 0)
+
+result <- run(revenue, evidence = file.path(root, "runs"))
+collect(result)
+result$metadata$transformations$dbt
+```
+
+The adapter currently accepts model IDs of the form `model.package.name`. Use
+`dbt_build()` directly for versioned-model selection and other specialized dbt
+selectors. The requested materialized model must succeed in the current invocation.
+Failed selected models or tests fail the transform. The metadata
+records the model, invocation ID and artifacts directory, even if later R
+transformations follow. `input` is replaced every run; dbt controls whether its
+output model uses an incremental strategy.
+
+Staging and dbt writes are external side effects. A later failed product contract
+cannot roll them back. Add `set_target(target_lake(config))` when the final checked
+result also needs an immutable release; do not interpret that as an atomic commit
+of the entire dbt project.
+
+## Start from a pinned release
+
+A governed release can be another product's source. The reference resolves to one
+specific release and is recorded in the input metadata.
+
+```{r release-source, eval=requireNamespace("duckdb", quietly=TRUE) && requireNamespace("yaml", quietly=TRUE)}
+released <- product("orders") |>
+  add_source(data.frame(order_id = 1:3, amount = c(25, 75, 50))) |>
+  set_target(target_lake(config)) |>
+  run()
+
+lake <- connect_lake(config)
+prepared <- product("orders.prepared") |>
+  add_source(source_release(lake, "orders", released$release_id)) |>
+  add_transform(function(data) dplyr::filter(data, amount >= 50)) |>
+  run()
+input_for_dbt <- collect(prepared)
+prepared$inputs[, c("asset", "release_id")]
+close_lake(lake)
+```
+
+Pass `input_for_dbt` to a product with an appropriate `transform_dbt()` step.
+Collect and close borrowed local catalog connections before dbt starts. For a dbt
+project that reads a release directly, declare its exact physical relation in dbt
+source YAML using `registry(lake, "releases")`; updating that reference is an
+explicit project decision.
+
+## Inspect current relations or publish a snapshot
+
+```{r relational-model, eval=FALSE}
+lake <- connect_lake(config)
+relations <- dbt_model(lake, built,
+  tables = c(orders = "model.tidyweave_demo.stg_orders",
+    customers = "model.tidyweave_demo.customer_revenue"),
+  primary_keys = list(orders = "order_id", customers = "customer_id"),
+  foreign_keys = list(list(table = "orders", columns = "customer_id",
+    ref_table = "customers", ref_columns = "customer_id")))
+dm::dm_examine_constraints(relations)
+dplyr::collect(relations$customers)
+
+schema <- contract(columns = c(customer_id = "integer", revenue = "numeric"))
+release <- dbt_publish(lake, built,
+  model = "model.tidyweave_demo.customer_revenue", contract = schema,
+  asset = "revenue.snapshot", code_version = "reporting-v1")
+read_release(lake, "revenue.snapshot", release$release_id)
+close_lake(lake)
+```
+
+`dm` checks explicit relational keys; SQL dependencies alone do not establish
+primary or foreign keys. `dbt_model()` borrows the connection and reads current
+relations. `dbt_publish()` validates and snapshots one relation visible now,
+using the dbt invocation as provenance. Coordinate writers between build and
+snapshot. `model()` provides relational access to pinned governed releases.
+
+## Diagnose a failed invocation
 
 ```{r failure-inspection, eval=FALSE}
-result <- dl_dbt_build(project, stop_on_failure = FALSE)
-if (!result$success) {
-  dl_dbt_status(result)
-  result$stderr
-  result$artifact_error
+built <- dbt_build(project, stop_on_failure = FALSE)
+if (!built$success) {
+  dbt_status(built)
+  built$stderr
+  built$artifact_error
 }
 ```
 
-A nonzero exit code, failed/skipped node or invalid artifact pair marks the
-result unsuccessful. By default `dl_dbt_failed` carries the result in
-`condition$result`. Process-start or timeout errors use `dl_dbt_process_error`.
-No automatic retry is performed because a retry could repeat writes.
+Each invocation writes separate artifacts under `.tidyweave/runs/<id>` in the dbt
+project. Old successful artifacts cannot stand in for a failed invocation. A
+nonzero exit code, failed/skipped node or invalid artifact pair makes the result
+unsuccessful. There is no automatic CLI retry because it could repeat writes.
+Anonymous dbt telemetry is disabled for the child process. Logs can contain SQL,
+paths and database diagnostics; store them with the operating project.
 
-## Understand the returned tables offline
-
-These are explicitly synthetic artifact fixtures bundled for documentation.
+The bundled synthetic artifacts work without installing dbt:
 
 ```{r artifacts}
-artifacts <- system.file("extdata", "dbt-artifacts", package = "lakefold")
-dl_dbt_status(artifacts)
-dl_dbt_lineage(artifacts)
+artifacts <- system.file("extdata", "dbt-artifacts", package = "tidyweave")
+dbt_status(artifacts)
+dbt_lineage(artifacts)
 ```
 
-`run_results.json` lists executed nodes, while the manifest describes the whole
-project. A selected build may leave some manifest relations absent. Choose those
-you want to open by their dbt unique IDs.
+For details, consult dbt's
+[model selection](https://docs.getdbt.com/reference/node-selection/methods),
+[run results](https://docs.getdbt.com/reference/artifacts/run-results-json),
+[manifest](https://docs.getdbt.com/reference/artifacts/manifest-json) and the
+[dbt-duckdb adapter](https://github.com/duckdb/dbt-duckdb).
 
-## Consume a relational model
-
-```{r model, eval=FALSE}
-lake <- dl_connect(config)
-model <- dl_dbt_model(
-  lake, result,
-  tables = c(orders = "model.lakefold_demo.stg_orders",
-             customers = "model.lakefold_demo.customer_revenue"),
-  primary_keys = list(orders = "order_id", customers = "customer_id"),
-  foreign_keys = list(list(
-    table = "orders", columns = "customer_id",
-    ref_table = "customers", ref_columns = "customer_id"
-  ))
-)
-dm::dm_examine_constraints(model)
-dplyr::collect(model$customers)
-# Optional diagram: dm::dm_draw(model)
-dl_disconnect(lake)
-```
-
-The model borrows the connection. `check = TRUE` validates declared keys, which
-can be expensive on large tables. SQL dependencies alone cannot prove keys.
-The default `database = "lake"` maps manifest schema/table names to the R
-attachment, so ensure both R and dbt point to the same catalog.
-
-## Use your own ingested data
-
-`dl_ingest()` returns a pinned release. To make that exact release a dbt source,
-read its physical schema/table from `dl_registry(lake, "releases")` and declare
-those values in your dbt source YAML. This makes lineage explicit. A subsequent
-ingestion creates a new release; updating dbt's source reference is a deliberate
-project change. The package does not silently repoint dbt sources or copy dbt
-outputs into governed releases.
-
-## DuckLake and deployment
-
-Set `backend = "ducklake"` in the starter config to generate a local DuckLake
-attachment. Close R connections before dbt and reopen afterwards. This also
-avoids DuckDB version and local catalog locking conflicts between processes.
-For S3 or PostgreSQL catalogs, supply an independently verified profile through
-`dl_dbt_project(path, profiles_dir, target, executable)`. Keep credentials in
-environment variables or a secret provider. Automatic remote profile generation
-is not implemented.
-
-A dbt build is not an atomic lakefold publication: earlier models may remain
-written when a later model or test fails. `dl_dbt_model()` opens current relations,
-whereas `dl_model()` pins immutable governed releases. Do not interchange their
-reproducibility guarantees. The registry still requires a single writer.
-
-```{r cleanup}
+```{r cleanup, include=FALSE}
 unlink(root, recursive = TRUE)
 ```
-
-Artifact contracts follow the official
-[run results reference](https://docs.getdbt.com/reference/artifacts/run-results-json)
-and [manifest reference](https://docs.getdbt.com/reference/artifacts/manifest-json).
-Attachment configuration follows the
-[dbt-duckdb adapter](https://github.com/duckdb/dbt-duckdb).

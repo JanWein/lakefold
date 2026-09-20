@@ -1,30 +1,35 @@
-library(lakefold)
-library(pointblank)
+# A complete local example. Install pointblank only when you need its checks.
+library(tidyweave)
 
-contract <- dl_contract(
-  "risk.reserves",
-  "1.0.0",
-  owner = "Risk",
-  description = "Validated reserves",
-  grain = "One contract per business date",
-  columns = c(id = "character", date = "Date", reserve = "numeric"),
-  key = c("id", "date"),
-  rules = list(
-    dl_pointblank(
-      "business_checks",
-      function(data) {
-        create_agent(
-          tbl = data,
-          actions = action_levels(warn_at = 0.005, stop_at = 0.05)
-        ) |>
-          col_vals_gte(columns = "reserve", value = 0) |>
-          col_vals_not_null(columns = c("id", "date", "reserve"))
-      },
-      policy = "agent"
-    )
+if (requireNamespace("pointblank", quietly = TRUE)) {
+  reserves <- data.frame(
+    id = c("a", "b"),
+    date = as.Date("2026-09-30"),
+    reserve = c(100, 200)
   )
-)
-# Native pointblank action levels determine the gate for policy = "agent".
-# Inactive/errored checks always block; no failing rows are silently removed.
-# Use input_contract = contract in dl_ingest() to check before Raw writes.
-# dl_validate(data, contract, keep_agents = TRUE) retains native report agents.
+  schema <- contract(
+    columns = c(id = "character", date = "Date", reserve = "numeric"),
+    key = c("id", "date")
+  )
+  checks <- pointblank_checks(
+    "business_checks",
+    function(data) {
+      pointblank::create_agent(
+        data,
+        actions = pointblank::action_levels(warn_at = 0.005, stop_at = 0.05)
+      ) |>
+        pointblank::col_vals_gte("reserve", 0)
+    },
+    policy = "agent"
+  )
+
+  result <- product("reserves") |>
+    add_source(reserves) |>
+    add_contract(schema) |>
+    add_quality(checks) |>
+    run()
+  print(quality(result))
+  print(collect(result))
+} else {
+  message("Install optional package pointblank to run this example.")
+}

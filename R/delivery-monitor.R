@@ -22,18 +22,18 @@
 #'   the result is also persisted as an operational event.
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
-#' root <- tempfile("lakefold-")
-#' lake <- dl_connect(dl_config(dl_catalog_duckdb(file.path(root, "lake.db")),
-#'   dl_storage_local(file.path(root, "data")),
+#' root <- tempfile("tidyweave-")
+#' lake <- connect_lake(lake_config(registry_duckdb(file.path(root, "lake.db")),
+#'   storage_local(file.path(root, "data")),
 #'   landing = file.path(root, "landing"), backend = "duckdb"))
-#' contract <- dl_contract("orders", "1", "Analytics", "Orders", "One order",
+#' contract <- contract("orders", "1", "Analytics", "Orders", "One order",
 #'   c(id = "integer"), key = "id")
-#' dl_check_delivery(lake, "orders", contract, as.Date("2026-08-31"),
+#' check_delivery(lake, "orders", contract, as.Date("2026-08-31"),
 #'   due_at = as.POSIXct("2026-09-01 09:00:00", tz = "UTC"),
 #'   at = as.POSIXct("2026-09-01 10:00:00", tz = "UTC"))
-#' dl_disconnect(lake)
+#' disconnect_lake(lake)
 #' unlink(root, recursive = TRUE)
-dl_check_delivery <- function(
+check_delivery <- function(
   lake,
   asset,
   contract,
@@ -58,8 +58,8 @@ dl_check_delivery <- function(
     column_name(date_column)
   }
   asset_id(asset)
-  if (!inherits(contract, "dl_contract")) {
-    abort("contract must be a dl_contract.")
+  if (!inherits(contract, "tw_contract")) {
+    abort("contract must be a contract.")
   }
   assert_contract_ready(contract)
   date <- as.character(business_date)
@@ -78,13 +78,13 @@ dl_check_delivery <- function(
   if (!valid_time(at) || !valid_time(due_at)) {
     abort("at and due_at must be POSIXct scalars.")
   }
-  releases <- dl_releases(lake, asset)
+  releases <- releases(lake, asset)
   received <- FALSE
   if (nrow(releases)) {
     ref <- releases[1, ]
     column <- date_column %||% delivery_partition_column(lake, ref)
     if (!is.null(column)) {
-      data <- dl_tbl(lake, asset, ref$release_id[[1]])
+      data <- tbl(lake, asset, ref$release_id[[1]])
       if (!column %in% colnames(data)) {
         abort("Delivery date column is missing from the current release.")
       }
@@ -113,7 +113,7 @@ dl_check_delivery <- function(
   }
   event_id <- NA_character_
   if (status != "pending" && record) {
-    dl_register(lake, contract)
+    register(lake, contract)
     incident <- fingerprint(list(
       asset = asset,
       date = date,

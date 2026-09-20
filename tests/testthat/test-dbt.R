@@ -1,14 +1,14 @@
 test_that("dbt results and lineage are available without dbt", {
-  path <- system.file("extdata", "dbt-artifacts", package = "lakefold")
-  status <- dl_dbt_status(path)
+  path <- system.file("extdata", "dbt-artifacts", package = "tidyweave")
+  status <- dbt_status(path)
   expect_equal(nrow(status), 3L)
   expect_equal(status$status, rep("success", 3))
   expect_equal(
-    dl_dbt_lineage(path)$from,
+    dbt_lineage(path)$from,
     c("seed.shop.raw_orders", "model.shop.stg_orders")
   )
   expect_equal(
-    dl_dbt_lineage(path)$to,
+    dbt_lineage(path)$to,
     c("model.shop.stg_orders", "model.shop.customer_revenue")
   )
 })
@@ -28,12 +28,12 @@ test_that("each invocation gets isolated artifacts and literal selector argument
     captured <<- args
     target <- args[match("--target-path", args) + 1L]
     paths <<- c(paths, target)
-    fixtures <- system.file("extdata", "dbt-artifacts", package = "lakefold")
+    fixtures <- system.file("extdata", "dbt-artifacts", package = "tidyweave")
     file.copy(list.files(fixtures, full.names = TRUE), target)
     list(status = 0L, stdout = "done", stderr = "")
   })
-  project <- dl_dbt_project(root, executable = file.path(R.home("bin"), "R"))
-  result <- dl_execute(
+  project <- dbt_project(root, executable = file.path(R.home("bin"), "R"))
+  result <- tw_execute(
     project,
     select = "tag:monthly orders; echo nope",
     echo = FALSE
@@ -43,8 +43,8 @@ test_that("each invocation gets isolated artifacts and literal selector argument
     captured[match("--select", captured) + 1L],
     "tag:monthly orders; echo nope"
   )
-  expect_equal(dl_dbt_status(result)$status, rep("success", 3))
-  second <- dl_dbt_test(project, echo = FALSE)
+  expect_equal(dbt_status(result)$status, rep("success", 3))
+  second <- dbt_test(project, echo = FALSE)
   expect_equal(second$command, "test")
   expect_length(unique(paths), 2L)
 })
@@ -53,13 +53,13 @@ test_that("a failed process cannot reuse previous successful artifacts", {
   root <- withr::local_tempdir()
   writeLines("name: test", file.path(root, "dbt_project.yml"))
   dir.create(file.path(root, "target"))
-  fixtures <- system.file("extdata", "dbt-artifacts", package = "lakefold")
+  fixtures <- system.file("extdata", "dbt-artifacts", package = "tidyweave")
   file.copy(list.files(fixtures, full.names = TRUE), file.path(root, "target"))
   testthat::local_mocked_bindings(dbt_process = function(...) {
     list(status = 2L, stdout = "", stderr = "bad profile")
   })
-  result <- dl_dbt_build(
-    dl_dbt_project(root, executable = file.path(R.home("bin"), "R")),
+  result <- dbt_build(
+    dbt_project(root, executable = file.path(R.home("bin"), "R")),
     echo = FALSE,
     stop_on_failure = FALSE
   )
@@ -71,7 +71,7 @@ test_that("a failed process cannot reuse previous successful artifacts", {
 
 test_that("inconsistent artifacts are rejected", {
   root <- withr::local_tempdir()
-  fixtures <- system.file("extdata", "dbt-artifacts", package = "lakefold")
+  fixtures <- system.file("extdata", "dbt-artifacts", package = "tidyweave")
   file.copy(list.files(fixtures, full.names = TRUE), root)
   runs <- jsonlite::read_json(file.path(root, "run_results.json"))
   runs$metadata$invocation_id <- "another-run"
@@ -81,13 +81,13 @@ test_that("inconsistent artifacts are rejected", {
     auto_unbox = TRUE,
     null = "null"
   )
-  expect_snapshot(error = TRUE, dl_dbt_status(root))
+  expect_snapshot(error = TRUE, dbt_status(root))
 })
 
 test_that("selectors cannot inject CLI flags", {
   expect_snapshot(
     error = TRUE,
-    dl_dbt_build(dl_dbt_project("."), select = "--profiles-dir")
+    dbt_build(dbt_project("."), select = "--profiles-dir")
   )
 })
 
@@ -96,7 +96,7 @@ test_that("dbt failures retain structured diagnostics", {
   writeLines("name: test", file.path(root, "dbt_project.yml"))
   testthat::local_mocked_bindings(dbt_process = function(command, args, ...) {
     target <- args[match("--target-path", args) + 1L]
-    fixtures <- system.file("extdata", "dbt-artifacts", package = "lakefold")
+    fixtures <- system.file("extdata", "dbt-artifacts", package = "tidyweave")
     file.copy(list.files(fixtures, full.names = TRUE), target)
     runs <- jsonlite::read_json(file.path(target, "run_results.json"))
     runs$results[[1]]$status <- "fail"
@@ -108,12 +108,12 @@ test_that("dbt failures retain structured diagnostics", {
     )
     list(status = 0L, stdout = "", stderr = "")
   })
-  project <- dl_dbt_project(root, executable = file.path(R.home("bin"), "R"))
+  project <- dbt_project(root, executable = file.path(R.home("bin"), "R"))
   error <- tryCatch(
-    dl_dbt_build(project, echo = FALSE),
-    dl_dbt_failed = identity
+    dbt_build(project, echo = FALSE),
+    tw_dbt_failed = identity
   )
-  expect_s3_class(error, "dl_dbt_failed")
+  expect_s3_class(error, "tw_dbt_failed")
   expect_equal(error$result$results$status[[1]], "fail")
   expect_equal(error$result$success, FALSE)
 })
@@ -121,14 +121,14 @@ test_that("dbt failures retain structured diagnostics", {
 test_that("dbt relations become a lazy dm with explicit keys", {
   skip_if_not_installed("dm")
   f <- fixture()
-  withr::defer(cleanup(f))
+  withr::defer(fixture_cleanup(f))
   DBI::dbExecute(f$lake$con, "CREATE SCHEMA lake.marts")
   DBI::dbExecute(
     f$lake$con,
     "CREATE TABLE lake.marts.customer_revenue AS SELECT 101 AS customer_id, 100 AS revenue"
   )
-  path <- system.file("extdata", "dbt-artifacts", package = "lakefold")
-  model <- dl_dbt_model(
+  path <- system.file("extdata", "dbt-artifacts", package = "tidyweave")
+  model <- dbt_model(
     f$lake,
     path,
     tables = c(revenue = "model.shop.customer_revenue"),
@@ -137,7 +137,7 @@ test_that("dbt relations become a lazy dm with explicit keys", {
   expect_s3_class(model, "dm")
   expect_equal(dplyr::collect(model$revenue)$revenue, 100L)
   expect_equal(
-    attr(model, "dl_dbt_nodes"),
+    attr(model, "tw_dbt_nodes"),
     c(revenue = "model.shop.customer_revenue")
   )
 })
@@ -145,7 +145,7 @@ test_that("dbt relations become a lazy dm with explicit keys", {
 
 test_that("malformed optional fields cannot erase failed nodes", {
   root <- withr::local_tempdir()
-  fixtures <- system.file("extdata", "dbt-artifacts", package = "lakefold")
+  fixtures <- system.file("extdata", "dbt-artifacts", package = "tidyweave")
   file.copy(list.files(fixtures, full.names = TRUE), root)
   runs <- jsonlite::read_json(file.path(root, "run_results.json"))
   runs$results[[1]]$status <- "fail"
@@ -156,5 +156,5 @@ test_that("malformed optional fields cannot erase failed nodes", {
     auto_unbox = TRUE,
     null = "null"
   )
-  expect_snapshot(error = TRUE, dl_dbt_status(root))
+  expect_snapshot(error = TRUE, dbt_status(root))
 })

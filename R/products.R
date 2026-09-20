@@ -1,266 +1,41 @@
-#' Define a data product
+#' Define a composable data product
 #'
-#' Start with `dl_product("orders")` and compose it with [dl_add_source()] and
-#' optional `dl_add_*()` verbs. Nothing executes until [dl_run()] or
-#' [dl_publish()]. A composed product uses ordinary R tables, requires no lake
-#' connection, and needs no manual version for everyday execution.
-#'
-#' The existing `inputs` plus `build` form remains supported for derived
-#' products built from pinned lake releases. It retains its lazy-table and
-#' explicit-version semantics; see [dl_build()].
-#' @param id Product identity.
-#' @param version Optional immutable definition version. Composed products
-#'   derive a technical version when omitted; explicit versions require a bump
-#'   after a definition change. Derived products default to `1.0.0`.
-#' @param inputs Named character vector of input asset ids.
-#' @param build Function of a named list of lazy input tables; returns a lazy
-#'   table or a data frame. Inputs are pinned to releases before build runs.
-#' @param contract Product contract.
-#' @param owner,description Metadata.
-#' @param code_version Version of code, captured values and dependencies.
-#'   Optional for composed products, which do not cache by default. Required
-#'   for derived products and to enable caching in a composed lake workflow.
-#' @param layer Output schema.
-#' @return A `dl_product_spec` for composition, or a legacy `dl_product` when
-#'   `inputs` and `build` are supplied. Both work with [dl_run()].
+#' Add named sources, ordinary transformation functions and optional checks or
+#' a target. Nothing executes until [run()] or [publish()]. Products can be
+#' sources of other products; shared dependencies run once per execution.
+#' @param id Product identity, unique within a dependency graph.
+#' @param contract Optional contract, named type vector or prototype list.
+#' @param version Optional immutable definition version. When omitted, lake
+#'   publication derives a technical version from the definition.
+#' @param owner,description Optional metadata, otherwise inherited from contract.
+#' @param code_version Optional code and dependency version. Required only when
+#'   explicitly reusing a previously published lake release with `cache = TRUE`.
+#' @returns A `tw_product`, ready for composition, inspection and execution.
 #' @export
 #' @examples
-#' dl_product("orders") |> dl_add_source(data.frame(id = 1:2))
-#' contract <- dl_contract(
-#'   "orders", "1.0.0", "Analytics", "Order amounts", "One order",
-#'   c(order_id = "integer", amount = "numeric"), key = "order_id"
-#' )
-#' product <- dl_product("orders.copy", c(orders = "orders"),
-#'   build = function(tables) tables$orders, contract = contract,
-#'   code_version = "v1")
-#' product
-dl_product <- function(
+#' orders <- product("orders") |> add_source(data.frame(id = 1:2))
+#' product("summary") |>
+#'   add_source(orders) |>
+#'   add_transform(function(data) data.frame(rows = nrow(data))) |>
+#'   run() |>
+#'   collect()
+product <- function(
   id,
-  inputs = NULL,
-  build = NULL,
   contract = NULL,
   version = "1.0.0",
-  owner = contract$owner,
-  description = contract$description,
-  code_version = NULL,
-  layer = "products"
+  owner = NULL,
+  description = NULL,
+  code_version = NULL
 ) {
-  if (is.null(inputs) && is.null(build)) {
-    return(new_product(
-      id,
-      contract,
-      version,
-      code_version,
-      automatic_version = missing(version),
-      owner = owner %||% "",
-      description = description %||% ""
-    ))
-  }
-  asset_id(id)
-  scalar(version, "version")
-  scalar(code_version, "code_version")
-  ident(layer)
-  if (
-    !is.character(inputs) ||
-      !length(inputs) ||
-      is.null(names(inputs)) ||
-      anyDuplicated(names(inputs)) ||
-      any(!nzchar(names(inputs)))
-  ) {
-    abort("inputs must be a named character vector of assets.")
-  }
-  invisible(lapply(inputs, asset_id))
-  if (!is.function(build) || !inherits(contract, "dl_contract")) {
-    abort("A build function and contract are required.")
-  }
-  structure(
-    list(
-      id = id,
-      version = version,
-      kind = "product",
-      inputs = as.list(inputs),
-      build = build,
-      contract = contract,
-      owner = owner,
-      description = description,
-      code_version = code_version,
-      layer = layer
-    ),
-    class = "dl_product"
+  new_product(
+    id,
+    contract,
+    version,
+    code_version,
+    automatic_version = missing(version),
+    owner = owner,
+    description = description
   )
-}
-
-#' Build, validate and publish a product
-#' @param lake Connected lake.
-#' @param product Product specification.
-#' @param releases Optional named vector of explicit input release ids, keyed
-#'   by input alias.
-#' @param business_date Reporting date.
-#' @param notify Optional function(event).
-#' @param cache Reuse a matching release. Set `FALSE` to re-evaluate builders
-#'   that consult external state. Change `code_version` for intentional changes.
-#' @param stop_on_failure Fail the job after metadata has been saved.
-#' @return Run result.
-#' @export
-#' @examplesIf requireNamespace("duckdb", quietly = TRUE)
-#' root <- tempfile("lakefold-example-")
-#' config <- dl_config(
-#'   dl_catalog_duckdb(file.path(root, "lake.db")),
-#'   dl_storage_local(file.path(root, "data")),
-#'   landing = file.path(root, "landing"), backend = "duckdb"
-#' )
-#' lake <- dl_connect(config)
-#' path <- file.path(root, "orders.csv")
-#' utils::write.csv(data.frame(order_id = 1:2, amount = c(25, 75)), path,
-#'   row.names = FALSE)
-#' source <- dl_source("orders.file", path, reader = utils::read.csv)
-#' contract <- dl_contract(
-#'   "orders", "1.0.0", "Analytics", "Order amounts", "One order",
-#'   c(order_id = "integer", amount = "numeric"), key = "order_id"
-#' )
-#' release <- dl_ingest(lake, source, contract, "orders", code_version = "v1")
-#' product <- dl_product("orders.copy", c(orders = "orders"),
-#'   build = function(tables) tables$orders, contract = contract,
-#'   code_version = "v1")
-#' dl_build(lake, product)
-#' dl_disconnect(lake)
-#' unlink(root, recursive = TRUE)
-dl_build <- function(
-  lake,
-  product,
-  releases = NULL,
-  business_date = NA_character_,
-  notify = NULL,
-  stop_on_failure = TRUE,
-  cache = TRUE
-) {
-  assert_writable(lake)
-  flag(cache, "cache")
-  if (!inherits(product, "dl_product")) {
-    abort("product must be a dl_product.")
-  }
-  if (!product$layer %in% lake$config$layers) {
-    abort("Product layer not configured.")
-  }
-  if (
-    !is.null(releases) &&
-      (!setequal(names(releases), names(product$inputs)) || anyNA(releases))
-  ) {
-    abort("releases must pin every input alias.")
-  }
-  dl_register(lake, product$contract)
-  dl_register(lake, product)
-  dh <- fingerprint(product)
-  contract <- product$contract
-  run <- new_run(lake, product$id, product$id, dh, product$code_version)
-  result <- tryCatch(
-    {
-      refs <- lapply(names(product$inputs), function(alias) {
-        resolve_release(
-          lake,
-          product$inputs[[alias]],
-          if (!is.null(releases)) releases[[alias]] else NULL
-        )
-      })
-      names(refs) <- names(product$inputs)
-      ih <- fingerprint(list(
-        releases = lapply(refs, function(x) x$release_id[[1]]),
-        business_date = as.character(business_date)
-      ))
-      exec(
-        lake,
-        paste("UPDATE", meta(lake, "runs"), "SET input_hash=? WHERE run_id=?"),
-        list(ih, run)
-      )
-      for (alias in names(refs)) {
-        insert_meta(
-          lake,
-          "inputs",
-          list(
-            run_id = run,
-            source = product$inputs[[alias]],
-            source_version = refs[[alias]]$release_id[[1]],
-            fingerprint = refs[[alias]]$input_hash[[1]],
-            original_name = "",
-            landed_path = "",
-            received_at = now(),
-            business_date = as.character(business_date)
-          )
-        )
-      }
-      cached <- find_cached(lake, product$id, ih, dh)
-      if (cache && nrow(cached)) {
-        finish_run(lake, run, "cached", release = cached$release_id[[1]])
-        run_result(run, "cached", cached$release_id[[1]])
-      } else {
-        tables <- lapply(refs, function(r) {
-          dl_tbl(lake, r$asset[[1]], r$release_id[[1]])
-        })
-        pub <- list(asset = product$id, mode = "replace", layer = product$layer)
-        candidate <- compose_candidate(lake, product$build(tables), pub, run)
-        quality <- dl_validate(candidate$data, contract)
-        persist_quality(lake, run, contract, quality)
-        if (!quality_ok(quality)) {
-          finish_run(
-            lake,
-            run,
-            "blocked",
-            "Product quality gate blocked publication."
-          )
-          emit_event(
-            lake,
-            run,
-            product$id,
-            "quality_failed",
-            contract$producer,
-            "Product publication blocked; inspect quality_results.",
-            notify
-          )
-          run_result(run, "blocked", quality = quality)
-        } else {
-          edges <- lapply(refs, function(r) {
-            list(from_id = r$asset[[1]], from_version = r$release_id[[1]])
-          })
-          publish_candidate(
-            lake,
-            run,
-            pub,
-            candidate,
-            contract,
-            quality,
-            dh,
-            ih,
-            business_date,
-            edges
-          )
-        }
-      }
-    },
-    error = function(e) {
-      finish_run(lake, run, "error", "Product execution failed.")
-      emit_event(
-        lake,
-        run,
-        product$id,
-        "run_error",
-        contract$producer,
-        "Product execution failed; inspect input availability and build code.",
-        notify
-      )
-      x <- run_result(run, "error")
-      x$error <- e
-      x
-    }
-  )
-  if (stop_on_failure && !result$status %in% c("published", "cached")) {
-    abort(
-      paste("Product run", run, "ended with", result$status),
-      "dl_run_failed",
-      result = result,
-      parent = result$error
-    )
-  }
-  result
 }
 
 #' Create and validate a relational dm model from pinned releases
@@ -274,28 +49,29 @@ dl_build <- function(
 #' @return A dm object containing lazy tables. No automatic flattening is done.
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
-#' root <- tempfile("lakefold-example-")
-#' config <- dl_config(
-#'   dl_catalog_duckdb(file.path(root, "lake.db")),
-#'   dl_storage_local(file.path(root, "data")),
+#' root <- tempfile("tidyweave-example-")
+#' config <- lake_config(
+#'   registry_duckdb(file.path(root, "lake.db")),
+#'   storage_local(file.path(root, "data")),
 #'   landing = file.path(root, "landing"), backend = "duckdb"
 #' )
-#' lake <- dl_connect(config)
+#' lake <- connect_lake(config)
 #' path <- file.path(root, "orders.csv")
 #' utils::write.csv(data.frame(order_id = 1:2, amount = c(25, 75)), path,
 #'   row.names = FALSE)
-#' source <- dl_source("orders.file", path, reader = utils::read.csv)
-#' contract <- dl_contract(
+#' source <- source_file("orders.file", path, reader = utils::read.csv)
+#' contract <- contract(
 #'   "orders", "1.0.0", "Analytics", "Order amounts", "One order",
 #'   c(order_id = "integer", amount = "numeric"), key = "order_id"
 #' )
-#' release <- dl_ingest(lake, source, contract, "orders", code_version = "v1")
-#' model <- dl_model(lake, c(orders = "orders"),
+#' release <- product("orders", contract = contract, code_version = "v1") |>
+#'   add_source(source) |> publish(to = lake)
+#' model <- model(lake, c(orders = "orders"),
 #'   primary_keys = list(orders = "order_id"))
 #' model
-#' dl_disconnect(lake)
+#' disconnect_lake(lake)
 #' unlink(root, recursive = TRUE)
-dl_model <- function(
+model <- function(
   lake,
   tables,
   primary_keys = list(),
@@ -319,10 +95,10 @@ dl_model <- function(
   })
   names(refs) <- names(tables)
   model <- dm::dm(
-    !!!lapply(refs, function(r) dl_tbl(lake, r$asset[[1]], r$release_id[[1]]))
+    !!!lapply(refs, function(r) tbl(lake, r$asset[[1]], r$release_id[[1]]))
   )
   model <- dm_keys(model, primary_keys, foreign_keys, check)
-  attr(model, "dl_releases") <- lapply(refs, function(r) r$release_id[[1]])
+  attr(model, "tw_releases") <- lapply(refs, function(r) r$release_id[[1]])
   model
 }
 
@@ -348,7 +124,7 @@ dm_keys <- function(model, primary_keys, foreign_keys, check) {
     if (nrow(checks) && !all(checks$is_key)) {
       abort(
         "Relational constraints failed.",
-        "dl_model_invalid",
+        "tw_model_invalid",
         checks = checks
       )
     }

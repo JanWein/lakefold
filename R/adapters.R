@@ -5,18 +5,18 @@
 #'   serialized as runnable YAML.
 #' @export
 #' @examples
-#' contract <- dl_contract(
+#' contract <- contract(
 #'   "orders", "1.0.0", "Analytics", "Order amounts", "One order",
 #'   c(order_id = "integer", amount = "numeric"), key = "order_id"
 #' )
 #' path <- tempfile(fileext = ".yml")
-#' dl_contract_yaml(contract, path)
+#' contract_yaml(contract, path)
 #' cat(readLines(path), sep = "\n")
 #' unlink(path)
-dl_contract_yaml <- function(contract, path) {
+contract_yaml <- function(contract, path) {
   need("yaml")
   x <- list(
-    format = "dataloom-contract",
+    format = "tidyweave-contract",
     format_version = "1.0",
     id = contract$id,
     version = contract$version,
@@ -59,16 +59,16 @@ dl_contract_yaml <- function(contract, path) {
 #'   commons.
 #' @export
 #' @examples
-#' metric <- dl_metric(
+#' metric <- metric(
 #'   "orders.total", "orders", expr = sum(amount), time_behavior = "flow",
 #'   unit = "EUR", owner = "Analytics", description = "Total order value",
 #'   approved = TRUE, code_version = "v1"
 #' )
 #' path <- tempfile(fileext = ".yml")
-#' dl_commons_yaml(metric, "orders", "SUM(amount)", path)
+#' commons_yaml(metric, "orders", "SUM(amount)", path)
 #' cat(readLines(path), sep = "\n")
 #' unlink(path)
-dl_commons_yaml <- function(metric, table, sql_expr, path) {
+commons_yaml <- function(metric, table, sql_expr, path) {
   need("yaml")
   scalar(table, "table")
   scalar(sql_expr, "sql_expr")
@@ -98,38 +98,4 @@ dl_commons_yaml <- function(metric, table, sql_expr, path) {
   )
   yaml::write_yaml(x, path)
   invisible(path)
-}
-
-#' Check backend capabilities
-#' @param lake Connected lake.
-#' @return A named list of explicit implementation capabilities.
-#' @export
-#' @examplesIf requireNamespace("duckdb", quietly = TRUE)
-#' root <- tempfile("lakefold-example-")
-#' config <- dl_config(
-#'   dl_catalog_duckdb(file.path(root, "lake.db")),
-#'   dl_storage_local(file.path(root, "data")),
-#'   landing = file.path(root, "landing"), backend = "duckdb"
-#' )
-#' lake <- dl_connect(config)
-#' dl_capabilities(lake)
-#' dl_disconnect(lake)
-#' unlink(root, recursive = TRUE)
-dl_capabilities <- function(lake) {
-  list(
-    backend = lake$config$backend,
-    transactions = TRUE,
-    immutable_releases = TRUE,
-    replace = TRUE,
-    replace_partition = TRUE,
-    multi_writer = FALSE,
-    read_only = isTRUE(lake$config$read_only),
-    release_comparison = TRUE,
-    report_readback = TRUE,
-    explicit_recovery = TRUE,
-    automatic_column_lineage = FALSE,
-    own_scheduler = FALSE,
-    authentication = FALSE,
-    automatic_retention = FALSE
-  )
 }

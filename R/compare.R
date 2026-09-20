@@ -15,21 +15,21 @@
 #'   releases. When only `to` is given, `from` is its preceding release.
 #' @param key Optional business-key column names.
 #' @param limit Maximum rows in each added, removed and changed preview.
-#' @returns A `dl_comparison` list with release IDs, counts, schema differences,
+#' @returns A `tw_comparison` list with release IDs, counts, schema differences,
 #'   numeric totals, and row previews. Changed previews contain separate
 #'   `before` and `after` tables in the same key order.
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
-#' root <- tempfile("lakefold-")
-#' lake <- dl_open(root)
-#' dl_write(lake, data.frame(id = c(1L, 2L), amount = c(10, 20)), "orders")
-#' dl_write(lake, data.frame(id = c(1L, 3L), amount = c(12, 30)), "orders")
-#' difference <- dl_compare(lake, "orders", key = "id")
+#' root <- tempfile("tidyweave-")
+#' lake <- open_lake(root)
+#' write_data(lake, data.frame(id = c(1L, 2L), amount = c(10, 20)), "orders")
+#' write_data(lake, data.frame(id = c(1L, 3L), amount = c(12, 30)), "orders")
+#' difference <- compare(lake, "orders", key = "id")
 #' difference
 #' difference$changed
-#' dl_close(lake)
+#' close_lake(lake)
 #' unlink(root, recursive = TRUE)
-dl_compare <- function(
+compare <- function(
   lake,
   name,
   from = NULL,
@@ -48,7 +48,7 @@ dl_compare <- function(
   ) {
     abort("limit must be a non-negative whole number or Inf.")
   }
-  history <- dl_releases(lake, name)
+  history <- releases(lake, name)
   if (!nrow(history)) {
     abort(paste("No published release for", name))
   }
@@ -81,8 +81,8 @@ dl_compare <- function(
     abort("Supply key or define a unique key in the published contract.")
   }
   invisible(lapply(key, column_name))
-  old <- dl_tbl(lake, name, from)
-  new <- dl_tbl(lake, name, to)
+  old <- tbl(lake, name, from)
+  new <- tbl(lake, name, to)
   types_before <- infer_column_types(old)
   types_after <- infer_column_types(new)
   if (!all(key %in% intersect(names(types_before), names(types_after)))) {
@@ -254,13 +254,13 @@ dl_compare <- function(
       ),
       limit = limit
     ),
-    class = "dl_comparison"
+    class = "tw_comparison"
   )
 }
 
 #' @export
-print.dl_comparison <- function(x, ...) {
-  cat("<dl_comparison>", x$name, "\n")
+print.tw_comparison <- function(x, ...) {
+  cat("<tw_comparison>", x$name, "\n")
   print(tibble::tibble(change = names(x$counts), rows = unname(x$counts)))
   cat("Row previews are available in $added, $removed and $changed.\n")
   invisible(x)

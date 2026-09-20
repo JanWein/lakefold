@@ -2,7 +2,7 @@
 #'
 #' Store paths and CLI settings without running dbt or opening a database.
 #' dbt remains responsible for SQL models, dependencies, tests and incremental
-#' strategies. Use [dl_dbt_build()] or [dl_execute()] to execute the project.
+#' strategies. Use [dbt_build()] or [run()] to execute the project.
 #'
 #' @param path Character scalar giving the directory with `dbt_project.yml`.
 #'   The directory is checked when executing, not when constructing the object.
@@ -11,14 +11,14 @@
 #' @param target Optional character scalar naming a target in the dbt profile.
 #' @param executable Character scalar giving a dbt executable name or path.
 #'   It is passed to [processx::run()] without a shell.
-#' @returns A serializable `dl_dbt_project` specification. It contains no
+#' @returns A serializable `dbt_project` specification. It contains no
 #'   database connection or resolved environment credentials.
-#' @seealso [dl_dbt_init()], [dl_dbt_status()], [dl_dbt_model()]
+#' @seealso [dbt_init()], [dbt_status()], [dbt_model()]
 #' @examples
-#' project <- dl_dbt_project("analytics", profiles_dir = "analytics")
+#' project <- dbt_project("analytics", profiles_dir = "analytics")
 #' project
 #' @export
-dl_dbt_project <- function(
+dbt_project <- function(
   path = "dbt",
   profiles_dir = NULL,
   target = NULL,
@@ -39,24 +39,24 @@ dl_dbt_project <- function(
       target = target,
       executable = executable
     ),
-    class = "dl_dbt_project"
+    class = "tw_dbt_project"
   )
 }
 
 #' Build or test SQL models with dbt
 #'
 #' Run the dbt CLI in a separate process and read that invocation's artifacts.
-#' Each invocation gets a new directory under `.lakefold/runs` in the project;
+#' Each invocation gets a new directory under `.tidyweave/runs` in the project;
 #' a failed invocation can never reuse an earlier run's successful results.
 #'
 #' Close R connections to the same local DuckDB or DuckLake catalog before
 #' running dbt, then reconnect for analysis. dbt manages its own connections.
 #' Anonymous usage telemetry is disabled for the child process.
-#' A dbt build is not an atomic lakefold release: earlier models can have been
+#' A dbt build is not an atomic tidyweave release: earlier models can have been
 #' materialized even if a later model or test fails. dbt logs and artifacts can
 #' contain SQL, paths and database messages; treat them as project data.
 #'
-#' @param project A [dl_dbt_project()] specification.
+#' @param project A [dbt_project()] specification.
 #' @param select,exclude Optional character vectors of dbt selection
 #'   expressions.
 #'   Each element is one CLI argument; expressions starting with `-` are
@@ -65,21 +65,21 @@ dl_dbt_project <- function(
 #' @param vars A named list of non-secret dbt variables, encoded as JSON.
 #' @param echo Logical scalar. Stream dbt output to the R console.
 #' @param timeout Positive timeout in seconds, or `Inf` for no limit.
-#' @param stop_on_failure Logical scalar. Raise `dl_dbt_failed` on a nonzero
+#' @param stop_on_failure Logical scalar. Raise `tw_dbt_failed` on a nonzero
 #'   exit
 #'   status, failed nodes or missing artifacts. The condition's `result` field
 #'   retains diagnostics. Set `FALSE` to inspect failures as ordinary results.
-#' @returns A `dl_dbt_result` list with `status` (integer exit code), `success`
+#' @returns A `tw_dbt_result` list with `status` (integer exit code), `success`
 #'   (logical), `command`, `results` (node tibble), parsed `manifest`,
 #'   `artifacts_dir`, `stdout`, `stderr` and `artifact_error`. Warnings reported
 #'   by dbt are retained and do not by themselves count as failure.
-#' @seealso [dl_dbt_status()], [dl_dbt_lineage()], [dl_dbt_model()]
-#' @examplesIf nzchar(Sys.getenv("LAKEFOLD_DBT_EXAMPLE_PROJECT"))
-#' project <- dl_dbt_project(Sys.getenv("LAKEFOLD_DBT_EXAMPLE_PROJECT"))
-#' result <- dl_dbt_build(project, select = "tag:reporting", echo = FALSE)
-#' dl_dbt_status(result)
+#' @seealso [dbt_status()], [dbt_lineage()], [dbt_model()]
+#' @examplesIf nzchar(Sys.getenv("TIDYWEAVE_DBT_EXAMPLE_PROJECT"))
+#' project <- dbt_project(Sys.getenv("TIDYWEAVE_DBT_EXAMPLE_PROJECT"))
+#' result <- dbt_build(project, select = "tag:reporting", echo = FALSE)
+#' dbt_status(result)
 #' @export
-dl_dbt_build <- function(
+dbt_build <- function(
   project,
   select = NULL,
   exclude = NULL,
@@ -102,9 +102,9 @@ dl_dbt_build <- function(
   )
 }
 
-#' @rdname dl_dbt_build
+#' @rdname dbt_build
 #' @export
-dl_dbt_test <- function(
+dbt_test <- function(
   project,
   select = NULL,
   exclude = NULL,
@@ -127,11 +127,12 @@ dl_dbt_test <- function(
 }
 
 #' @export
-dl_execute.dl_dbt_project <- function(object, lake = NULL, ...) {
+#' @noRd
+tw_execute.tw_dbt_project <- function(object, lake = NULL, ...) {
   if (!is.null(lake)) {
-    abort("dbt opens its own connections; omit lake.", "dl_dbt_invalid")
+    abort("dbt opens its own connections; omit lake.", "tw_dbt_invalid")
   }
-  dl_dbt_build(object, ...)
+  dbt_build(object, ...)
 }
 
 dbt_selection <- function(value, name) {
@@ -147,7 +148,7 @@ dbt_selection <- function(value, name) {
   ) {
     abort(
       paste(name, "must contain non-empty dbt selectors, not CLI flags."),
-      "dl_dbt_invalid"
+      "tw_dbt_invalid"
     )
   }
   c(paste0("--", name), value)
@@ -182,8 +183,8 @@ dbt_run <- function(
   timeout,
   stop_on_failure
 ) {
-  if (!inherits(project, "dl_dbt_project")) {
-    abort("Use dl_dbt_project() first.", "dl_dbt_invalid")
+  if (!inherits(project, "tw_dbt_project")) {
+    abort("Use dbt_project() first.", "tw_dbt_invalid")
   }
   flag(full_refresh, "full_refresh")
   flag(echo, "echo")
@@ -196,7 +197,7 @@ dbt_run <- function(
   ) {
     abort(
       "timeout must be a positive number of seconds or Inf.",
-      "dl_dbt_invalid"
+      "tw_dbt_invalid"
     )
   }
   if (
@@ -209,7 +210,7 @@ dbt_run <- function(
   ) {
     abort(
       "vars must be a named list with unique non-empty names.",
-      "dl_dbt_invalid"
+      "tw_dbt_invalid"
     )
   }
   selectors <- c(
@@ -218,8 +219,8 @@ dbt_run <- function(
   )
   if (!file.exists(file.path(project$path, "dbt_project.yml"))) {
     abort(
-      "No dbt_project.yml found. Use dl_dbt_init() or supply an existing project.",
-      "dl_dbt_invalid"
+      "No dbt_project.yml found. Use dbt_init() or supply an existing project.",
+      "tw_dbt_invalid"
     )
   }
   need("processx")
@@ -227,12 +228,12 @@ dbt_run <- function(
   if (!nzchar(executable) && !file.exists(project$executable)) {
     abort(
       "dbt executable not found. Install dbt and set executable to its path.",
-      "dl_dbt_unavailable"
+      "tw_dbt_unavailable"
     )
   }
-  artifacts <- file.path(project$path, ".lakefold", "runs", uid())
+  artifacts <- file.path(project$path, ".tidyweave", "runs", uid())
   if (!dir.create(artifacts, recursive = TRUE)) {
-    abort("Could not create the dbt artifact directory.", "dl_dbt_io")
+    abort("Could not create the dbt artifact directory.", "tw_dbt_io")
   }
   args <- c(
     command,
@@ -265,7 +266,7 @@ dbt_run <- function(
     error = function(e) {
       abort(
         "dbt could not complete. Check the executable, timeout and project logs.",
-        "dl_dbt_process_error",
+        "tw_dbt_process_error",
         parent = e,
         artifacts_dir = artifacts
       )
@@ -283,7 +284,7 @@ dbt_run <- function(
       stderr = process$stderr,
       artifact_error = NULL
     ),
-    class = "dl_dbt_result"
+    class = "tw_dbt_result"
   )
   parsed <- tryCatch(dbt_read_artifacts(artifacts), error = identity)
   if (inherits(parsed, "error")) {
@@ -297,7 +298,7 @@ dbt_run <- function(
   if (stop_on_failure && !result$success) {
     abort(
       "dbt execution failed. Inspect condition$result or use stop_on_failure = FALSE.",
-      "dl_dbt_failed",
+      "tw_dbt_failed",
       result = result
     )
   }
@@ -318,7 +319,7 @@ dbt_read_json <- function(path) {
   if (!file.exists(path)) {
     abort(
       paste("Missing dbt artifact:", basename(path)),
-      "dl_dbt_artifact_invalid"
+      "tw_dbt_artifact_invalid"
     )
   }
   tryCatch(
@@ -326,7 +327,7 @@ dbt_read_json <- function(path) {
     error = function(e) {
       abort(
         paste("Invalid dbt JSON:", basename(path)),
-        "dl_dbt_artifact_invalid"
+        "tw_dbt_artifact_invalid"
       )
     }
   )
@@ -338,7 +339,7 @@ dbt_read_artifacts <- function(path) {
   if (!is.list(runs) || is.null(runs$metadata) || !is.list(runs$results)) {
     abort(
       "run_results.json must contain metadata and a results array.",
-      "dl_dbt_artifact_invalid"
+      "tw_dbt_artifact_invalid"
     )
   }
   run_id <- runs$metadata$invocation_id
@@ -348,7 +349,7 @@ dbt_read_artifacts <- function(path) {
   ) {
     abort(
       "dbt artifacts must belong to the same invocation.",
-      "dl_dbt_artifact_invalid"
+      "tw_dbt_artifact_invalid"
     )
   }
   rows <- lapply(runs$results, function(node) {
@@ -361,7 +362,7 @@ dbt_read_artifacts <- function(path) {
     ) {
       abort(
         "A dbt result is missing unique_id or status.",
-        "dl_dbt_artifact_invalid"
+        "tw_dbt_artifact_invalid"
       )
     }
     for (field in c("execution_time", "failures", "message")) {
@@ -372,7 +373,7 @@ dbt_read_artifacts <- function(path) {
       if (!valid) {
         abort(
           paste("Invalid scalar dbt result field:", field),
-          "dl_dbt_artifact_invalid"
+          "tw_dbt_artifact_invalid"
         )
       }
     }
@@ -399,7 +400,7 @@ dbt_read_manifest <- function(path) {
   ) {
     abort(
       "manifest.json must contain metadata and nodes.",
-      "dl_dbt_artifact_invalid"
+      "tw_dbt_artifact_invalid"
     )
   }
   manifest
@@ -410,17 +411,17 @@ dbt_read_manifest <- function(path) {
 #' Read structured statuses without parsing console output. A directory must
 #' contain a matching pair of `run_results.json` and `manifest.json` artifacts.
 #' The returned table contains executed nodes only, not the entire dbt project.
-#' @param x A `dl_dbt_result`, or a character scalar giving an artifact
+#' @param x A `tw_dbt_result`, or a character scalar giving an artifact
 #'   directory.
 #' @returns A tibble with character columns `unique_id`, `status`, `message`,
 #'   numeric `execution_time` (seconds) and integer `failures` (possibly `NA`).
-#' @seealso [dl_dbt_build()], [dl_dbt_lineage()]
+#' @seealso [dbt_build()], [dbt_lineage()]
 #' @examples
-#' artifacts <- system.file("extdata", "dbt-artifacts", package = "lakefold")
-#' dl_dbt_status(artifacts)
+#' artifacts <- system.file("extdata", "dbt-artifacts", package = "tidyweave")
+#' dbt_status(artifacts)
 #' @export
-dl_dbt_status <- function(x) {
-  if (inherits(x, "dl_dbt_result")) {
+dbt_status <- function(x) {
+  if (inherits(x, "tw_dbt_result")) {
     return(x$results)
   }
   dbt_read_artifacts(absolute_path(x))$results
@@ -432,15 +433,15 @@ dl_dbt_status <- function(x) {
 #' manifest nodes. Dependencies describe SQL builds, not primary/foreign keys
 #' or column-level lineage. No database connection or dbt installation is
 #'   needed.
-#' @inheritParams dl_dbt_status
+#' @inheritParams dbt_status
 #' @returns A tibble with character columns `from`, `to` and `resource_type`.
 #'   One row represents a dependency from a parent to a downstream resource.
-#' @seealso [dl_dbt_model()], [dl_dbt_status()]
+#' @seealso [dbt_model()], [dbt_status()]
 #' @examples
-#' artifacts <- system.file("extdata", "dbt-artifacts", package = "lakefold")
-#' dl_dbt_lineage(artifacts)
+#' artifacts <- system.file("extdata", "dbt-artifacts", package = "tidyweave")
+#' dbt_lineage(artifacts)
 #' @export
-dl_dbt_lineage <- function(x) {
+dbt_lineage <- function(x) {
   manifest <- dbt_manifest(x)
   nodes <- c(
     manifest$nodes,
@@ -473,9 +474,9 @@ dl_dbt_lineage <- function(x) {
 }
 
 dbt_manifest <- function(x) {
-  if (inherits(x, "dl_dbt_result")) {
+  if (inherits(x, "tw_dbt_result")) {
     if (is.null(x$manifest)) {
-      abort("This dbt result has no valid manifest.", "dl_dbt_artifact_invalid")
+      abort("This dbt result has no valid manifest.", "tw_dbt_artifact_invalid")
     }
     return(x$manifest)
   }
@@ -488,30 +489,30 @@ dbt_manifest <- function(x) {
 #' must refer to the same catalog used by the dbt project. SQL dependencies do
 #' not imply relational keys; declare keys explicitly when needed.
 #'
-#' Relations are current dbt tables or views, not immutable lakefold releases.
+#' Relations are current dbt tables or views, not immutable tidyweave releases.
 #' The returned lazy model borrows the supplied connection; keep it open while
 #' querying. Ephemeral models cannot be opened. This function does not certify
 #' that tables were successfully built or that they still match the artifacts.
-#' @param lake A connected lake from [dl_connect()].
-#' @inheritParams dl_dbt_status
+#' @param lake A connected lake from [connect_lake()].
+#' @inheritParams dbt_status
 #' @param tables Optional named character vector mapping R table aliases to dbt
 #'   unique IDs, such as `c(sales = "model.shop.sales")`. By default includes
 #'   all
 #'   non-ephemeral models, seeds and snapshots. Use a subset after selected
 #'   builds.
 #' @param database Character scalar: the attachment name in the R connection.
-#'   Defaults to `"lake"`, as created by [dl_connect()].
-#' @inheritParams dl_model
-#' @returns A lazy `dm` object with a `dl_dbt_nodes` attribute mapping aliases
-#'   to dbt unique IDs. Key violations raise `dl_model_invalid` when `check` is
+#'   Defaults to `"lake"`, as created by [connect_lake()].
+#' @inheritParams model
+#' @returns A lazy `dm` object with a `tw_dbt_nodes` attribute mapping aliases
+#'   to dbt unique IDs. Key violations raise `tw_model_invalid` when `check` is
 #'   `TRUE`; SQL and connection errors are propagated.
-#' @seealso [dl_model()] for immutable releases, [dl_dbt_lineage()]
-#' @examplesIf nzchar(Sys.getenv("LAKEFOLD_DBT_EXAMPLE_PROJECT"))
+#' @seealso [model()] for immutable releases, [dbt_lineage()]
+#' @examplesIf nzchar(Sys.getenv("TIDYWEAVE_DBT_EXAMPLE_PROJECT"))
 #' # See vignette("dbt-workflows") for a complete build and reconnect example.
-#' project <- dl_dbt_project(Sys.getenv("LAKEFOLD_DBT_EXAMPLE_PROJECT"))
+#' project <- dbt_project(Sys.getenv("TIDYWEAVE_DBT_EXAMPLE_PROJECT"))
 #' project
 #' @export
-dl_dbt_model <- function(
+dbt_model <- function(
   lake,
   x,
   tables = NULL,
@@ -551,7 +552,7 @@ dl_dbt_model <- function(
   ) {
     abort(
       "tables must map unique R aliases to materialized dbt node IDs.",
-      "dl_dbt_invalid"
+      "tw_dbt_invalid"
     )
   }
   relations <- lapply(tables, function(id) {
@@ -564,14 +565,14 @@ dl_dbt_model <- function(
     )
   })
   model <- dm_keys(dm::dm(!!!relations), primary_keys, foreign_keys, check)
-  attr(model, "dl_dbt_nodes") <- tables
+  attr(model, "tw_dbt_nodes") <- tables
   model
 }
 
 #' @export
-print.dl_dbt_project <- function(x, ...) {
+print.tw_dbt_project <- function(x, ...) {
   cat(
-    "<dl_dbt_project>\nProject:",
+    "<dbt_project>\nProject:",
     x$path,
     "\nTarget:",
     x$target %||% "profile default",
@@ -580,9 +581,9 @@ print.dl_dbt_project <- function(x, ...) {
   invisible(x)
 }
 #' @export
-print.dl_dbt_result <- function(x, ...) {
+print.tw_dbt_result <- function(x, ...) {
   cat(
-    "<dl_dbt_result>",
+    "<tw_dbt_result>",
     x$command,
     "| exit:",
     x$status,

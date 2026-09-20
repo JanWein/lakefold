@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="840" height="370" viewBox="0 0 840 370" role="img" aria-labelledby="title desc">
+<title id="title">From inputs to a checked output</title><desc id="desc">Sources supply tables, transformations prepare a candidate and contracts plus quality rules check it. A passing candidate reaches the selected target. A failed check records evidence without writing the candidate.</desc>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#37546b"/></marker></defs>
+<rect width="840" height="370" fill="#f6f8fa" rx="12"/>
+<g font-family="sans-serif" fill="#183348">
+<text x="30" y="40" font-size="23" font-weight="bold">From input to checked output</text>
+<g fill="#e5f2ee" stroke="#487f6c"><rect x="30" y="82" width="210" height="92" rx="9"/><rect x="305" y="82" width="210" height="92" rx="9"/><rect x="580" y="82" width="230" height="92" rx="9"/></g>
+<text x="49" y="116" font-size="18" font-weight="bold">Source</text><text x="49" y="147" font-size="15">Table, file or adapter</text>
+<text x="324" y="116" font-size="18" font-weight="bold">Transform</text><text x="324" y="147" font-size="15">Your preparation code</text>
+<text x="599" y="116" font-size="18" font-weight="bold">Check candidate</text><text x="599" y="147" font-size="15">Contract and quality rules</text>
+<path d="M243 128H294" fill="none" stroke="#37546b" stroke-width="2" marker-end="url(#arrow)"/><path d="M518 128H569" fill="none" stroke="#37546b" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="305" y="244" width="210" height="89" rx="9" fill="#fff0e6" stroke="#a16d42"/><rect x="580" y="244" width="230" height="89" rx="9" fill="#e6eef8" stroke="#537799"/>
+<text x="324" y="276" font-size="18" font-weight="bold">Blocked</text><text x="324" y="306" font-size="15">Evidence; no new output</text>
+<text x="599" y="276" font-size="18" font-weight="bold">Write to target</text><text x="599" y="306" font-size="15">Memory, lake, file or table</text>
+<path d="M695 176V233" fill="none" stroke="#37546b" stroke-width="2" marker-end="url(#arrow)"/><path d="M650 176V204H410V233" fill="none" stroke="#37546b" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="708" y="213" font-size="14">Pass</text><text x="441" y="226" font-size="14">Fail</text>
+</g></svg>

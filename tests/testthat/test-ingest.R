@@ -1,15 +1,15 @@
 test_that("convenience ingestion preserves publication and cache semantics", {
   f <- fixture()
-  withr::defer(cleanup(f))
+  withr::defer(fixture_cleanup(f))
   source <- f$pipeline$steps$land
-  first <- dl_ingest(
+  first <- tw_ingest(
     f$lake,
     source,
     f$contract,
     "simple.orders",
     code_version = "v1"
   )
-  second <- dl_ingest(
+  second <- tw_ingest(
     f$lake,
     source,
     f$contract,

@@ -1,59 +1,65 @@
 # Contributing
 
-Create a focused issue or pull request with a reproducible example using
-synthetic data. Describe the expected behavior, actual behavior, package versions
-and backend. Do not attach credentials, production extracts or private catalog snapshots.
+Use synthetic data in issues and pull requests. Explain the expected result,
+actual result, package version and backend. Keep production extracts and runtime
+credentials out of examples, logs and metadata.
 
-From the repository root:
+## Develop and verify
 
 ```r
-install.packages(c("remotes", "testthat", "roxygen2", "rcmdcheck"))
+install.packages(c("remotes", "testthat", "roxygen2", "rcmdcheck", "pkgdown"))
 remotes::install_deps(dependencies = TRUE)
-testthat::test_local(".")
-Sys.setenv(DATALOOM_TEST_DUCKLAKE = "true")
+roxygen2::roxygenise()
 testthat::test_local(".")
 source("scripts/check.R")
+pkgdown::check_pkgdown()
 ```
 
-Update roxygen comments and run `roxygen2::roxygenise()` for changed public APIs.
-Add meaningful regression coverage for publication, idempotency and quality-gate
-changes. Keep database identifiers quoted and credentials out of registry records.
-Update `NEWS.md` and the relevant guide when behavior changes.
+Use the Posit package-development and testing skills, base R pipes, roxygen2
+Markdown and testthat edition 3. Format R files with `air format .`. Generate
+`man/` and `NAMESPACE`; do not edit them by hand. Add meaningful tests for changed
+behavior, especially failed publication gates, transactions, ownership and
+backend substitution. Update NEWS when visible behavior changes.
 
-Write package documentation, examples, user-facing messages, issue templates
-and repository materials in English. Keep the README as the canonical overview.
-When guide content is shared between `docs/` and `vignettes/`, update both.
-Keep `inst/examples/monthly_reporting.R` aligned with the core steps and result
-assertions in `vignettes/getting-started.Rmd`. Execute both after tutorial edits.
+Run infrastructure suites sequentially. Exercise DuckDB and DuckLake with
+`TIDYWEAVE_TEST_BACKEND=duckdb` and `TIDYWEAVE_TEST_BACKEND=ducklake`; enable the
+DuckLake integration with `TIDYWEAVE_TEST_DUCKLAKE=true`. Real dbt tests use
+`TIDYWEAVE_DBT_EXECUTABLE`. The core-only CI job runs `scripts/check-core.R`
+without optional infrastructure. Keep external services out of normal examples.
 
-Design for a short path through common tasks and explicit composition for more
-complex workflows. Require only the inputs needed for the selected operation;
-keep metadata and advanced integrations optional and document the defaults.
-Keep sources, contracts, steps, products, metrics and releases
-consistent in their inputs, outputs and lifecycle.
+## One canonical home for each tutorial
 
-Core principles: explicit release identity, failed checks block publication,
-normal R functions and tidyverse-compatible data objects, optional integrations,
-and accurate statements about tested behavior.
+All package documentation and user-facing messages are English. The README is
+the short introduction. **Executable vignettes are the canonical tutorials.**
+`docs/` holds design decisions, operational notes and concise links to tutorials,
+not a second copy of their prose. Function arguments and return types belong in
+roxygen help. `_pkgdown.yml` groups beginner functions before advanced adapters.
 
+The downloadable examples are extracted from the corresponding vignettes:
 
-The development workflow follows Posit `r-package-development`,
-`testing-r-packages` and `critical-code-reviewer` skills. Use base pipes, format
-with `air format .`, generate `man/` and `NAMESPACE` from roxygen2 (never edit
-Rd manually), and run `pkgdown::check_pkgdown()`. Add new topics to the grouped
-reference index. Tests use testthat edition 3 and clean up temporary files.
+| Script | Source |
+|---|---|
+| `composing_products.R` | `composing-products.Rmd` |
+| `monthly_reporting.R` | `getting-started.Rmd` |
+| `custom_target.R` | `extending-tidyweave.Rmd` |
+| `end_to_end.R` | Runs `composing_products.R` |
 
-For the external dbt integration test, install the versions documented in the
-dbt vignette and set `LAKEFOLD_DBT_EXECUTABLE` to the executable's absolute path.
-Run both `DATALOOM_TEST_BACKEND=duckdb` and `ducklake`. Keep optional external
-services out of ordinary examples; explain explicit integration requirements.
-The generated docs use runnable offline examples, and CLI-only chunks are
-clearly labelled. Full checks build vignettes instead of suppressing them.
+Use `knitr::purl(..., documentation = 0)` after tutorial edits. Chunks requiring
+user files, credentials or optional services use `purl = FALSE`. Add
+`library(tidyweave)` only if the extracted chunks do not include it. The monthly
+script guards its optional DuckDB dependency. Execute the changed vignette and
+its generated script; assertions in examples should test meaningful outcomes.
 
-The core-only CI job installs hard dependencies and runs `scripts/check-core.R`
-without DuckDB. New infrastructure must remain optional and fail clearly before
-acquisition when required but unavailable. Add S3 substitution tests for new
-component interfaces; a custom adapter must not need private core functions.
-Keep `inst/examples/composing_products.R` and `custom_target.R` aligned with
-their executable vignettes. Inspect metadata output for unintended input rows
-and runtime credentials.
+## Design discipline
+
+A new user should need only `product()`, `add_source()`, `run()` and `collect()`.
+Expose optional detail when it solves a real need. Use one product representation
+and ordinary R values. Add S3 interfaces when another implementation can use them;
+do not add classes merely for symmetry. Declare adapter limits and verify that a
+failed quality gate does not invoke its writer.
+
+The package is in development. Public interfaces can change without compatibility
+aliases until the first stable release candidate. This does not excuse careless
+handling of stored data: immutable releases, complete-candidate checks and pinned
+report evidence remain integrity requirements. Document actual test coverage and
+production boundaries without claiming untested guarantees.

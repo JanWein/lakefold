@@ -3,31 +3,31 @@
 #' Exports persisted check metadata, counts and segment labels. No source rows
 #' are collected. The HTML is self-contained, escapes cell contents and displays
 #' status as text. An empty result is explicitly reported as not checked.
-#' @param x Quality tibble or a run/dbt result accepted by [dl_quality()].
+#' @param x Quality tibble or a run/dbt result accepted by [quality()].
 #' @param path Output file path.
 #' @param format HTML or JSON.
 #' @param title Human-readable report title.
 #' @param overwrite Replace an existing file only when explicitly requested.
 #' @returns The normalized output path, invisibly.
-#' @seealso [dl_pointblank_report()], [dl_expect_quality()]
+#' @seealso [pointblank_report()], [expect_quality()]
 #' @export
 #' @examples
-#' contract <- dl_contract("orders", "1", "Analytics", "Orders", "One order",
+#' contract <- contract("orders", "1", "Analytics", "Orders", "One order",
 #'   c(id = "integer"), key = "id")
-#' quality <- dl_validate(data.frame(id = c(1L, 1L)), contract)
+#' quality <- validate(data.frame(id = c(1L, 1L)), contract)
 #' path <- tempfile(fileext = ".html")
-#' dl_quality_report(quality, path)
+#' quality_report(quality, path)
 #' unlink(path)
-dl_quality_report <- function(
+quality_report <- function(
   x,
   path,
   format = c("html", "json"),
-  title = "lakefold quality report",
+  title = "tidyweave quality report",
   overwrite = FALSE
 ) {
   format <- match.arg(format)
   scalar(title, "title")
-  quality <- dl_quality(x)
+  quality <- quality(x)
   attr(quality, "pointblank_agents") <- NULL
   report_file(path, overwrite, function(temp) {
     if (format == "json") {
@@ -141,7 +141,7 @@ report_file <- function(path, overwrite, write) {
     abort("The output directory must exist.")
   }
   temp <- tempfile(
-    ".lakefold-report-",
+    ".tidyweave-report-",
     tmpdir = dirname(path),
     fileext = ".html"
   )
@@ -155,35 +155,35 @@ report_file <- function(path, overwrite, write) {
 
 #' Export the native pointblank report from a validation
 #'
-#' Requires [dl_validate()] with `keep_agents = TRUE`. Agents are held only in
+#' Requires [validate()] with `keep_agents = TRUE`. Agents are held only in
 #' memory and are never serialized into the registry. Failed-row extracts and
 #' checked-table samples are disabled during interrogation. The native report
-#' describes pointblank action levels; the authoritative lakefold gate is shown
-#' by [dl_quality_report()], especially when using `policy = "rule"`.
+#' describes pointblank action levels; the authoritative tidyweave gate is shown
+#' by [quality_report()], especially when using `policy = "rule"`.
 #' @param x A quality tibble containing retained pointblank agents.
-#' @param rule Name supplied to [dl_pointblank()].
+#' @param rule Name supplied to [pointblank_checks()].
 #' @param path Output HTML path.
 #' @param overwrite Replace an existing output.
 #' @returns The normalized output path, invisibly.
 #' @export
 #' @examplesIf requireNamespace("pointblank", quietly = TRUE)
-#' contract <- dl_contract("orders", "1", "Analytics", "Orders", "One order",
-#'   c(amount = "numeric"), rules = list(dl_pointblank("amounts", function(data) {
+#' contract <- contract("orders", "1", "Analytics", "Orders", "One order",
+#'   c(amount = "numeric"), rules = list(pointblank_checks("amounts", function(data) {
 #'     pointblank::create_agent(data) |>
 #'       pointblank::col_vals_gte("amount", 0)
 #'   })))
-#' quality <- dl_validate(data.frame(amount = c(10, -1)), contract,
+#' quality <- validate(data.frame(amount = c(10, -1)), contract,
 #'   keep_agents = TRUE)
 #' path <- tempfile(fileext = ".html")
-#' dl_pointblank_report(quality, "amounts", path)
+#' pointblank_report(quality, "amounts", path)
 #' unlink(path)
-dl_pointblank_report <- function(x, rule, path, overwrite = FALSE) {
+pointblank_report <- function(x, rule, path, overwrite = FALSE) {
   need("pointblank")
   scalar(rule, "rule")
   agents <- attr(x, "pointblank_agents")
   if (is.null(agents[[rule]])) {
     abort(
-      "No retained agent for this rule. Use dl_validate(..., keep_agents = TRUE)."
+      "No retained agent for this rule. Use validate(..., keep_agents = TRUE)."
     )
   }
   report_file(path, overwrite, function(temp) {
@@ -200,16 +200,16 @@ dl_pointblank_report <- function(x, rule, path, overwrite = FALSE) {
 #'
 #' Uses the same gate as ingestion: warning states are allowed; empty results,
 #' failures, evaluation errors and skipped checks fail the expectation.
-#' @param x Quality tibble or result accepted by [dl_quality()].
+#' @param x Quality tibble or result accepted by [quality()].
 #' @returns `x`, invisibly, after recording a testthat expectation.
 #' @export
 #' @examplesIf requireNamespace("testthat", quietly = TRUE)
-#' contract <- dl_contract("orders", "1", "Analytics", "Orders", "One order",
+#' contract <- contract("orders", "1", "Analytics", "Orders", "One order",
 #'   c(id = "integer"), key = "id")
-#' dl_expect_quality(dl_validate(data.frame(id = 1:2), contract))
-dl_expect_quality <- function(x) {
+#' expect_quality(validate(data.frame(id = 1:2), contract))
+expect_quality <- function(x) {
   need("testthat")
-  quality <- dl_quality(x)
+  quality <- quality(x)
   blocked <- quality$rule[!quality$status %in% c("passed", "warning")]
   testthat::expect(
     quality_ok(quality),

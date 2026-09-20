@@ -1,12 +1,12 @@
 test_that("delivery monitoring detects missing business dates without an ingest attempt", {
   f <- fixture()
-  withr::defer(cleanup(f))
+  withr::defer(fixture_cleanup(f))
   due <- as.POSIXct("2026-09-01 09:00:00", tz = "UTC")
   date <- as.Date("2026-08-31")
   sent <- 0L
   notify <- function(event) sent <<- sent + 1L
   check <- function(at = due + 60, notify_fn = notify) {
-    dl_check_delivery(
+    check_delivery(
       f$lake,
       "risk.validated",
       f$contract,
@@ -17,24 +17,24 @@ test_that("delivery monitoring detects missing business dates without an ingest 
     )
   }
   expect_equal(check(due - 60)$status, "pending")
-  expect_equal(nrow(dl_registry(f$lake, "events")), 0L)
+  expect_equal(nrow(registry(f$lake, "events")), 0L)
   expect_equal(check()$status, "missing")
-  expect_equal(dl_freshness(f$lake)$delivery_status, "missing")
+  expect_equal(freshness(f$lake)$delivery_status, "missing")
   check()
   check()
   expect_equal(sent, 1L)
-  dl_run(f$pipeline, f$lake, business_date = as.Date("2026-07-31"))
+  run(f$pipeline, f$lake, business_date = as.Date("2026-07-31"))
   expect_equal(check()$status, "missing")
-  release <- dl_run(f$pipeline, f$lake, business_date = date)
+  release <- run(f$pipeline, f$lake, business_date = date)
   expect_equal(check()$release_id, release$release_id)
   expect_equal(check()$status, "received")
 })
 
 test_that("failed notifications remain retryable", {
   f <- fixture()
-  withr::defer(cleanup(f))
+  withr::defer(fixture_cleanup(f))
   due <- as.POSIXct("2026-09-01 09:00:00", tz = "UTC")
-  dl_check_delivery(
+  check_delivery(
     f$lake,
     "risk.validated",
     f$contract,
@@ -43,9 +43,9 @@ test_that("failed notifications remain retryable", {
     at = due + 60,
     notify = function(event) stop("Transport unavailable")
   )
-  expect_equal(dl_registry(f$lake, "events")$status, "delivery_failed")
+  expect_equal(registry(f$lake, "events")$status, "delivery_failed")
   sent <- 0L
-  dl_check_delivery(
+  check_delivery(
     f$lake,
     "risk.validated",
     f$contract,

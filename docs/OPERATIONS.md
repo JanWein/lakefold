@@ -1,186 +1,180 @@
-# Operating lakefold 0.4.0
+# Operate a tidyweave project
 
-For the new product-first interface, start with the [composition guide](https://janwein.github.io/lakefold/articles/composing-products.html).
-Lake examples require optional DuckDB >= 1.5.5; existing workflows remain supported.
+Start with a working product and add only the operating capabilities it needs.
+The [optional integrations guide](https://janwein.github.io/tidyweave/articles/optional-integrations.html)
+contains executable local examples. This guide describes responsibilities at
+execution, storage and service boundaries.
 
-
-## dbt execution
-
-Use one writing process per local catalog. Close R connections before invoking
-dbt and reopen them afterward. Serialize tasks for the same catalog in the
-scheduler. The registry does not implement distributed locks.
-
-dbt logs and artifacts are stored per invocation under `.lakefold/runs/<id>`.
-They can contain SQL, paths and database diagnostics. Keep them in the operating
-project's controlled storage. The child process inherits its parent's
-environment; credentials come from the dbt profile and environment variables.
-Anonymous dbt telemetry is explicitly disabled for the child process.
-
-On failure, inspect `result$success`, `dl_dbt_status(result)`, `result$stderr` and
-`result$artifact_error`. `timeout` terminates a stalled child process. There is
-no automatic retry, and a failed dbt invocation does not roll back every model
-already built. After a successful selected build, open the corresponding
-manifest nodes through `dl_dbt_model(tables = ...)`.
-
-Operators manage artifact retention, secrets, backup and restore. S3/PostgreSQL
-and dbt v2 require separately verified configuration. The starter generates local
-dbt-duckdb profiles. Keep the R and Python DuckDB versions aligned.
-
-## Configuration
-
-[setup_s3.R](../inst/examples/setup_s3.R) uses these environment variables:
-
-| Variable | Contents |
-|---|---|
-| `DATALOOM_S3_BUCKET` | Existing S3 bucket, required |
-| `DATALOOM_S3_ENDPOINT` | Endpoint including `https://` and no path, required |
-| `DATALOOM_S3_PREFIX` | Prefix, default `dataloom/dev` for compatibility |
-| `AWS_DEFAULT_REGION` | Region, default `eu-central-1` |
-| `AWS_ACCESS_KEY_ID` | Access key supplied at runtime |
-| `AWS_SECRET_ACCESS_KEY` | Secret supplied at runtime |
-| `AWS_SESSION_TOKEN` | Optional session token |
-| `DUCKLAKE_PG_CONNECTION` | libpq connection string for a PostgreSQL catalog |
-
-The `DATALOOM_S3_*` variables belong to the example script. Package constructors
-receive configuration explicitly. Archiving originals on S3 requires
-`paws.storage`; Parquet storage uses DuckDB httpfs. The S3 service must support
-conditional PutObject to avoid overwriting originals. Verify this with a test
-file in the target environment.
-
-## PostgreSQL
-
-Provision a database, configure TLS and runtime credentials, then use
-`dl_catalog_postgres("DUCKLAKE_PG_CONNECTION")`. This constructor neither
-provisions PostgreSQL nor migrates a local catalog. Back up database metadata
-and S3 objects together, and exercise restoration. A metadata-only backup does
-not contain the data files.
-
-## Jobs and Posit Connect
-
-The templates in `inst/templates/` separate definitions, an R job, a Quarto
-report and a Shiny app. Use stable absolute file paths, configure environment
-variables in the runtime and pass a Git commit as `DATALOOM_CODE_VERSION`.
-Lock package dependencies in the operating project.
-
-Use one writer for the shared lake. In a dedicated GitHub operating repository,
-use the same `concurrency.group` and `cancel-in-progress: false` for all jobs
-writing that lake. This only coordinates jobs within that repository. Connect
-and GitHub Actions must not write the same lake concurrently. Package CI uses
-isolated synthetic data and requires no production credentials. GitHub
-concurrency is not a durable job queue; the scheduler must retain a traceable
-run for each expected delivery.
-
-## Failures and recovery
-
-Monitor registry and job status. `dl_interrupted()` lists runs left in `running`
-state. An identical retry can find already committed releases.
-`dl_freshness()` checks data age; active monitoring requires an external
-scheduler. Surface notification transport failures. After a Quarto render fails,
-Connect may still display the last successful HTML. The registry records the
-current run's outcome.
-
-## Access and historical data
-
-Contracts and quality gates do not enforce storage permissions. Direct SQL
-clients can bypass framework rules. Catalog snapshots may include source paths,
-descriptions and contacts. Share only snapshots approved for the intended
-catalog audience. The public package repository contains no production
-snapshots. Retain historical releases referenced by reports. General automatic
-retention is not implemented.
-
-## Delivery monitoring and cleanup
-
-Call `dl_check_delivery()` from the existing scheduler. It checks an explicitly
-expected business date and `due_at`, even without a preceding import attempt.
-For partitioned releases it inspects the current date partition values, so an
-older correction retains evidence for newer months still present. For a full
-replacement with several dates, supply `date_column`. Without an identifiable
-date column it compares the recorded delivery date. Removed historical data
-does not count as a current delivery. Notifications
-are deduplicated after successful delivery, and transport failures remain
-retryable. The catalog displays delivery status alongside data age and the
-latest attempt.
-
-`dl_cleanup(lake, older_than_days = 30)` returns a preview. With
-`dry_run = FALSE`, eligible Raw/candidate tables from completed failed runs are
-dropped in one transaction. Running jobs, published release tables, landing
-files, quality evidence and reports are retained. Physical DuckLake file cleanup
-and snapshot expiry remain separate operating tasks.
-
-Quality reports and native pointblank reports can contain segment names and
-business rules. Compact reports omit complete source rows. Save reports to the
-operating project's intended location.
-
-## Simple local workflows
-
-`dl_open("my-lake")` stores the catalog, landing snapshots, data directory and
-`lakefold.json` in one folder. Keep that configuration file with the catalog;
-it records the backend. Reopen with the same call and close with `dl_close()`.
-Back up the folder with all connections closed, using the backend's documented
-backup requirements. Historical metadata can contain absolute file paths.
-
-`dl_write()` checks the schema automatically. It sets no freshness deadline and
-requires no owner or notification transport. Supply a contract when those
-business requirements are known. After adopting an explicit contract, continue
-supplying it on each write. The simple API shares the one-writer requirement.
-
-For custom readers and rules, fresh evaluation is the default. Opt into cache
-reuse with an explicit `code_version` covering dependencies and captured values.
-Schema preparation for a first file happens before the normal run is created;
-parsing failures retain the archived bytes but have no run-level quality report.
-
-
-## Read-only analysis and report reuse
-
-After closing the writer, open `dl_open("my-lake", read_only = TRUE)` for analysis.
-The backend enforces read-only storage access. No registry migration runs;
-upgrade once through a writable connection when needed. `dl_measure()` and
-`dl_check_delivery()` default to `record = FALSE` on this handle. Queries still
-need the backend's normal storage permissions, and local DuckDB connection
-locking rules still apply.
-
-Read saved values with `dl_report_read(lake, "report-id", values_only = TRUE)`.
-This does not execute a formula. Re-saving a recalculated identical report keeps
-its original timestamps. Changed inputs or values require a new report ID.
-
-## Recover an interrupted writer
-
-Inspect `dl_interrupted(lake)`, stop the original writer, and preview explicitly:
+## Keep evidence and monitor failures
 
 ```r
-# Replace these IDs with the selected run and asset from your own job.
-plan <- dl_recover(lake, run_ids = interrupted_run_id,
-  staging_assets = "orders")
-print(plan)
+result <- run(orders_definition, evidence = "runs", stop_on_failure = FALSE)
+run_history("runs")
+incidents("runs")
+read_run("runs", result$run_id)
 ```
 
-Execute the same selection with `dry_run = FALSE`. A known live process blocks
-recovery. For a legacy, remote or unsupported owner, set `writer_stopped = TRUE`
-only after stopping that writer externally. Linux process identity includes the
-boot and process start, so PID reuse does not establish liveness. This is not a
-replacement for shared writer coordination.
+Without `evidence`, ordinary runs retain evidence in their R result. With it,
+one JSON record per run contains status, times, input references, schema, quality
+counts and metadata-delivery state. Source rows, open connections, request objects,
+executable definitions and raw errors are excluded. Identifiers, paths and business
+descriptions can still be operationally sensitive.
 
-Recovered runs become errors; releases, landing archives and evidence remain.
-Staging cleanup happens after the metadata transaction and reports filesystem
-failures separately. Retry a remaining staging slot explicitly. A later
-`dl_cleanup()` can remove eligible unpublished tables under your retention policy.
+Use one coordinated writer for an evidence directory, including retry workers.
+This local store is separate from publication: a process crash after a target
+write but before evidence is saved requires reconciliation. It is not a distributed
+transaction log. Keep evidence in storage that survives job restarts and deployment
+updates. Targets cache hits reuse an earlier result and its timestamps; they are
+not new product executions.
 
-## Inspect a rule failure locally
+For local diagnosis use `result$error`, `result$warning_conditions`,
+`quality_errors()` or retained pointblank agents. Raw conditions may include values
+or credentials; they stay in memory and are not the portable evidence payload.
 
-Run `q <- dl_validate(candidate, contract, keep_errors = TRUE)` and inspect
-`lapply(dl_quality_errors(q), conditionMessage)`. Original conditions remain in
-memory and are not stored in `_dl.quality_results`. They may include data values.
-Use `keep_agents = TRUE` and `dl_pointblank_report()` for native pointblank detail.
+## Publish metadata to external services
 
-## Measure your own workload
+External catalogs are optional consumers of metadata. They do not replace the
+lake's technical registry or control whether a completed data write occurred.
 
-Source `system.file("examples", "benchmark.R", package = "lakefold")`, then run
-`benchmark_lakefold(100000, "duckdb")` or choose DuckLake. The deterministic
-synthetic workload times an initial write, a complete partition correction and a
-keyed comparison. Its assertions check changed-row counts; its timings describe
-that machine only. `dl_compare()` limits collected previews by default.
+```r
+lineage <- catalog_openlineage(
+  "https://lineage.example/api/v1/lineage",
+  namespace = "analytics.production",
+  request = function(request) {
+    httr2::req_auth_bearer_token(request, Sys.getenv("LINEAGE_TOKEN"))
+  }
+)
+metadata <- catalog_openmetadata(
+  "https://metadata.example",
+  database_schema = "warehouse.analytics.public",
+  source_tables = c(delivery = "warehouse.raw.public.orders"),
+  request = function(request) {
+    httr2::req_auth_bearer_token(request, Sys.getenv("METADATA_TOKEN"))
+  }
+)
 
-Partition replacement still materializes a full candidate and each published
-release retains its table. Increasing history therefore increases storage.
-The benchmark does not establish production throughput, incremental storage
-or remote backup guarantees.
+orders_definition <- product("orders") |>
+  add_source("orders.csv", name = "delivery") |>
+  add_catalog(lineage) |>
+  add_catalog(metadata)
+run(orders_definition, evidence = "runs")
+```
+
+Configure the actual service URL, TLS, credentials and permissions in your
+runtime. Never put credentials in endpoint URLs. Request factories obtain fresh
+authentication on every delivery. Package HTTP fixture tests verify requests and
+responses locally; they do not establish compatibility with your deployed server.
+
+OpenLineage sends **buffered START and COMPLETE/FAIL events after execution**,
+using the recorded timestamps and a stable run UUID. It is historical lineage,
+not live progress streaming. Failed or blocked runs report no output dataset.
+
+OpenMetadata upserts a table only for successful runs. Its database service,
+database and schema must already exist. `source_tables` maps `add_source()` names
+to existing fully qualified table names. Mapped sources receive table-level lineage;
+unmapped sources and column-level lineage are not inferred. This adapter does not
+provision infrastructure or implement the service's complete governance API.
+
+See [OpenLineage](https://openlineage.io/docs/) and
+[OpenMetadata](https://docs.open-metadata.org/) for service setup and supported
+server behavior.
+
+## Retry failed metadata delivery
+
+Publication and metadata delivery are separate. A failed catalog request records
+a warning and a pending delivery; it does not pretend that published data was
+rolled back. Supply the destination adapters again, with fresh credentials:
+
+```r
+retry_catalogs("runs", list(lineage, metadata))
+run_history("runs")
+```
+
+Only pending deliveries with matching destination IDs are attempted. A callback
+registered with `add_catalog(callback, name = "audit")` must be supplied as
+`list(audit = callback)` when retrying. Callback code and authenticated requests
+are not serialized into evidence.
+
+Delivery is **at least once**. A server may accept a request before local
+acknowledgement is saved. OpenLineage receivers should deduplicate by event/run
+identity; a retry can repeat an accepted START event. OpenMetadata table upserts
+and table-lineage edges are repeatable. Do not claim exactly-once delivery.
+
+## Coordinate storage writers
+
+A governed lake requires one coordinated writer. Keep dbt and R writes to the same
+local catalog sequential, closing R connections before the CLI opens it.
+`transform_dbt()` does this for its factory-owned connections. Other callers must
+coordinate their own connections and jobs.
+
+| Destination | Operating responsibility |
+|---|---|
+| DBI target | Verify driver transactions, isolation and transactional DDL; coordinate writers |
+| Local Parquet file | Verify replacement/rename behavior on the actual filesystem |
+| pins board | Configure authentication, retention and board-specific versioning |
+| DuckDB/DuckLake lake | Coordinate a writer and back up metadata plus underlying data |
+| S3/PostgreSQL lake deployment | Provision services, TLS and runtime secrets; verify conditional object writes and restore |
+
+`target_database(mode = "append")` checks the complete existing and incoming
+candidate before writing. This collects the existing table. General remote
+concurrency control, distributed locks and cross-system atomic commits remain
+outside the package.
+
+The environment-driven S3 example is [setup_s3.R](../inst/examples/setup_s3.R):
+
+| Variable | Purpose |
+|---|---|
+| `TIDYWEAVE_S3_BUCKET`, `TIDYWEAVE_S3_ENDPOINT` | Existing bucket and endpoint |
+| `TIDYWEAVE_S3_PREFIX` | Object prefix; example default `tidyweave/dev` |
+| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, optional `AWS_SESSION_TOKEN` | Runtime authentication |
+| `AWS_DEFAULT_REGION` | Region; example default `eu-central-1` |
+| `DUCKLAKE_PG_CONNECTION` | PostgreSQL registry connection string when that backend is selected |
+
+These example variables are not mandatory package configuration. Changing
+`registry_duckdb()` to `registry_postgres()` connects to another registry; it does
+not migrate an existing lake. Back up registry metadata and data objects together,
+and test restoration. A metadata-only backup cannot reconstruct the data files.
+
+## Schedule a project
+
+```r
+init_project("orders-project", targets = TRUE, renv = TRUE, connect = TRUE)
+```
+
+The generated project includes a runner, optional targets file, explicit renv
+bootstrap script and Quarto job. Creation does not install packages, produce a
+lockfile, deploy to Connect or configure a schedule. Follow its README to perform
+those steps. Use `TIDYWEAVE_EVIDENCE` for a persistent deployment evidence path.
+
+Configure schedules, credentials and process isolation in your chosen platform.
+For GitHub Actions, use a shared concurrency group for jobs writing the same lake;
+this coordinates only that repository. Connect and other schedulers need the same
+writer policy. A failed Quarto render can leave the previous successful HTML
+visible; inspect job status and execution evidence as well as the report.
+
+## Inspect and recover governed lake runs
+
+`interrupted(lake)` lists runs left in `running` state. Stop the original writer,
+then preview recovery for explicit run IDs:
+
+```r
+recover(lake, run_ids = selected_run_id, staging_assets = "orders")
+# After reviewing the preview:
+recover(lake, run_ids = selected_run_id, staging_assets = "orders",
+  dry_run = FALSE)
+```
+
+A known live process blocks recovery. For an owner whose liveness cannot be
+verified, `writer_stopped = TRUE` is an explicit operator assertion after stopping
+it externally. Recovery does not erase committed releases or landing evidence.
+It is not a substitute for writer coordination.
+
+`cleanup(lake)` previews eligible unpublished tables from completed failed runs;
+`dry_run = FALSE` performs that cleanup. Published releases, landing files, reports
+and quality evidence remain. General history retention and DuckLake physical-file
+expiry are separate operating tasks. Retain releases referenced by saved reports.
+
+`freshness()` and `check_delivery()` provide checks for an external scheduler;
+there is no background monitoring service. `report_read()` reads saved report
+values without rerunning formulas. Storage permissions remain essential: direct
+SQL or filesystem clients can bypass framework quality gates.

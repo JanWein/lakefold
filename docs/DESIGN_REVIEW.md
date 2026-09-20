@@ -1,49 +1,9 @@
-# Architecture review outcome: lakefold 0.7.0
+# Architecture review
 
-The [baseline critique and target design](REFACTOR_REVIEW.md) were recorded
-before implementation. The original package had strong publication integrity
-and useful ordinary-R escape hatches. Its chief weaknesses were the lake
-requirement for composed workflows, a technical step grammar, string-based
-quality dispatch and undocumented extension boundaries.
+The canonical, executable guide is
+[Architecture review](https://janwein.github.io/tidyweave/articles/design-review.html).
+Its source is [the package vignette](../vignettes/design-review.Rmd).
 
-## Implemented decisions
-
-- Extend `dl_product()` instead of introducing a parallel user-facing framework.
-- Add `dl_add_*()` composition while preserving existing derived-product calls.
-- Normalize tables, functions, paths, formulas and type/prototype declarations.
-- Make DuckDB optional; provide useful native execution with no infrastructure.
-- Use S3 component interfaces and independent preflight checks.
-- Compile lake products into the proven publication engine rather than
-  rebuilding transactions, history or recovery.
-- Keep native and composed transforms on ordinary R tables; preserve the
-  existing lazy APIs for larger workloads.
-- Generate structured metadata from execution and retain local failure evidence.
-- Keep pointblank and dbt as specialist engines, with their existing semantics.
-- Keep catalog delivery separate from the data transaction and expose failures.
-
-## Simplification pass
-
-Ordinary R functions have no new class. Quality sets are plain lists of existing
-rules. Targets normalize paths and existing configuration objects. No platform
-container, engine registry, new contract dialect, scheduler or family of adapter
-packages was introduced. Existing internal publication helpers remain shared.
-`dl_run()` reuses the existing `dl_execute()` dispatch rather than introducing
-another independent lifecycle for each public verb.
-
-## Remaining tradeoffs and sensible next work
-
-| Boundary | Why it remains | Useful next step |
-|---|---|---|
-| Native composition materializes tables in R | Predictable function semantics across targets | A lazy executor with explicit capabilities when a real workload requires it |
-| Specialized lake compilation and native execution coexist | The lake owns durable archives and publication transactions | Share additional preparation helpers only when behavior is truly identical |
-| Registry writes require one coordinated writer | No distributed locking protocol is claimed | Design locking and unique constraints with the deployed catalog |
-| Catalog callbacks are separate from publication | External catalogs cannot participate in the local transaction | An outbox/retry adapter if reliable remote delivery becomes necessary |
-| DBI factories and preflight can fail before durable ingestion | Source acquisition is not a distributed job system | An external job log for acquisition-level durability |
-| Descriptors cannot recreate closures or connections | R environments and credentials are runtime state | Versioned project code, dependency locks and external configuration |
-| No bundled production OpenMetadata client | Server versions and authentication vary | A separately tested adapter for the deployed API version |
-| Core still uses dplyr/dbplyr and DBI | Existing lazy workflows and validation rely on them | Measure installation costs before extracting integration packages |
-
-The package is broader without claiming unsupported remote infrastructure,
-transaction guarantees or out-of-memory execution for the simple composition
-path. The validation record distinguishes implemented behavior from deployment
-work still required.
+Design findings and remaining gaps are maintained in
+[the critical review](REFACTOR_REVIEW.md) and
+[the modern data stack comparison](MODERN_DATA_STACK.md).

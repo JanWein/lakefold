@@ -1,58 +1,73 @@
 #' Evaluate an interchangeable quality rule
 #'
 #' Extension packages implement an S3 method for their rule class, inheriting
-#' from `dl_rule`. Return the same columns as a native call. Unknown states,
+#' from `tw_rule`. Return the same columns as a native call. Unknown states,
 #' empty evidence and malformed results never authorize publication.
-#' Rule exceptions are retained locally only when requested by [dl_validate()].
-#' @param rule A rule from [dl_rule()], [dl_pointblank()], or an extension.
+#' Rule exceptions are retained locally only when requested by [validate()].
+#' @param rule A rule from [quality_rule()], [pointblank_checks()], or an extension.
 #' @param data Data frame or lazy table.
 #' @param ... Adapter-specific options. Native methods accept `keep_agent`.
 #' @returns A quality tibble, with one row per evaluated check.
 #' @export
 #' @examples
-#' dl_run_quality(dl_rule("positive", ~ amount > 0),
+#' run_quality(quality_rule("positive", ~ amount > 0),
 #'   data.frame(amount = c(10, -1, NA)))
-dl_run_quality <- function(rule, data, ...) UseMethod("dl_run_quality")
+run_quality <- function(rule, data, ...) UseMethod("run_quality")
 
 #' @export
-dl_run_quality.dl_rule <- function(rule, data, ...) {
-  # Preserve older serialized pointblank rules without changing their identity.
+run_quality.tw_rule <- function(rule, data, ...) {
   if (identical(rule$engine, "pointblank")) {
     return(pointblank_results(rule, data, ...))
   }
   if (!identical(rule$engine, "r")) {
-    abort("This quality engine needs a dl_run_quality() method.")
+    abort("This quality engine needs a run_quality() method.")
   }
   if (inherits(rule$check, "formula")) {
-    if (inherits(data, "tbl_sql")) {
+    if (is_lazy_table(data)) {
       predicate <- rlang::new_quosure(rule$check[[2]], environment(rule$check))
-      units <- dplyr::transmute(data, .dl_pass = !!predicate)
+      units <- dplyr::transmute(dplyr::ungroup(data), .tw_pass = !!predicate)
       proto <- dplyr::collect(utils::head(units, 0))
-      if (!is.logical(proto$.dl_pass)) {
+      if (!is.logical(proto$.tw_pass)) {
         abort("Quality formulas must return logical values.")
       }
+      .tw_pass <- NULL
       counts <- dplyr::collect(dplyr::summarise(
         units,
-        failed = sum(as.integer(is.na(.dl_pass) | !.dl_pass), na.rm = TRUE),
+        failed = sum(as.integer(is.na(.tw_pass) | !.tw_pass), na.rm = TRUE),
         total = dplyr::n()
       ))
-      value <- dl_quality_counts(counts$failed %||% 0, counts$total)
+      value <- quality_counts(
+        if (is.na(counts$failed)) 0 else counts$failed,
+        counts$total
+      )
     } else {
       value <- rlang::eval_tidy(
         rule$check[[2]],
         data,
         env = environment(rule$check)
       )
-      if (!is.logical(value) || !length(value) %in% c(1L, nrow(data))) {
+      if (
+        !is.logical(value) ||
+          !is.null(dim(value)) ||
+          !length(value) %in% c(1L, nrow(data))
+      ) {
         abort("Quality formulas must return one logical value or one per row.")
       }
       value <- rep(value, length.out = nrow(data))
-      value <- dl_quality_counts(sum(is.na(value) | !value), length(value))
+      value <- quality_counts(sum(is.na(value) | !value), length(value))
     }
   } else {
     value <- rule$check(data)
+    if (is.logical(value) && is.null(dim(value))) {
+      if (length(value) != 1L && length(value) != count_rows(data)) {
+        abort(
+          "A quality function must return one logical value, one per row, or quality_counts()."
+        )
+      }
+      value <- quality_counts(sum(is.na(value) | !value), length(value))
+    }
   }
-  if (inherits(value, "dl_quality_counts")) {
+  if (inherits(value, "tw_quality_counts")) {
     out <- from_counts(
       rule$name,
       value$n_failed,
@@ -60,20 +75,9 @@ dl_run_quality.dl_rule <- function(rule, data, ...) {
       rule$severity,
       rule$max_failure
     )
-  } else if (is.logical(value) && length(value) == 1L && !is.na(value)) {
-    out <- from_counts(
-      rule$name,
-      as.numeric(!value),
-      1,
-      rule$severity,
-      rule$max_failure
-    )
   } else {
-    out <- quality_row(
-      rule$name,
-      "error",
-      rule$severity,
-      message = "Rule must return a non-missing scalar logical or dl_quality_counts()."
+    abort(
+      "A quality function must return logical values or quality_counts(); numeric scores are not pass/fail results."
     )
   }
   out$engine <- "r"
@@ -81,9 +85,9 @@ dl_run_quality.dl_rule <- function(rule, data, ...) {
 }
 
 #' @export
-dl_run_quality.default <- function(rule, data, ...) {
+run_quality.default <- function(rule, data, ...) {
   abort(
-    "Use dl_rule(), dl_pointblank(), or a rule with a dl_run_quality() method."
+    "Use quality_rule(), pointblank_checks(), or a rule with a run_quality() method."
   )
 }
 
@@ -136,7 +140,7 @@ evaluate_rules <- function(
   rows <- lapply(rules, function(rule) {
     tryCatch(
       {
-        result <- dl_run_quality(rule, data, keep_agent = keep_agents)
+        result <- run_quality(rule, data, keep_agent = keep_agents)
         if (keep_agents) {
           agents[[rule$name]] <<- attr(result, "pointblank_agent")
         }
@@ -161,7 +165,7 @@ evaluate_rules <- function(
     attr(out, "pointblank_agents") <- agents
   }
   if (keep_errors) {
-    attr(out, "dl_errors") <- errors
+    attr(out, "tw_errors") <- errors
   }
   out
 }

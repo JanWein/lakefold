@@ -1,0 +1,199 @@
+---
+title: "Write an adapter without changing the framework"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Write an adapter without changing the framework}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE, purl=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", message = FALSE)
+```
+
+An ordinary function is usually enough for a source or transformation. Introduce
+an adapter when configuration, inspection, resource ownership or a different
+implementation needs a reusable boundary. An extension package uses ordinary
+S3 methods; it does not modify tidyweave's core or register with a plugin system.
+
+## The small set of extension interfaces
+
+| Generic | Input | Required result |
+|---|---|---|
+| `read_source()` | Source configuration | An ordinary or supported lazy table |
+| `execute_transform()` | Transform and table; a named list for multiple inputs | One ordinary or supported lazy table |
+| `run_quality()` | Rule and candidate table | Standard quality evidence |
+| `write_target()` | Target, checked table and run context | Output descriptor list, or an error |
+| `publish_metadata()` | Catalog and descriptive run metadata | Ignored; raise an error on failure |
+| `check_component()` | Component configuration | Component invisibly; no acquisition |
+| `inspect()` | Component | Safe descriptive list with a `type` field |
+| `capabilities()` | Component | Six standard capability flags, optionally additional fields |
+
+The product executor already coordinates acquisition, transforms, checks and
+run evidence. A writer is responsible for its destination's persistence,
+atomicity and cleanup. It must not claim guarantees it does not provide.
+
+## A source, a writer and a quality engine
+
+This small example is intentionally local and runnable. The source wrapper
+stands in for an external reader. The target writes an RDS file inside a new
+directory. Neither requires private tidyweave functions.
+
+```{r definitions}
+library(tidyweave)
+
+guide_source <- function(data) structure(list(data = data), class = "guide_source")
+read_source.guide_source <- function(source, ...) source$data
+check_component.guide_source <- function(x, ...) {
+  if (!is.data.frame(x$data)) stop("Supply an R data frame.")
+  invisible(x)
+}
+inspect.guide_source <- function(x, ...) {
+  list(type = "example reader", columns = names(x$data))
+}
+capabilities.guide_source <- function(x, ...) {
+  component_capabilities(read = TRUE, write = FALSE, lazy = FALSE,
+    transactions = FALSE, partition = FALSE, immutable = FALSE)
+}
+
+guide_target <- function(path) structure(list(path = path), class = "guide_target")
+check_component.guide_target <- function(x, ...) {
+  if (!is.character(x$path) || length(x$path) != 1L ||
+      is.na(x$path) || !nzchar(x$path)) stop("Supply one destination path.")
+  if (!dir.exists(dirname(x$path))) stop("Create the parent directory first.")
+  if (file.exists(x$path)) stop("Choose a new directory for this output.")
+  invisible(x)
+}
+inspect.guide_target <- function(x, ...) list(type = "new RDS directory", path = x$path)
+capabilities.guide_target <- function(x, ...) {
+  component_capabilities(read = FALSE, write = TRUE, lazy = FALSE,
+    transactions = FALSE, partition = FALSE, immutable = FALSE)
+}
+write_target.guide_target <- function(target, data, context, ...) {
+  check_component(target)
+  if (!dir.create(target$path, showWarnings = FALSE)) {
+    stop("Could not create the new destination.")
+  }
+  complete <- FALSE
+  on.exit(if (!complete) unlink(target$path, recursive = TRUE))
+  path <- file.path(target$path, "data.rds")
+  saveRDS(as.data.frame(data), path)
+  complete <- TRUE
+  list(path = path, product = context$product, rows = nrow(data))
+}
+
+guide_quality <- function() {
+  rule <- quality_rule("nonnegative", ~ amount >= 0)
+  class(rule) <- c("guide_quality", class(rule))
+  rule
+}
+run_quality.guide_quality <- function(rule, data, ...) {
+  # A real external engine would supply these aggregate counts.
+  failed <- sum(is.na(data$amount) | data$amount < 0)
+  total <- nrow(data)
+  native <- quality_rule(rule$name, function(data) quality_counts(failed, total),
+    severity = rule$severity, max_failure = rule$max_failure)
+  evidence <- run_quality(native, data)
+  evidence$engine <- "example"
+  evidence
+}
+```
+
+The writer owns its newly created directory and removes incomplete output on
+failure. It does **not** promise atomic visibility to other readers, immutable
+history, partition replacement or distributed locking. A production adapter
+should use the existing storage client's commit protocol when those are needed.
+
+The quality adapter preserves the class from `quality_rule()` and returns its
+standard evidence shape. Unknown states, empty evidence, errors and malformed
+counts cannot authorize publication. Never turn an engine failure into a pass.
+
+## Register methods in the extension package
+
+In an installed package, add roxygen2 `@export` and `@importFrom tidyweave
+read_source` (or the relevant generic) above each method. roxygen2 writes its
+S3 registration to NAMESPACE. This article instead registers the methods
+interactively so the example can run by itself:
+
+```{r register-methods}
+methods <- list(
+  read_source.guide_source = read_source.guide_source,
+  check_component.guide_source = check_component.guide_source,
+  inspect.guide_source = inspect.guide_source,
+  capabilities.guide_source = capabilities.guide_source,
+  check_component.guide_target = check_component.guide_target,
+  inspect.guide_target = inspect.guide_target,
+  capabilities.guide_target = capabilities.guide_target,
+  write_target.guide_target = write_target.guide_target,
+  run_quality.guide_quality = run_quality.guide_quality
+)
+for (name in names(methods)) {
+  registerS3method(sub("[.].*$", "", name), sub("^[^.]+[.]", "", name),
+    methods[[name]], envir = asNamespace("tidyweave"))
+}
+```
+
+Keep `...` in extension methods so the interface is consistent. Reject options
+that your method does not support. Preflight must not open a remote connection,
+execute a query or write a file just to decide whether a definition is valid.
+
+## Prove that substitution leaves the workflow intact
+
+```{r substitution}
+workflow <- function(source, target = NULL, check = ~ amount >= 0) {
+  product("orders") |>
+    add_source(source) |>
+    add_transform(function(data) transform(data, amount = amount * 2)) |>
+    add_quality(check) |>
+    set_target(target)
+}
+input <- data.frame(id = 1:2, amount = c(10, 20))
+path <- tempfile("custom-target-")
+native <- run(workflow(input))
+extended <- run(workflow(guide_source(input), guide_target(path), guide_quality()))
+stopifnot(identical(collect(native), collect(extended)))
+stopifnot(identical(readRDS(extended$outputs$path), as.data.frame(collect(native))))
+
+flags <- capabilities(guide_target(tempfile()))
+stopifnot(setequal(names(flags), names(component_capabilities())),
+  all(vapply(flags, function(x) is.logical(x) && length(x) == 1L, logical(1))))
+```
+
+The same function composes both implementations. `TRUE` means a declared
+capability is supported, `FALSE` means it is unsupported, and `NA` means it is
+unknown or depends on user code. A capability declaration is not evidence that
+a remote database supports a particular transaction or SQL translation.
+
+```{r gate}
+blocked_path <- tempfile("blocked-target-")
+bad <- workflow(guide_source(data.frame(id = 1L, amount = -1)),
+  guide_target(blocked_path), guide_quality())
+blocked <- run(bad, stop_on_failure = FALSE)
+stopifnot(blocked$status == "blocked", !file.exists(blocked_path))
+```
+
+The failed gate never invokes the writer. These are useful conformance tests,
+alongside invalid inputs, failed reads, failed writes, owned-resource cleanup,
+missing dependencies and lazy/materialized behavior.
+
+## Add specialist integrations without replacing them
+
+Use the existing pointblank adapter for pointblank assertions. Let dbt own its
+SQL graph and tests. Let targets own dependency caching. Their existing clients
+and conventions belong inside adapters, not in dozens of product arguments.
+
+Metadata delivery is another boundary. A callback is sufficient for a small
+integration; OpenLineage and OpenMetadata adapters provide HTTP implementations.
+Delivery failures are visible without undoing published data. Durable retries
+receive freshly supplied adapters rather than serialized credentials.
+
+```{r cleanup}
+unlink(path, recursive = TRUE)
+method_table <- get(".__S3MethodsTable__.", envir = asNamespace("tidyweave"))
+rm(list = names(methods), envir = method_table)
+```
+
+The [optional integrations guide](optional-integrations.html) demonstrates built-in
+adapters together. The package tests include independent S3 substitution and built-in adapter
+checks. Real deployment verification still belongs to the integration's owner:
+a local HTTP fixture cannot certify an enterprise catalog or IAM configuration.

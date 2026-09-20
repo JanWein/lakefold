@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="820" height="420" viewBox="0 0 820 420" role="img" aria-labelledby="title desc">
-<title id="title">Simple product API, interchangeable execution</title><desc id="desc">Users name a product, add ordinary inputs, then run or publish. Internally normalization and validation prepare a plan. Native R, a governed lake or a custom adapter executes it and returns data plus evidence.</desc>
+<title id="title">Simple product API, interchangeable execution</title><desc id="desc">Users name a product, add ordinary inputs, then run or publish. Internally normalization and validation prepare a plan. Source and transform adapters, storage targets and metadata adapters implement the plan with their own explicit guarantees.</desc>
 <defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#36546b"/></marker></defs>
 <rect width="820" height="420" fill="#f6f8fa" rx="12"/>
 <g font-family="sans-serif" fill="#173247">
@@ -15,8 +15,8 @@
 <path d="M333 119H405" stroke="#36546b" stroke-width="2" marker-end="url(#arrow)"/>
 <path d="M601 178V210H172 M601 210H647" fill="none" stroke="#36546b" stroke-width="2"/><path d="M172 210V231" stroke="#36546b" stroke-width="2" marker-end="url(#arrow)"/><path d="M412 210V231" stroke="#36546b" stroke-width="2" marker-end="url(#arrow)"/><path d="M647 210V231" stroke="#36546b" stroke-width="2" marker-end="url(#arrow)"/>
 <g fill="#fff" stroke="#8796a2"><rect x="65" y="237" width="215" height="91" rx="7"/><rect x="306" y="237" width="215" height="91" rx="7"/><rect x="546" y="237" width="215" height="91" rx="7"/></g>
-<text x="87" y="269" font-size="17" font-weight="bold">Native R</text><text x="87" y="298" font-size="14">Tables and run evidence</text>
-<text x="328" y="269" font-size="17" font-weight="bold">Governed lake</text><text x="328" y="298" font-size="14">Archives and release history</text>
-<text x="568" y="269" font-size="17" font-weight="bold">Custom adapter</text><text x="568" y="298" font-size="14">Use an existing tool</text>
-<text x="66" y="378" font-size="16">Source, transform and quality interfaces stay consistent across destinations.</text>
+<text x="87" y="269" font-size="17" font-weight="bold">R / DBI / Arrow</text><text x="87" y="298" font-size="14">Read and transform</text>
+<text x="328" y="269" font-size="17" font-weight="bold">Lake / DBI / files</text><text x="328" y="298" font-size="14">Check and write</text>
+<text x="568" y="269" font-size="17" font-weight="bold">Metadata adapters</text><text x="568" y="298" font-size="14">Run evidence and delivery</text>
+<text x="66" y="378" font-size="16">Common interfaces; each adapter declares its own guarantees.</text>
 </g></svg>

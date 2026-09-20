@@ -1,19 +1,19 @@
 test_that("contract and commons exports preserve their declared scope", {
   skip_if_not_installed("yaml")
   f <- fixture()
-  on.exit(cleanup(f))
+  on.exit(fixture_cleanup(f))
   path <- file.path(f$root, "contract.yaml")
-  dl_contract_yaml(f$contract, path)
+  contract_yaml(f$contract, path)
   x <- yaml::read_yaml(path)
-  expect_equal(x$format, "dataloom-contract")
+  expect_equal(x$format, "tidyweave-contract")
   expect_equal(x$grain, f$contract$grain)
   expect_equal(x$key, c("id", "date"))
   expect_identical(x$allow_extra, FALSE)
-  dl_commons_yaml(reserve_metric(), "published_reserves", "SUM(reserve)", path)
+  commons_yaml(reserve_metric(), "published_reserves", "SUM(reserve)", path)
   x <- yaml::read_yaml(path)
   expect_equal(x$tables[[1]]$definitions[[1]]$expr, "SUM(reserve)")
   expect_error(
-    dl_commons_yaml(reserve_metric(), "x", "SUM(x); DROP TABLE y", path),
+    commons_yaml(reserve_metric(), "x", "SUM(x); DROP TABLE y", path),
     "one expression"
   )
 })
@@ -21,9 +21,9 @@ test_that("contract and commons exports preserve their declared scope", {
 test_that("dm foreign keys reject orphaned references", {
   skip_if_not_installed("dm")
   f <- fixture()
-  on.exit(cleanup(f))
-  dl_run(f$pipeline, f$lake)
-  companies <- dl_contract(
+  on.exit(fixture_cleanup(f))
+  run(f$pipeline, f$lake)
+  companies <- contract(
     "risk.company_contract",
     "1.0.0",
     "Risk",
@@ -32,14 +32,13 @@ test_that("dm foreign keys reject orphaned references", {
     c(company = "character"),
     key = "company"
   )
-  p <- dl_product(
-    "risk.companies",
-    c(reserves = "risk.validated"),
-    function(inputs) dplyr::distinct(dplyr::select(inputs$reserves, company)),
-    companies,
-    code_version = "v1"
-  )
-  dl_build(f$lake, p)
+  p <- product("risk.companies", contract = companies, code_version = "v1") |>
+    add_source(source_release(f$lake, "risk.validated")) |>
+    add_transform(function(data) {
+      dplyr::distinct(dplyr::select(data, company))
+    }) |>
+    set_target(f$lake)
+  run(p)
   tables <- c(reserves = "risk.validated", companies = "risk.companies")
   keys <- list(reserves = c("id", "date"), companies = "company")
   foreign <- list(list(
@@ -48,18 +47,18 @@ test_that("dm foreign keys reject orphaned references", {
     ref_table = "companies",
     ref_columns = "company"
   ))
-  expect_s3_class(dl_model(f$lake, tables, keys, foreign), "dm")
-  p$build <- function(inputs) {
+  expect_s3_class(model(f$lake, tables, keys, foreign), "dm")
+  p$transforms[[1]] <- function(data) {
     dplyr::filter(
-      dplyr::distinct(dplyr::select(inputs$reserves, company)),
+      dplyr::distinct(dplyr::select(data, company)),
       company == "Alpha"
     )
   }
   p$version <- "2.0.0"
   p$code_version <- "v2"
-  dl_build(f$lake, p)
+  run(p)
   expect_error(
-    dl_model(f$lake, tables, keys, foreign),
-    class = "dl_model_invalid"
+    model(f$lake, tables, keys, foreign),
+    class = "tw_model_invalid"
   )
 })

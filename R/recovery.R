@@ -62,7 +62,7 @@ writer_state <- function(owner) {
 #'
 #' Selected running jobs become errors, retaining their inputs and quality
 #' evidence. Selected data-frame staging slots are removed; immutable landing
-#' deliveries and published tables are retained. Use [dl_cleanup()] separately
+#' deliveries and published tables are retained. Use [cleanup()] separately
 #' for abandoned candidate tables. Run recovery with one coordinated writer.
 #' Database changes are transactional; staging removal happens afterwards and
 #' is reported separately, so an incomplete filesystem cleanup can be retried.
@@ -77,12 +77,12 @@ writer_state <- function(owner) {
 #'   state and planned or completed action.
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
-#' root <- tempfile("lakefold-")
-#' lake <- dl_open(root)
-#' dl_recover(lake)
-#' dl_close(lake)
+#' root <- tempfile("tidyweave-")
+#' lake <- open_lake(root)
+#' recover(lake)
+#' close_lake(lake)
 #' unlink(root, recursive = TRUE)
-dl_recover <- function(
+recover <- function(
   lake,
   run_ids = character(),
   staging_assets = character(),
@@ -106,11 +106,11 @@ dl_recover <- function(
     if (!dry_run) {
       abort("Select run_ids or staging_assets explicitly before recovery.")
     }
-    run_ids <- dl_interrupted(lake)$run_id
+    run_ids <- interrupted(lake)$run_id
   }
   plan <- function() {
-    runs <- dl_registry(lake, "runs")
-    owners <- dl_registry(lake, "run_owners")
+    runs <- registry(lake, "runs")
+    owners <- registry(lake, "run_owners")
     rows <- lapply(run_ids, function(id) {
       run <- runs[runs$run_id == id, ]
       if (nrow(run) != 1L || run$status[[1]] != "running") {
@@ -128,7 +128,7 @@ dl_recover <- function(
       )
     })
     for (asset in staging_assets) {
-      slot <- file.path(lake$config$landing, ".lakefold-staging", asset)
+      slot <- file.path(lake$config$landing, ".tidyweave-staging", asset)
       if (!dir.exists(slot)) {
         abort(paste("Staging slot does not exist:", asset))
       }
@@ -198,7 +198,7 @@ dl_recover <- function(
   })
   out$action[out$kind == "run"] <- "marked_error"
   for (i in which(out$kind == "staging")) {
-    slot <- file.path(lake$config$landing, ".lakefold-staging", out$id[[i]])
+    slot <- file.path(lake$config$landing, ".tidyweave-staging", out$id[[i]])
     removed <- unlink(slot, recursive = TRUE) == 0L && !dir.exists(slot)
     out$action[[i]] <- if (removed) {
       "removed_staging"

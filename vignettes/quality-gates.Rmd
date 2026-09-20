@@ -1,211 +1,206 @@
 ---
-title: "Quality gates: pointblank, dbt and reliable releases"
+title: "Quality: start with one check, add rules when needed"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Quality gates: pointblank, dbt and reliable releases}
+  %\VignetteIndexEntry{Quality: start with one check, add rules when needed}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(collapse = TRUE, comment = "#>", warning = FALSE, message = FALSE)
-library(lakefold)
-knitr::opts_chunk$set(eval = requireNamespace("duckdb", quietly = TRUE))
-if (!requireNamespace("pointblank", quietly = TRUE)) {
-  knitr::opts_chunk$set(eval = FALSE)
-}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", message = FALSE)
+library(tidyweave)
 ```
 
-This storage guide uses optional DuckDB >= 1.5.5. For a database-free start,
-see [composing products](composing-products.html).
+Quality checks answer a practical question: **can somebody safely use this
+result?** Start with the requirement you already know. You do not need a
+database, an external quality engine or governance metadata.
 
+```{r first-check}
+orders <- data.frame(id = 1:3, amount = c(10, 20, 30))
+result <- product("orders") |>
+  add_source(orders) |>
+  add_quality(~ amount >= 0) |>
+  run()
+collect(result)
+quality(result)
+```
 
-## Three quality responsibilities
+## Choose the smallest useful tool
 
-| Stage | Tool | Responsibility |
+| Tool | Question | Does it decide whether publication is allowed? |
 |---|---|---|
-| Incoming delivery | pointblank inside a lakefold contract | Plausibility, value ranges, segments and tolerated failures |
-| Building persisted SQL models | dbt | Model dependencies, structural tests, SQL rules and materializations |
-| Relational analysis in R | dm | Explicit primary/foreign keys and relationships |
+| `profile_data(data)` | What types, missing counts and ranges occur? | No |
+| `contract(columns = ...)` | Which structure, required fields and keys do I promise? | Yes |
+| `add_quality(~ amount >= 0)` | Does this business rule hold? | Yes |
+| `pointblank_checks()` | Can an existing pointblank plan evaluate these rules? | Yes |
 
-lakefold makes the publication decision and records its evidence. A successful
-dbt model is initially a mutable relation. A lakefold release references an
-immutable candidate snapshot. Scheduling and permissions belong to the
-surrounding platform.
+A profile describes data. It does not turn observations into requirements.
+Database and Arrow profiles collect aggregate results, not samples; exact
+counts can still require scanning the data on the backend.
 
-## Define a contract with graded pointblank thresholds
-
-This guide requires the optional pointblank package:
-`install.packages("pointblank")`. If it is unavailable during documentation
-building, the examples are displayed but not executed.
-
-A single global failure ratio can hide problems in small entities. This rule
-therefore uses pointblank segments by `entity`. lakefold retains evidence for
-each segment and checks all results before publication.
-
-```{r pointblank-contract}
-contract <- dl_contract(
-  "orders.contract", "1.0.0", "Analytics", "Order amounts", "One order",
-  columns = c(id = "integer", entity = "character", amount = "numeric"),
-  key = "id", producer = "Data producer", operator = "Platform operations",
-  column_metadata = list(amount = list(description = "Order amount", unit = "EUR")),
-  rules = list(dl_pointblank("plausibility", function(data) {
-    pointblank::create_agent(
-      tbl = data,
-      actions = pointblank::action_levels(warn_at = 0.005, stop_at = 0.05)
-    ) |>
-      pointblank::col_vals_gte("amount", 0, segments = pointblank::vars(entity))
-  }, policy = "agent"))
+```{r profile-and-contract}
+profile_data(orders)
+schema <- contract(
+  columns = list(id = integer(), amount = double()),
+  key = "id"
 )
-orders <- data.frame(
-  id = seq_len(200), entity = rep(c("Alpha", "Beta"), each = 100),
-  amount = rep(10, 200)
+validate(orders, schema)
+```
+
+By default declared fields cannot be missing, and additional fields are
+rejected. Use `required = character()` or `allow_extra = TRUE` when that is the
+promise you intend. Owners, descriptions, versions and freshness deadlines are
+optional. `max_age_hours = NULL` means that age is not monitored; set a deadline
+only when the consumer has one.
+
+Factor prototypes describe character labels. The original factor stays intact
+in R; a database need not preserve its levels or ordering. `integer64` is a
+distinct exact type. For caller-owned DuckDB connections, set
+`DBI::dbConnect(duckdb::duckdb(), bigint = "integer64")`; tidyweave configures
+its own lake connections this way. A list column needs a target supporting
+nested data.
+
+## Missing values and tolerances are explicit
+
+Formulas evaluate one test per row. An ordinary function can do the same:
+
+```{r row-check}
+rule <- quality_rule("nonnegative", function(data) data$amount >= 0)
+run_quality(rule, data.frame(amount = c(10, -1, NA)))
+```
+
+Both `FALSE` and `NA` fail. A scalar function result, such as
+`function(data) nrow(data) >= 10`, is one aggregate test. A scalar formula is
+repeated over the rows. Longer function results must have exactly one logical
+value per row. For custom units, return `quality_counts(failed, total)`.
+
+`max_failure = 0.02` permits two failures out of 100. If a rule breaches its
+tolerance, `severity = "error"` blocks publication; `severity = "warning"`
+permits it with warning evidence. Empty, skipped or errored checks never count
+as passing checks. Contract null checks remain independent of rule tolerances.
+
+## Check relationships without adopting a relational framework
+
+A reference rule answers whether each key occurs in another table. A named
+vector maps input columns to reference columns, including composite keys:
+
+```{r reference-check}
+customers <- data.frame(id = c("a", "b"), region = c("EU", "US"))
+deliveries <- data.frame(
+  customer_id = c("a", "b", "missing"),
+  region = c("EU", "US", "EU")
 )
-orders$amount[1:3] <- -1
-quality <- dl_validate(orders, contract, keep_agents = TRUE)
-dl_quality(quality) |>
+known_customer <- quality_reference(
+  customers,
+  by = c(customer_id = "id", region = "region")
+)
+run_quality(known_customer, deliveries)
+```
+
+This finds one unmatched row. Duplicate reference keys do not multiply the
+input. Missing keys fail by default; `na_matches = "na"` explicitly permits
+missing values to match. The reference can also be a zero-argument function or
+source adapter, resolved anew on each run.
+
+Checks between lazy tables on one database use an anti-join and aggregate
+counts there. Moving distinct reference keys between backends requires
+`copy = TRUE`. Dynamic reference rules cannot use cached lake publication,
+because the reference can change independently of the product input.
+
+## Add pointblank only when its capabilities help
+
+The next example runs only when the optional `pointblank` package is installed.
+Segments avoid letting a large healthy group hide failures in a small group.
+
+```{r pointblank-check, eval=requireNamespace("pointblank", quietly = TRUE)}
+checks <- pointblank_checks("amounts", function(data) {
+  pointblank::create_agent(
+    data,
+    actions = pointblank::action_levels(warn_at = 0.005, stop_at = 0.05)
+  ) |>
+    pointblank::col_vals_gte(
+      "amount", 0, segments = pointblank::vars(entity)
+    )
+}, policy = "agent")
+amounts <- data.frame(
+  entity = rep(c("Alpha", "Beta"), each = 100), amount = 10
+)
+amounts$amount[1:3] <- -1
+evidence <- validate(
+  amounts,
+  contract(columns = c(entity = "character", amount = "numeric"),
+    rules = list(checks)),
+  keep_agents = TRUE
+)
+quality(evidence) |>
   dplyr::filter(engine == "pointblank") |>
-  dplyr::select(rule, segment, status, n_failed, n_total, failure_rate)
+  dplyr::select(rule, segment, status, n_failed, n_total)
 ```
 
-`policy = "agent"` uses action levels as evaluated by pointblank, including its
-rounding of proportions to test units. In this example, three failures among
-100 units trigger a warning; five reach the blocking threshold. Absolute
-thresholds are also supported. The example uses pointblank 0.12.4 argument
-names. Newer pointblank versions may also expose `warn`, `error` and `critical`.
+Three failures in Alpha cause a warning; five reach the blocking threshold.
+`policy = "agent"` uses pointblank's native action levels and rounding.
+The default `policy = "rule"` instead uses the rule's `severity` and
+`max_failure`. These are alternative policies. Under the agent policy, each
+step needs a warning or blocking action level. Inactive or errored steps and
+empty plans block under either policy.
 
-`policy = "rule"` remains the compatible default: `max_failure` is the maximum
-permitted failure ratio, and `severity` determines whether a breach warns or
-blocks. The two policies are alternatives, not combined thresholds. Under the
-agent policy, each check needs at least one warning or blocking action level.
-Skipped checks, empty plans and evaluation errors block publication regardless
-of the chosen tolerance. If multiple blocking action columns are present, any
-triggered blocking action prevents publication.
+## Keep the last good release when a delivery fails
 
-When lakefold handles notifications, configure pointblank action levels without
-custom sending functions. The runner records diagnostics before dispatching a
-deduplicated event through the supplied transport.
+Storage is optional. Add a lake target when readers need durable, historical
+releases. This example requires DuckDB and uses only a temporary local folder.
 
-## Validate before Raw and check the full candidate again
-
-```{r ingestion}
-root <- tempfile("lakefold-quality-")
-config <- dl_config(
-  dl_catalog_duckdb(file.path(root, "lake.db")),
-  dl_storage_local(file.path(root, "data")),
-  landing = file.path(root, "landing"), backend = "duckdb"
-)
-lake <- dl_connect(config)
-first <- dl_ingest_data(lake, orders, contract, "orders", code_version = "v1",
-  input_contract = contract, business_date = as.Date("2026-08-31"))
-dl_status(first)
-orders$amount[4:5] <- -1
-blocked <- dl_ingest_data(lake, orders, contract, "orders", code_version = "v1",
-  input_contract = contract, business_date = as.Date("2026-08-31"),
-  stop_on_failure = FALSE)
-dl_status(blocked)
-dl_quality(lake, run_id = blocked$run_id) |>
-  dplyr::filter(engine == "pointblank") |>
-  dplyr::select(stage, rule, status, n_failed)
+```{r lake-gates, eval=requireNamespace("duckdb", quietly = TRUE)}
+root <- tempfile("tidyweave-quality-")
+lake <- open_lake(root)
+definition <- product("orders") |>
+  add_contract(schema) |>
+  add_quality(~ amount >= 0) |>
+  add_quality(quality_rule("unusually_large", ~ amount < 100,
+    severity = "warning")) |>
+  set_target(lake)
+first <- definition |> add_source(orders) |> run()
+unusual <- data.frame(id = 1:3, amount = c(10, 200, 30))
+warning_release <- definition |> add_source(unusual) |> run()
+bad <- data.frame(id = 1:3, amount = c(10, -1, 30))
+blocked <- definition |> add_source(bad) |> run(stop_on_failure = FALSE)
+status(blocked)
+read_release(lake, "orders")
 ```
 
-The rejected RDS snapshot remains in landing. This failed attempt writes no Raw
-table, and the previous release remains available. `dl_ingest_data()` also works
-after `readxl::read_excel()` or an API request made with existing R tools. It
-archives the received R object. Use `dl_source()` and
-`dl_ingest(..., input_contract = contract)` to archive an original file unchanged.
+The amount of 200 is still current: its warning permitted publication. The
+negative amount blocked the next delivery and did not replace that release.
+The original release is also available by `first$release_id`.
 
-In an explicit pipeline, `dl_step_precheck()` follows `dl_step_extract()` and
-precedes transformations. Its reader must return a data frame. The final
-`dl_step_validate()` remains mandatory and checks the complete combined state
-when replacing partitions. Input and product contracts may differ.
-
-## Inspect results and export reports
-
-```{r diagnostics}
-dl_releases(lake, "orders") |>
-  dplyr::select(asset, release_id, quality, business_date)
-published_quality <- dl_quality(lake, asset = "orders", release = first$release_id)
-dl_expect_quality(published_quality)
-html <- file.path(root, "quality.html")
-dl_quality_report(dl_quality(blocked), html)
-dl_quality_report(published_quality, file.path(root, "quality.json"), format = "json")
-dl_pointblank_report(quality, "plausibility", file.path(root, "pointblank.html"))
-file.exists(c(html, file.path(root, "pointblank.html")))
+```{r reports, eval=requireNamespace("duckdb", quietly = TRUE)}
+quality_report(quality(blocked), file.path(root, "blocked.html"))
+quality(lake, asset = "orders", release = warning_release$release_id) |>
+  dplyr::select(rule, status, n_failed)
 ```
 
-`dl_quality(lake, asset = "orders")` shows the latest attempt. Supply `release`
-to retrieve evidence for a particular published state. Cache-hit diagnostics
-resolve the original checks. `dl_status()` and `dl_quality()` also accept dbt
-results; process failures remain visible even when individual nodes succeeded.
+HTML and JSON reports contain check metadata, without source rows. For a native
+pointblank report, call `pointblank_report(evidence, "amounts", path)` while
+the result with `keep_agents = TRUE` is still in memory. Agents are not stored
+in the registry.
 
-The compact HTML/JSON report contains check metadata and segment labels, without
-full source rows. The native pointblank report needs the in-memory result from
-`keep_agents = TRUE`; agents are not stored in the registry. Failed-row extracts
-and table samples are disabled. `dl_expect_quality()` applies the runner's gate
-decision inside testthat.
+## Put business decisions into tests
 
-## Review a contract draft explicitly
+`expect_quality()` belongs in your package's testthat tests. It applies the
+same fail-closed gate used for publication:
 
-```{r contract-draft}
-draft <- dl_contract_from(orders, "orders.next", "Analytics", "Order amounts",
-  "One order", key = "id", required = c("id", "entity", "amount"))
-draft
-reviewed <- dl_contract_confirm(draft)
-dl_contract_diff(reviewed, contract) |>
-  dplyr::select(field, breaking)
+```{r quality-test, eval=FALSE}
+testthat::test_that("the example delivery meets its contract", {
+  expect_quality(validate(example_delivery, schema))
+})
 ```
 
-The constructor reads column types, using a zero-row prototype for lazy tables.
-It does not infer business keys, units or rules from samples. A draft can become
-a gate only after `dl_contract_confirm()`. An `NA` in the difference report
-indicates a change requiring semantic review, such as a changed R rule or grain.
-Confirmation is an explicit review step, not an access-controlled approval system.
+For failure diagnosis, historical reads and cache behavior, continue with
+[Quality and history](quality-history.html). dbt model tests belong in the dbt
+project; see [dbt workflows](dbt-workflows.html).
 
-## Detect missing deliveries independently of imports
-
-```{r monitoring}
-dl_check_delivery(lake, "orders", contract, business_date = as.Date("2026-09-30"),
-  due_at = as.POSIXct("2026-10-01 09:00:00", tz = "UTC"),
-  at = as.POSIXct("2026-10-01 10:00:00", tz = "UTC"))
-dl_freshness(lake) |>
-  dplyr::select(asset, published_quality, latest_attempt, delivery_status)
-dl_cleanup(lake, older_than_days = 30) # Preview only; no tables are removed
-```
-
-Invoke monitoring from the existing scheduler. `notify` can connect an existing
-transport, so the package requires no email service. Repeated identical incidents
-are suppressed after successful notification; transport failures remain
-retryable. The catalog distinguishes publication quality, the latest attempt
-and delivery status. The expected business date is compared with the latest
-published release.
-
-`dl_cleanup(..., dry_run = FALSE)` removes only expired unpublished Raw/candidate
-tables from completed failed attempts. Published releases, reports, landing
-files and quality evidence are retained. DuckLake snapshots and physical files
-are not cleaned up by this operation.
-
-## Publish dbt results for reproducible reporting
-
-This section needs a configured dbt project and is not executed here. Integration
-tests exercise build, test, snapshot publication and the resulting query.
-
-```{r dbt-release, eval=FALSE}
-dl_disconnect(lake) # Close the local catalog before the external dbt process.
-result <- dl_dbt_build(project)
-lake <- dl_connect(config)
-release <- dl_dbt_publish(lake, result, "model.shop.customer_revenue",
-  revenue_contract, "shop.revenue", code_version = "v1")
-dl_tbl(lake, "shop.revenue", release$release_id)
-```
-
-The package copies the currently visible relation and validates that exact copy.
-An earlier invocation ID alone cannot prove unchanged table contents, so this
-operation never approves a cached release solely from the dbt ID. Operators
-must exclude competing writers between build and snapshot. One call publishes
-one relation, not an atomic bundle of all dbt models.
-
-```{r cleanup, include=FALSE}
-dl_disconnect(lake)
+```{r close-quality-lake, include=FALSE, eval=requireNamespace("duckdb", quietly = TRUE)}
+stopifnot(blocked$status == "blocked",
+  identical(read_release(lake, "orders")$amount, unusual$amount))
+close_lake(lake)
 unlink(root, recursive = TRUE)
 ```

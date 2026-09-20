@@ -19,13 +19,13 @@
 #' @return Metric specification. Reports execute it directly without an LLM.
 #' @export
 #' @examples
-#' metric <- dl_metric(
+#' metric <- metric(
 #'   "orders.total", "orders", expr = sum(amount), time_behavior = "flow",
 #'   unit = "EUR", owner = "Analytics", description = "Total order value",
 #'   approved = TRUE, code_version = "v1"
 #' )
 #' metric
-dl_metric <- function(
+metric <- function(
   id,
   product,
   expr = NULL,
@@ -97,7 +97,7 @@ dl_metric <- function(
       code_version = code_version,
       input_columns = input_columns
     ),
-    class = "dl_metric"
+    class = "tw_metric"
   )
 }
 
@@ -112,36 +112,37 @@ dl_metric <- function(
 #' @param record Record definition and lineage. Defaults to `TRUE` on a writable
 #'   lake and `FALSE` on a read-only lake. Unrecorded results still carry their
 #'   complete metric definition and pinned release in the manifest.
-#' @return Tibble with a dl_manifest attribute for report reproducibility.
+#' @return Tibble with a tw_manifest attribute for report reproducibility.
 #'   Grouped results are ordered by the requested dimensions using C collation
 #'   so database row order does not change report identity.
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
-#' root <- tempfile("lakefold-example-")
-#' config <- dl_config(
-#'   dl_catalog_duckdb(file.path(root, "lake.db")),
-#'   dl_storage_local(file.path(root, "data")),
+#' root <- tempfile("tidyweave-example-")
+#' config <- lake_config(
+#'   registry_duckdb(file.path(root, "lake.db")),
+#'   storage_local(file.path(root, "data")),
 #'   landing = file.path(root, "landing"), backend = "duckdb"
 #' )
-#' lake <- dl_connect(config)
+#' lake <- connect_lake(config)
 #' path <- file.path(root, "orders.csv")
 #' utils::write.csv(data.frame(order_id = 1:2, amount = c(25, 75)), path,
 #'   row.names = FALSE)
-#' source <- dl_source("orders.file", path, reader = utils::read.csv)
-#' contract <- dl_contract(
+#' source <- source_file("orders.file", path, reader = utils::read.csv)
+#' contract <- contract(
 #'   "orders", "1.0.0", "Analytics", "Order amounts", "One order",
 #'   c(order_id = "integer", amount = "numeric"), key = "order_id"
 #' )
-#' release <- dl_ingest(lake, source, contract, "orders", code_version = "v1")
-#' metric <- dl_metric(
+#' release <- product("orders", contract = contract, code_version = "v1") |>
+#'   add_source(source) |> publish(to = lake)
+#' metric <- metric(
 #'   "orders.total", "orders", expr = sum(amount), time_behavior = "flow",
 #'   unit = "EUR", owner = "Analytics", description = "Total order value",
 #'   approved = TRUE, code_version = "v1"
 #' )
-#' dl_measure(lake, metric)
-#' dl_disconnect(lake)
+#' measure(lake, metric)
+#' disconnect_lake(lake)
 #' unlink(root, recursive = TRUE)
-dl_measure <- function(
+measure <- function(
   lake,
   metric,
   by = character(),
@@ -156,8 +157,8 @@ dl_measure <- function(
   if (record) {
     assert_writable(lake)
   }
-  if (!inherits(metric, "dl_metric")) {
-    abort("metric must be a dl_metric.")
+  if (!inherits(metric, "tw_metric")) {
+    abort("metric must be a metric.")
   }
   if (!metric$approved) {
     abort("Metric definition is not approved.")
@@ -172,7 +173,7 @@ dl_measure <- function(
     abort("Filters must be named permitted dimensions.")
   }
   if (record) {
-    dl_register(lake, metric)
+    register(lake, metric)
   } else {
     old <- query(
       lake,
@@ -190,7 +191,7 @@ dl_measure <- function(
     }
   }
   ref <- resolve_release(lake, metric$product, release)
-  data <- dl_tbl(lake, metric$product, ref$release_id[[1]])
+  data <- tbl(lake, metric$product, ref$release_id[[1]])
   if (!all(c(by, names(filters), metric$time_column) %in% colnames(data))) {
     abort("Metric columns missing from input product.")
   }
@@ -252,7 +253,7 @@ dl_measure <- function(
     ))
   }
   if (!nrow(result)) {
-    abort("Metric returned an empty result.", "dl_metric_empty")
+    abort("Metric returned an empty result.", "tw_metric_empty")
   }
   if (!all(by %in% colnames(result))) {
     abort("Custom metric result must include all requested grouping columns.")
@@ -294,7 +295,7 @@ dl_measure <- function(
     calculated_at = now(),
     result_hash = fingerprint(result)
   )
-  attr(result, "dl_manifest") <- manifest
+  attr(result, "tw_manifest") <- manifest
   if (
     record &&
       !query(
@@ -326,39 +327,40 @@ dl_measure <- function(
 #' Freeze metric results and input versions for a report
 #' @param lake Connected lake.
 #' @param id Immutable report release id.
-#' @param results Named list of dl_measure results.
+#' @param results Named list of measure results.
 #' @param code_version Reporting code version.
 #' @param params Report parameters.
 #' @return Report manifest including result values as data frames, both on
 #'   initial save and an identical retry. Retries preserve original timestamps.
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
-#' root <- tempfile("lakefold-example-")
-#' config <- dl_config(
-#'   dl_catalog_duckdb(file.path(root, "lake.db")),
-#'   dl_storage_local(file.path(root, "data")),
+#' root <- tempfile("tidyweave-example-")
+#' config <- lake_config(
+#'   registry_duckdb(file.path(root, "lake.db")),
+#'   storage_local(file.path(root, "data")),
 #'   landing = file.path(root, "landing"), backend = "duckdb"
 #' )
-#' lake <- dl_connect(config)
+#' lake <- connect_lake(config)
 #' path <- file.path(root, "orders.csv")
 #' utils::write.csv(data.frame(order_id = 1:2, amount = c(25, 75)), path,
 #'   row.names = FALSE)
-#' source <- dl_source("orders.file", path, reader = utils::read.csv)
-#' contract <- dl_contract(
+#' source <- source_file("orders.file", path, reader = utils::read.csv)
+#' contract <- contract(
 #'   "orders", "1.0.0", "Analytics", "Order amounts", "One order",
 #'   c(order_id = "integer", amount = "numeric"), key = "order_id"
 #' )
-#' release <- dl_ingest(lake, source, contract, "orders", code_version = "v1")
-#' metric <- dl_metric(
+#' release <- product("orders", contract = contract, code_version = "v1") |>
+#'   add_source(source) |> publish(to = lake)
+#' metric <- metric(
 #'   "orders.total", "orders", expr = sum(amount), time_behavior = "flow",
 #'   unit = "EUR", owner = "Analytics", description = "Total order value",
 #'   approved = TRUE, code_version = "v1"
 #' )
-#' values <- dl_measure(lake, metric)
-#' dl_report_release(lake, "report.v1", list(total = values), code_version = "v1")
-#' dl_disconnect(lake)
+#' values <- measure(lake, metric)
+#' report_release(lake, "report.v1", list(total = values), code_version = "v1")
+#' disconnect_lake(lake)
 #' unlink(root, recursive = TRUE)
-dl_report_release <- function(
+report_release <- function(
   lake,
   id,
   results,
@@ -379,16 +381,16 @@ dl_report_release <- function(
     abort("results must be a named list.")
   }
   measures <- lapply(results, function(x) {
-    m <- attr(x, "dl_manifest")
+    m <- attr(x, "tw_manifest")
     if (is.null(m)) {
-      abort("Every result must come from dl_measure().")
+      abort("Every result must come from measure().")
     }
     if (!identical(m$result_hash, fingerprint(as.data.frame(x)))) {
       # Tibbles and data.frames have the same canonical JSON representation.
       abort("Metric result changed after calculation.")
     }
     values <- as.data.frame(x)
-    attr(values, "dl_manifest") <- NULL
+    attr(values, "tw_manifest") <- NULL
     list(manifest = m, values = values)
   })
   manifest <- list(
@@ -509,9 +511,9 @@ report_identity <- function(json) {
 #' @returns A manifest list, or a named list of tibbles.
 #' @export
 #' @examples
-#' # After saving report.v1 with dl_report_release():
-#' # dl_report_read(lake, "report.v1", values_only = TRUE)
-dl_report_read <- function(lake, id, values_only = FALSE) {
+#' # After saving report.v1 with report_release():
+#' # report_read(lake, "report.v1", values_only = TRUE)
+report_read <- function(lake, id, values_only = FALSE) {
   assert_lake(lake)
   scalar(id, "id")
   flag(values_only, "values_only")
@@ -521,7 +523,7 @@ dl_report_read <- function(lake, id, values_only = FALSE) {
     list(id)
   )
   if (nrow(row) != 1L) {
-    abort(paste("Report not found:", id), "dl_no_report")
+    abort(paste("Report not found:", id), "tw_no_report")
   }
   manifest <- jdecode(row$manifest[[1]])
   if (!values_only) {
