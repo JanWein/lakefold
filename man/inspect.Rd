@@ -3,11 +3,14 @@
 \name{inspect}
 \alias{inspect}
 \alias{explain}
+\alias{explain.tw_product}
 \title{Inspect a product or run without executing it}
 \usage{
 inspect(x, ...)
 
-explain(x)
+explain(x, ...)
+
+\method{explain}{tw_product}(x, ...)
 }
 \arguments{
 \item{x}{Product, run or component.}

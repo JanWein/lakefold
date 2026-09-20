@@ -11,7 +11,8 @@ lake_config(
   landing = "landing",
   backend = c("ducklake", "duckdb"),
   install_extensions = TRUE,
-  read_only = FALSE
+  read_only = FALSE,
+  path = NULL
 )
 }
 \arguments{
@@ -30,6 +31,12 @@ S3).}
 
 \item{read_only}{Attach existing storage read-only and skip schema creation
 and migration. A lake created by a newer package may require an upgrade.}
+
+\item{path}{Optional local lake folder. Derives \code{metadata.duckdb}, \code{data}
+and \code{landing} within that folder. Supply either \code{path} or explicit
+\code{catalog}, \code{storage} and \code{landing}, not both. An explicit backend must
+agree with a folder's saved backend. Default layers are unchanged;
+select \code{layers = c("raw", "staging", "core", "marts")} when needed.}
 }
 \value{
 A connection-free \code{lake_config} specification.
@@ -37,9 +44,16 @@ A connection-free \code{lake_config} specification.
 \description{
 This constructor validates configuration and resolves paths, but does not
 create directories, install extensions, connect to databases or read secrets.
+With \code{path}, it may read an existing \code{tidyweave.json} to preserve the saved
+backend. It never creates or writes files. A new shorthand lake defaults to
+DuckDB; other calls retain the usual DuckLake default. The local layout and
+backend marker are shared with \code{\link[=open_lake]{open_lake()}}. Unknown non-empty folders are
+refused rather than interpreted as a new lake.
 Pass its result to \code{\link[=connect_lake]{connect_lake()}} or \code{\link[=target_lake]{target_lake()}} when ready to execute.
 }
 \examples{
 config <- lake_config(backend = "duckdb")
 print(config)
+local <- lake_config(path = file.path(tempdir(), "my-data-lake"))
+print(local)
 }

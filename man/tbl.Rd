@@ -2,12 +2,17 @@
 % Please edit documentation in R/registry.R
 \name{tbl}
 \alias{tbl}
+\alias{tbl.tw_lake}
 \title{Query a published immutable data release}
 \usage{
-tbl(lake, asset, release = NULL)
+tbl(src, ...)
+
+\method{tbl}{tw_lake}(src, asset, release = NULL, ...)
 }
 \arguments{
-\item{lake}{Connected lake.}
+\item{src}{Connected lake.}
+
+\item{...}{Reserved for extensions.}
 
 \item{asset}{Asset id.}
 

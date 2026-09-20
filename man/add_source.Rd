@@ -15,7 +15,7 @@ add_transform(x, transform, name = NULL)
 
 add_contract(x, contract)
 
-add_quality(x, quality, name = NULL)
+add_quality(x, quality, name = NULL, engine = NULL)
 
 set_target(x, target)
 
@@ -39,6 +39,9 @@ add_catalog(x, catalog, name = NULL)
 \item{quality}{One-sided row predicate, function, rule, or list of rules.
 Formula \code{NA} results count as failures. Functions return scalar logicals
 or \code{\link[=quality_counts]{quality_counts()}}. Names in rule lists become rule names.}
+
+\item{engine}{Optional formula quality engine, \code{"native"} or
+\code{"pointblank"}. Omit to preserve engines on existing rule specifications.}
 
 \item{target}{Lake folder path, connected lake, configuration or target
 adapter. Use \code{\link[=target_lake]{target_lake()}} for partition or layer options.}

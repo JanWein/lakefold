@@ -61,7 +61,8 @@ Retry with \code{publish_metadata(catalog, result)} without rebuilding models.}
 A \code{tw_dbt_result} list with \code{status} (integer exit code), \code{success}
 (logical), \code{command}, \code{results} (node tibble), parsed \code{manifest},
 \code{artifacts_dir}, \code{stdout}, \code{stderr}, \code{artifact_error}, \code{invocation_id},
-\code{artifact_hashes} and optional \code{catalog_delivery}. Warnings reported
+\code{artifact_hashes}, original \code{project}, resolved \code{source_bindings},
+\code{source_catalog} and optional \code{catalog_delivery}. Warnings reported
 by dbt are retained and do not by themselves count as failure.
 }
 \description{

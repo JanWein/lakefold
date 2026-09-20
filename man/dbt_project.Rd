@@ -8,7 +8,9 @@ dbt_project(
   path = "dbt",
   profiles_dir = NULL,
   target = NULL,
-  executable = "dbt"
+  executable = "dbt",
+  lake = NULL,
+  sources = NULL
 )
 }
 \arguments{
@@ -22,6 +24,16 @@ The directory is checked when executing, not when constructing the object.}
 
 \item{executable}{Character scalar giving a dbt executable name or path.
 It is passed to \code{\link[processx:run]{processx::run()}} without a shell.}
+
+\item{lake}{Optional connection-free \code{\link[=lake_config]{lake_config()}} for local DuckDB or
+DuckLake. At execution, tidyweave writes a private profile for this catalog.
+Omit \code{profiles_dir} when using \code{lake}. SQL and handwritten project files
+stay unchanged. Close any caller-owned connections before running dbt.}
+
+\item{sources}{Optional named list of successful published lake results.
+They become the \code{inputs} source group. Use \code{\link[=dbt_sources]{dbt_sources()}} to add groups
+from other physical schemas. Definitions retain exact release IDs;
+registry resolution and YAML generation happen only at execution.}
 }
 \value{
 A serializable \code{dbt_project} specification. It contains no

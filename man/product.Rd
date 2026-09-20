@@ -6,6 +6,7 @@
 \usage{
 product(
   id,
+  data = NULL,
   contract = NULL,
   version = "1.0.0",
   owner = NULL,
@@ -15,6 +16,9 @@ product(
 }
 \arguments{
 \item{id}{Product identity, unique within a dependency graph.}
+
+\item{data}{Optional table, path, source adapter, product, or successful run.
+Successful lake runs are pinned to their exact published release.}
 
 \item{contract}{Optional contract, named type vector or prototype list.}
 

@@ -5,18 +5,18 @@
 \title{Calculate a metric on a pinned published release}
 \usage{
 measure(
-  lake,
+  x,
   metric,
   by = character(),
   at = NULL,
   release = NULL,
   filters = list(),
   params = list(),
-  record = !isTRUE(lake$config$read_only)
+  record = NULL
 )
 }
 \arguments{
-\item{lake}{Connected lake.}
+\item{x}{Connected lake or successful published \code{tw_run_result}.}
 
 \item{metric}{Metric definition.}
 
@@ -24,14 +24,16 @@ measure(
 
 \item{at}{Business date, or a vector for flow metrics.}
 
-\item{release}{Optional explicit product release id.}
+\item{release}{Optional explicit product release id for a connected lake.
+For a publication result it must be omitted or match that exact release.}
 
 \item{filters}{Named list of exact-match filters on permitted dimensions.}
 
 \item{params}{Parameters passed to custom compute functions.}
 
 \item{record}{Record definition and lineage. Defaults to \code{TRUE} on a writable
-lake and \code{FALSE} on a read-only lake. Unrecorded results still carry their
+lake and \code{FALSE} on a read-only lake or publication result. Use a connected
+writable lake for \code{record = TRUE}. Unrecorded results still carry their
 complete metric definition and pinned release in the manifest.}
 }
 \value{
@@ -40,7 +42,12 @@ Grouped results are ordered by the requested dimensions using C collation
 so database row order does not change report identity.
 }
 \description{
-Calculate a metric on a pinned published release
+A successful publication result supplies its exact asset and release. Later
+publications do not change that input. Result-based measurement does not
+register definitions or write lineage; its manifest still contains all
+metric and input evidence needed by \code{\link[=report_release]{report_release()}}. A live caller-owned
+lake is borrowed when available. Otherwise the saved configuration opens an
+owned read-only connection that closes before returning, including on errors.
 }
 \examples{
 \dontshow{if (requireNamespace("duckdb", quietly = TRUE)) withAutoprint(\{ # examplesIf}
@@ -66,7 +73,7 @@ metric <- metric(
   unit = "EUR", owner = "Analytics", description = "Total order value",
   approved = TRUE, code_version = "v1"
 )
-measure(lake, metric)
+release |> measure(metric)
 disconnect_lake(lake)
 unlink(root, recursive = TRUE)
 \dontshow{\}) # examplesIf}
