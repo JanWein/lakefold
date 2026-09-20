@@ -1,56 +1,45 @@
-# GitHub publication and CI
+# GitHub publication, checks and releases
 
-Project: [JanWein/lakefold](https://github.com/JanWein/lakefold).
-Maintainer metadata uses the GitHub no-reply address. Use repository issues for
-bug reports and improvement proposals.
+Project: [JanWein/tidyweave](https://github.com/JanWein/tidyweave).
+Documentation: [tidyweave](https://janwein.github.io/tidyweave/).
 
-## Development
+The package is in active development. Public API compatibility starts with the
+first stable release candidate; development changes may break earlier code.
+Publishing a package version is distinct from `publish()`, which writes a checked
+data product to its configured destination.
 
-```sh
-git clone https://github.com/JanWein/lakefold.git
-cd lakefold
-```
+## Development and verification
 
-In R, run `remotes::install_local(".", dependencies = TRUE)`. Contribute through
-a branch and pull request; see [CONTRIBUTING.md](../CONTRIBUTING.md).
-Keep documentation, examples, user-facing messages and repository materials in
-English. The README is the canonical overview.
+Use a branch and pull request as described in [CONTRIBUTING.md](../CONTRIBUTING.md).
+Keep package documentation, examples and user messages in English. Regenerate
+function help from roxygen2 comments, and keep the vignettes executable.
 
-## Automated checks
+The R-CMD-check workflow covers DuckDB and DuckLake on Linux, portable R/OS
+configurations, and a core installation without optional infrastructure packages.
+Full check jobs install Suggests, so installed SQLite, Arrow, pins, httr2 and
+targets integrations participate in their tests. The Linux backend jobs install
+a pinned dbt engine for real CLI integration tests. Tests of remote HTTP adapters
+use local fixtures; deployment credentials and production services are not needed.
 
-`.github/workflows/R-CMD-check.yaml` checks both backends on Ubuntu with R 4.5.1
-for pushes to `main` and pull requests. Actions installs R, system dependencies
-and optional test packages. `rcmdcheck` fails the job on errors and warnings.
-Logs are retained as Actions artifacts. DuckLake needs access to its extension
-repository.
+R packages and extensions are downloaded during setup; the environment is not
+fully frozen. Consult the Actions results for the actual commit and
+[VALIDATION.md](VALIDATION.md) for the recorded verification scope. A locally
+successful test is not evidence that a later GitHub job or deployment passed.
 
-R packages and extensions are downloaded at runtime; the build environment is
-not fully frozen. The Actions tab shows the status for a specific commit.
-Historical local results are recorded in [VALIDATION.md](VALIDATION.md).
+## Documentation site
 
-## Build the documentation
+The Documentation workflow builds pkgdown into `site/` and deploys its artifact
+to GitHub Pages. The installed package also includes function help and vignettes.
+Locally, run `pkgdown::build_site()` after installing the documentation dependencies.
+Review article links, examples and the reference index before deployment.
 
-The `Documentation` workflow builds a pkgdown website and uploads `site/` as a
-Pages artifact. Its deployment job publishes the result to the
-[documentation site](https://janwein.github.io/lakefold/). The README and guides
-remain available in the repository, and function help and vignettes also ship
-with the installed package.
+## Release preparation
 
-Locally, install `pkgdown`, then run `pkgdown::build_site()`. Regenerate function
-help from roxygen2 comments when it changes. Check article titles, examples,
-internal links and the grouped reference index before publication.
+Before a release candidate, update the version and NEWS, run the complete test
+suite and `R CMD check`, verify examples and documentation, and record remaining
+operating limits. Tag the reviewed commit with its actual version only after
+required checks pass. Do not infer stability from a development version number.
 
-## Release
-
-Before releasing, update the version and `NEWS.md`, then wait for the checks to
-pass. Create a tag for the version being released, for example:
-
-```sh
-git tag v0.4.0
-git push origin v0.4.0
-```
-
-Describe operating boundaries in the GitHub release. The current package
-requires one coordinated writer. Production S3/PostgreSQL environments require
-their own integration tests; package checks do not establish those environments'
-operational behavior.
+Remote database, object-storage and catalog deployments require verification in
+their own environments. A public GitHub repository contains package source and
+synthetic examples, not production data, credentials or operational evidence.

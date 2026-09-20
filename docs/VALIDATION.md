@@ -1,296 +1,68 @@
-# Validation record for lakefold 0.7.0
+# Validation record for tidyweave 0.8.0
 
-## Architecture refactoring verification
+Checked on 20 September 2026 with R 4.3.3 on Ubuntu 24.04. All data and HTTP
+service fixtures were synthetic. This is a development version, not a stable
+release candidate.
 
-Verified locally on R 4.3.3 / Ubuntu 24.04 with synthetic data:
-
-| Check | Result |
-|---|---|
-| Full `R CMD check`, including examples and vignette rebuilds | 0 errors, 0 warnings, 0 notes |
-| Complete suite with DuckDB as the default backend | 548 passed expectations, no failures, warnings or skips |
-| Complete suite with DuckLake as the default backend | 117 tests, 548 passed expectations, no failures, warnings or skips |
-| Isolated installation with hard dependencies and no DuckDB | Native workflow, formula quality, contracts, metadata and missing-target preflight passed |
-| New and existing end-to-end examples | Composed product, optional DBI/SQL/pointblank workflow, custom RDS target and monthly reporting script executed successfully |
-| Documentation | 11 executable vignettes; pkgdown reference check and site build completed |
-| Diagram | Rendered and visually checked; explanatory text accompanies the figure |
-
-The suite retains the earlier integrity tests and adds normalization, no-IO
-preflight, component substitution, connection ownership, formula missing values,
-malformed adapter evidence, catalog warnings, execution warnings, original-file
-preservation, schema baselines, partition retention, explicit version guards and
-ordinary R quality callbacks across native and lake execution.
-
-The external dbt test ran with dbt-core 1.12.5, dbt-duckdb 1.10.1 and DuckDB
-1.5.5. Optional pointblank checks used pointblank 0.12.4. The pkgdown build skips
-the two examples that explicitly require a user-supplied dbt project path;
-that is separate from the real dbt integration test, which ran successfully.
-
-GitHub Actions checks DuckDB and DuckLake on Linux, R 4.2.3 compatibility,
-Windows, macOS and a separate installation without optional integrations.
-See the repository's Actions history for the result on each published commit.
-
-These checks do not establish production S3/PostgreSQL connectivity, distributed
-locking, custom-adapter atomicity or workloads larger than R memory. Those
-boundaries are documented in the architecture and extension guides.
-
-## Earlier validation record (0.6.0)
-
-# Validation record for lakefold 0.6.0
-
-Check date: 19 September 2026. Local environment: Ubuntu 24.04 and R 4.3.3.
-All inputs were synthetic. Results below refer to the 0.6.0 implementation.
+## Executed checks
 
 | Check | Result |
 |---|---|
-| Full `R CMD check --no-manual` | 0 errors, 0 warnings, 0 notes |
-| DuckDB package-check expectations | 450 passed; 0 failures, warnings or skips |
-| Separate complete DuckLake suite | 95 test cases; 450 expectations passed; 0 failures, warnings or skips |
-| External integrations | Actual dbt execution, pointblank gates and dm checks exercised |
-| Documentation | Nine executable vignettes built and rebuilt; package examples checked |
-| Public reference | 70 exported functions and 59 help topics |
-| Monthly example script | Executed; original 350, correction 370 and September 390 verified |
-| Synthetic 100,000-row workload | Initial write, partition correction and complete difference counts passed on both backends |
+| Full source build and `R CMD check --no-manual` | 0 errors, 0 warnings, 0 notes |
+| Installed package test suite, DuckDB default | 933 passed expectations; no failures, warnings or skips |
+| Complete source suite, DuckLake default | 176 tests; 930 passed expectations, no failures or warnings; one installed-worker test skipped here and passed in the package check |
+| Installation with hard dependencies only | Native workflow, contracts, quality, metadata and missing optional-backend preflight passed |
+| Documentation | All 12 vignettes built, extracted R scripts executed and outputs rebuilt in the package check |
+| Minimal installed workflow | Ordinary table to checked product to tibble passed |
+| Advanced installed workflow | SQLite to Parquet to versioned pins, quality gates, metadata callback and four durable run records passed |
+| Extension and history walkthroughs | Custom source/target/quality, named dependencies, corrections and pinned reports executed successfully |
+| Optional execution engines | Actual dbt builds/tests, pointblank, Arrow, targets and a separate installed-package R worker exercised |
+| Documentation website | Fresh pkgdown build: 81 help topics, 12 articles; no missing local links or anchors; search index and sitemap verified |
+| Diagrams | SVGs rasterized and visually inspected |
 
-The 23 additional test cases cover full-formula identities, old metric protection,
-missing-value checks with pronouns and explicit inputs, random-seed isolation,
-read-only storage enforcement, unchanged registry reads, report retries and
-historical values, partition-aware delivery monitoring, automatic numeric schema
-migration, quoted column names, bounded comparisons, callback snapshots, local
-exceptions, explicit recovery, product cache bypass and saved configurations.
+## Integrity and interchangeability
 
-The schema migration test starts from schema 2, rejects read-only migration,
-retains release data and definitions, and verifies idempotent migration to 3.
-Known live writers block recovery; unknown owners need external confirmation.
-Grouped metric results use deterministic C collation before result hashing,
-including custom computations that return equivalent groups in another order.
-Linux process identity uses host, boot and process start. Other hosts take the
-conservative unknown-owner path.
+Regression tests cover additive named sources, duplicate-name errors, cycles,
+shared upstream execution, backend substitution, lazy DBI and Arrow boundaries,
+connection ownership, and preflight before data acquisition. Contracts cover
+factors, list columns, missing logical results, explicit freshness and exact
+integers above 2^53.
 
-## Local timing example
+Database targets validate the actual stored candidate inside the transaction.
+Tests reproduce cast-induced duplicate keys, confirm append and replacement
+rollback, and reject unsafe DuckDB BIGINT read modes. Lake checks retain complete
+candidate validation, original archives, pinned releases and quality evidence.
+Acquisition/combination failures create durable failed runs. Runtime input IDs
+remain separate from immutable product definitions, including targets execution.
 
-One run of the bundled `inst/examples/benchmark.R` with 100,000 rows measured:
+HTTP fixtures exercise API pagination and retry, OpenMetadata requests and
+OpenLineage events. Payloads were also checked against official JSON schemas.
+Catalog outages retain pending delivery records; retries do not rerun successful
+data transformations. Evidence excludes row values and credential-bearing URLs.
 
-| Backend | Initial write | Partition correction | Keyed comparison |
-|---|---:|---:|---:|
-| DuckDB | 0.236 s | 0.236 s | 0.227 s |
-| DuckLake | 0.665 s | 0.602 s | 0.545 s |
+## Tested components
 
-These are single local observations, not throughput guarantees or a sustained
-load benchmark. Each correction still materializes a full candidate, and history
-retains complete release tables. Folder size before connection close is reported
-by the script but is not a durable-storage measurement.
+DuckDB 1.5.5, Arrow 25.0.1, pointblank 0.12.4, pins 1.4.2, targets 1.12.0,
+httr2 1.3.0, RSQLite 3.53.3 and webfakes 1.5.0 were available locally.
+External dbt tests used dbt-core 1.12.5 and dbt-duckdb 1.10.1 with telemetry
+disabled. Project templates include optional renv and Posit Connect entry points;
+a generated template is not evidence of a Connect deployment.
 
-## CI scope and remaining verification
+## Verification boundaries
 
-The workflow retains Linux R 4.5.1 with real dbt on both backends and adds
-DuckDB compatibility jobs for R 4.2.3, Windows and macOS. The added jobs do not
-install the external dbt CLI or opt into DuckLake. See
-[GitHub Actions](https://github.com/JanWein/lakefold/actions) for results tied to
-the actual commit; a configured job is not evidence of success by itself.
+Local fixtures do not establish production connectivity to PostgreSQL, HANA,
+S3, OpenMetadata or an OpenLineage service. They do not prove distributed locking,
+transactional DDL on every DBI driver, multi-destination atomicity, continuous
+streaming or workloads larger than memory. Lazy transformations depend on backend
+support. Lake publication deliberately materializes a complete candidate.
 
-Production PostgreSQL/S3, remote restore, concurrent writers, incremental storage
-and atomic multi-table publication remain outside this release's verified scope.
-A targets adapter and automatic retention are not implemented. These boundaries
-are also documented in the feature overview and operating guide.
+Data publication, local evidence and remote catalog delivery are separate
+operations. Catalog delivery is at least once. Local lake and evidence writes
+require one coordinated writer. Custom adapters retain responsibility for their
+own persistence guarantees.
 
-# Historical record: lakefold 0.5.0
-
-Check date: 19 September 2026. Local environment: Ubuntu 24.04 and R 4.3.3.
-
-| Check | Result |
-|---|---|
-| Full `R CMD check --no-manual` | 0 errors, 0 warnings, 0 notes |
-| Expectations in the local package check | 329 passed, 0 failed, 0 warnings, 0 skipped |
-| Separate full DuckLake suite | 329 expectations passed, including actual dbt execution |
-| Examples and vignettes | All package examples checked; eight vignettes built and executable chunks run |
-| pkgdown | Reference index checked and complete site built |
-| API and reference | 66 exported functions, 55 help topics, complete pkgdown index |
-| Tests | 72 test cases, including 16 new simple-workflow cases |
-
-New coverage checks the minimal open/write/read workflow, automatic naming,
-reopening on DuckDB and DuckLake, immutable CSV/TSV/RDS originals, nullable
-columns, schema drift, empty writes, failed first deliveries, historical reads,
-writing an older payload as current data, explicit contract preservation and
-changed callback closures. Backend mismatch and ambiguous-name errors are
-snapshot-tested. Additional regressions retain explicit contracts after a
-blocked first run or upgrade and leave all nonempty unmarked folders untouched. Existing job retry semantics remain covered unchanged.
-
-The main package check includes the optional dbt integration and the new
-DuckLake entry-point test. GitHub checks run on both backend configurations;
-see [GitHub Actions](https://github.com/JanWein/lakefold/actions) for evidence tied
-to published commits. The limits below still apply to version 0.5.0.
-
-## Documentation walkthrough verification
-
-The monthly reporting walkthrough executes the same synthetic story from the
-first delivery through corrections, a blocked duplicate, partition replacement,
-a prepared product, a stock metric and a report record. Assertions check the
-original August total of 350, the corrected total of 370, September's separate
-390, the retained historical release and the blocked-delivery behavior.
-The optional pointblank example is executed when pointblank is installed.
-
-The bundled `inst/examples/monthly_reporting.R` runs the core sequence without
-knitr or optional integrations and checks the same outcomes. The Excel block
-is explicitly a template requiring a user's workbook and readxl; no external
-workbook is assumed to have been tested. The explanatory diagram is shipped
-with the vignette and the website. This update changes documentation and
-examples, with no runtime API changes.
-
-## Historical record: 0.4.0
-
-Check date: 19 September 2026. Local environment: Ubuntu 24.04 and R 4.3.3.
-
-| Check | Result |
-|---|---|
-| Full `R CMD check --no-manual` | 0 errors, 0 warnings, 0 notes |
-| Expectations in the final local package check | 263 passed, 0 failed, 0 warnings, 0 skipped |
-| Separate full DuckLake run | Passed, including actual dbt execution and snapshot publication |
-| Examples and vignettes | All package examples checked; seven vignettes built and executable R chunks run |
-| API and reference | 62 exported functions, 52 help topics, complete pkgdown index |
-| Tests | 56 test cases, including quality gates, migration, reports and dbt publication |
-
-GitHub workflows additionally check published commits with R 4.5.1 on DuckDB
-and DuckLake, then build and deploy the website. See
-[GitHub Actions](https://github.com/JanWein/lakefold/actions) for results tied to
-a particular commit. Local results and GitHub results are separate evidence.
-The documentation-language update does not change the runtime API.
-
-## Behavior covered by the new checks
-
-* Native pointblank thresholds warn or block per segment, preserving evidence
-  that a global failure ratio could hide.
-* Missing action levels, inactive checks and evaluation errors block publication.
-* All present blocking columns (`S`, `E` and `C`) are evaluated together.
-  Eight report layouts cover this behavior.
-* A failed input gate retains landing evidence and the old release while
-  preventing a new Raw table. The final candidate gate remains active.
-* Data-frame ingestion preserves date types and reuses identical deliveries
-  through the existing cache.
-* Quality reports show the gate decision, escape HTML and omit failed-row
-  extracts and samples.
-* Contract drafts require explicit confirmation. Comparisons identify structural
-  restrictions and changes that need semantic review.
-* Diagnostic accessors distinguish the latest attempt, a pinned release and
-  cache provenance. dbt process failures remain visible even when nodes pass.
-* dbt relations are copied and validated afresh. Later relation changes do not
-  modify a previously published release.
-* Missing business dates can be detected without an import attempt. Successful
-  notifications are deduplicated; transport failures remain retryable.
-* Additive registry migration retains old evidence, is idempotent and rejects
-  unknown newer schemas.
-* Cleanup defaults to a preview and retains published tables and quality evidence
-  when eligible intermediate tables are actually removed.
-
-Tested core combination: DuckDB 1.5.5 in R and Python, pointblank 0.12.4,
-dbt-core 1.12.5, dbt-duckdb 1.10.1 and dm 1.1.2. dbt telemetry is disabled.
-Production S3, PostgreSQL, dbt v2/Fusion, concurrent writers, Windows/macOS and
-sustained load testing remain outside the verified environments.
-
-## Historical record: 0.3.0
-
-Check date: 19 September 2026. Ubuntu 24.04, R 4.3.3.
-
-| Check | Result |
-|---|---|
-| Full DuckDB suite | Passed without test failures or warnings |
-| Full DuckLake suite | Passed without test failures or warnings |
-| Actual dbt integration on both backends | Build, five dbt data tests, a separate test invocation and a dm query passed |
-| `R CMD build` including vignettes | Successful |
-| `R CMD check --no-manual` | 0 errors, 0 warnings, 0 notes |
-| R examples and six vignettes | Executed or rebuilt in the package check |
-| `pkgdown::check_pkgdown()` | No issues; complete reference index |
-| `pkgdown::build_site()` | Full website, reference and articles built |
-
-Version 0.3.0 defined 38 test cases. The final local check with dbt integration
-enabled passed 165 expectations without failures, warnings or skipped tests.
-An additional run without the external CLI passed 161 expectations and skipped
-exactly the opt-in integration test.
-
-The integration used dbt-core 1.12.5, dbt-duckdb 1.10.1 and DuckDB 1.5.5 in both
-Python and R, with telemetry disabled. Ordinary checks do not require dbt and
-skip that external integration test; both separate backend runs executed it.
-
-Additional regressions covered isolated artifact directories, missing files,
-mismatched invocation IDs, malformed scalar result fields, failed nodes despite
-exit code 0, arguments passed without a shell, overwrite protection, dm keys
-and unchanged cache/release semantics through `dl_ingest()`.
-
-The local starter used dbt-duckdb profiles. Automatic v2 catalog generation,
-dbt v2/Fusion, production S3/PostgreSQL, concurrent writers, Windows/macOS and
-sustained load testing were not verified.
-
-## Historical record: 0.2.0
-
-Version 0.2.0 passed 26 test cases with 126 expectations on each backend.
-These historical results do not establish the behavior of later versions.
-Local session files and raw logs are not part of the public source tree.
-
-## Historical record: 0.1.0
-
-Check date: 18 September 2026. Ubuntu 24.04, R 4.3.3.
-
-| Check | Result |
-|---|---|
-| Full suite on local DuckDB plus an additional DuckLake test | 21 tests, 97 passing expectations |
-| Full suite with DuckLake as the default backend | 21 tests, 97 passing expectations |
-| Failed, skipped or warning tests | 0 in each category |
-| `R CMD build` | Successful |
-| `R CMD check --no-manual --no-build-vignettes` with DuckLake enabled | 0 errors, 0 warnings, 0 notes |
-| Included end-to-end example on DuckLake | Successful |
-| Shiny reactivity, search, definitions, quality and graph output | Automatically checked |
-| Shiny overview and lineage graph in Chromium | Rendered with no Shiny output errors; screenshots inspected |
-| S3 landing against a local HTTP test server using paws.storage | Original bytes preserved; conditional PUT retries did not overwrite them |
-
-All test data were synthetic. Raw logs and screenshots were kept outside the
-public source tree.
-
-### Failure cases covered
-
-* Valid, invalid, missing and corrected deliveries.
-* Failed gates leaving published data unchanged.
-* Retries without duplicate publication or reactivation of old releases.
-* Historical reads after corrections and reconnection.
-* Missing columns, duplicates, failed/skipped rules and empty candidates.
-* Tolerance boundaries and explicitly non-blocking warnings.
-* Changed definitions reusing the same version.
-* Notification deduplication, recurrence after recovery and transport failure.
-* Data age without a new job and stable paths after a working-directory change.
-* Partition corrections retaining other periods.
-* Failure before transaction commit rolling back release and success markers.
-* Products with pinned input versions.
-* Unapproved metrics, forbidden dimensions and multiple dates for stock metrics.
-* Metric values changed before report publication.
-* pointblank checks including inactive steps.
-* dm primary/foreign keys including orphaned references.
-* Explicit YAML export and invalid identifiers.
-
-### Main dependency versions
-
-| Package | Version |
-|---|---|
-| duckdb | 1.5.5 |
-| DBI | 1.2.2 |
-| dplyr | 1.2.1 |
-| dbplyr | 2.4.0 |
-| pointblank | 0.12.4 |
-| dm | 1.1.2 |
-| shiny | 1.8.0 |
-| bslib | 0.12.0 |
-| paws.storage | 0.10.0 |
-
-This records a tested combination rather than compatibility with every past or
-future dependency version. Lock dependencies in each operating project.
-
-## Operational verification still required
-
-* A production S3 endpoint with authentication and conditional PutObject support.
-  The local HTTP test server does not establish those endpoint guarantees.
-* A PostgreSQL catalog, its backup/restore process and catalog migration.
-* Deployment of the operating templates to Workbench, Connect or a scheduled
-  GitHub workflow. Package CI and documentation deployment are separate.
-* Quarto rendering on Connect and production notification transport.
-* A running commons/data-dict project. YAML export is a limited interface.
-* Large production datasets, concurrent writers, sustained load and Windows/macOS.
-
-The tests establish the recorded behavior in their environments. The package
-reports `multi_writer = FALSE` and does not automatically remove historical data.
+GitHub Actions defines Linux DuckDB/DuckLake checks, R 4.2.3 compatibility,
+Windows/macOS checks and a core-only installation. A configured job is not a
+passing result: consult [Actions](https://github.com/JanWein/tidyweave/actions)
+for evidence tied to the published commit. Earlier validation records remain in
+git history and describe their respective older versions.

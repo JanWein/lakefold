@@ -1,107 +1,35 @@
-# Feature coverage in 0.7.0
+# Capability index for tidyweave 0.8
 
-## Composable framework added in 0.7.0
+Start with one named product and an ordinary R table. Add an integration only
+when it supplies a capability you need. The package is experimental; its public
+API may change before the first stable release candidate.
 
-- Native in-memory products with no required DuckDB installation.
-- Product-first verbs with table, path, function, formula and prototype inputs.
-- DBI table/query sources, factory ownership and optional DuckDB SQL transforms.
-- Structural preflight, concise printing, plans and plain-language explanation.
-- Interchangeable S3 source, transform, quality, target and catalog adapters.
-- Governed lake compilation retaining original archives and publication gates.
-- Structured run metadata and explicit separation of catalog delivery failures.
-- An executed extension example and tests substituting independently registered
-  components without core edits.
-
-See the composing-products and extending-lakefold guides. Custom targets do not
-inherit lake history or transaction guarantees. The simple composition path
-uses R memory; existing lazy workflows remain available.
-
-## Component responsibilities
-
-DuckDB/DuckLake store and process tables. dbt manages SQL dependencies,
-materializations and model tests. pointblank provides optional business-rule
-input gates and detailed checks. dm describes explicit relationships in R.
-lakefold connects these components through reusable specifications, execution
-evidence and immutable releases.
-
-The framework is designed for simple entry points and explicit composition as
-workflows become more complex. Integrations retain their own responsibilities
-and can be adopted as needed.
-
-## Everyday workflows added in 0.6.0
-
-* Complete partition replacement through one optional `partition_by` argument.
-* API/database acquisition through ordinary source functions returning tables.
-* Spaced column names and compatible automatic integer/decimal schemas.
-* Read-only connections, unrecorded metrics and read-only delivery inspection.
-* Keyed release comparisons with database-side counts and bounded previews.
-* Immutable report readback and repeatable report saves.
-* Original quality exceptions retained only when explicitly requested locally.
-* Explicit abandoned-run/staging recovery that refuses known live writers.
-* Full metric expression fingerprints, complete input checks and RNG isolation.
-
-See the [everyday workflow guide](https://janwein.github.io/lakefold/articles/everyday-workflows.html)
-and [migration guide](MIGRATION.md). Existing pointblank, dbt and dm gates remain
-covered by the complete regression suite.
-
-## Simple defaults added in 0.5.0
-
-`dl_open()`, `dl_write()` and `dl_read()` provide a minimal local workflow.
-Folder layout, local backend, structural schema and definition versions are
-handled automatically. CSV, TSV and RDS readers are built in. `dl_close()`
-closes the connection, and `dl_open()` remembers the backend when reopening.
-
-Contracts, keys, metadata, custom readers, input checks, pointblank, dbt, dm,
-metrics and remote configuration are optional. Business requirements are never
-inferred from sample values. A custom contract requires only an ID and columns.
-Explicit contracts cannot be omitted on subsequent writes; custom callbacks
-are re-evaluated unless the caller supplies a code version for reuse.
-
-## Existing capabilities and additions
-
-| Capability | Available in 0.3.0 | Added in 0.4.0 |
+| Need | Available entry points | Guide |
 |---|---|---|
-| pointblank integration | Basic adapter with rule-level failure ratio and severity | Native warning/blocking thresholds, per-step overrides and segment evidence |
-| Ingestion | Local files, unchanged landing, Raw and candidates | Separate checks before Raw and direct R data-frame ingestion |
-| Contracts | Schema, required fields, keys, R rules and owner | Reviewed type drafts, differences, operator and column metadata |
-| Diagnostics | Raw registry tables and dbt-specific accessors | Shared status/quality views, release history and recursive lineage |
-| Reports | Quarto/Connect templates | Quality HTML/JSON, native pointblank reports and a testthat expectation |
-| dbt and releases | Separate lifecycles | Explicit snapshot publication of one freshly validated relation |
-| Missing deliveries | Missing file at job start and age indicators | Expected business date and deadline monitoring without an import attempt |
-| Registry | Fixed schema | Versioned, additive quality-metadata migration |
-| Retention | Preserved history | Preview and safe selection of expired unpublished failed-run tables |
+| Compose and inspect a workflow | `product()`, `add_source()`, `add_transform()`, `validate()`, `inspect()`, `run()` | [Composition](https://janwein.github.io/tidyweave/articles/composing-products.html) |
+| Read ordinary or remote data | Tables, callbacks, files, `source_database()`, `source_parquet()`, `source_api()`, `source_pins()`, `source_release()` | [Integrations](INTEGRATIONS.md) |
+| Choose storage | `target_lake()`, `target_database()`, `target_parquet()`, `target_pins()` | [Integrations](INTEGRATIONS.md) |
+| Define trustworthy data | `contract()`, `quality_rule()`, `quality_reference()`, `pointblank_checks()`, `profile_data()` | [Quality gates](https://janwein.github.io/tidyweave/articles/quality-gates.html) |
+| Preserve lake history | Immutable releases, full-candidate gates, complete partition replacement, original archives | [Everyday workflows](https://janwein.github.io/tidyweave/articles/everyday-workflows.html) |
+| Explain attempts and failures | `status()`, `quality()`, `run_history()`, `read_run()`, `incidents()`, quality reports | [Quality and history](https://janwein.github.io/tidyweave/articles/quality-history.html) |
+| Reproduce calculations | Pinned sources, `model()`, `metric()`, `measure()`, `report_release()`, `report_read()` | [Products and metrics](https://janwein.github.io/tidyweave/articles/products-metrics.html) |
+| Reuse ecosystem execution | `sql_transform()`, `transform_dbt()`, `as_targets()` | [Integrations](INTEGRATIONS.md) |
+| Publish catalog metadata | `catalog_openlineage()`, `catalog_openmetadata()`, retryable catalog delivery | [Integrations](INTEGRATIONS.md) |
+| Prepare a project | `init_project()`, optional renv and scheduling templates | [Getting started](https://janwein.github.io/tidyweave/articles/getting-started.html) |
+| Add an implementation | S3 adapters, preflight, capabilities and conformance checks | [Extension guide](https://janwein.github.io/tidyweave/articles/extending-tidyweave.html) |
 
-## Current boundaries
+The same product composition accepts R, lazy DBI and Arrow data. Transformations
+must support the objects they receive; a callback can explicitly collect data
+when local R computation is appropriate. Quality and profiling push supported
+operations to the backend.
 
-* Registry operations require one coordinated writer. Migration and conflict
-  checks do not provide distributed writer coordination.
-* `dl_dbt_publish()` publishes one relation. Atomic multi-table releases with a
-  shared dm gate are not implemented.
-* dbt v2/Fusion and generated remote profiles for S3/PostgreSQL are unverified.
-  The tested CLI path uses dbt-core and dbt-duckdb.
-* RDS landing after API/Excel preparation archives the R result. File-based
-  sources are required to archive the original file unchanged.
-* There is no general source-plugin protocol, incremental source change-data
-  capture or automatic migration of business data schemas.
-* `dl_cleanup()` retains published releases, DuckLake snapshots and object-store
-  files. It does not implement a general retention policy.
-* Scheduling remains external. A targets adapter and a combined R/dbt task
-  graph are outside the current implementation.
-* OpenMetadata, commons and data-dict are not fully integrated services.
-  YAML exports are explicitly limited interfaces.
+Lake guarantees do not automatically apply to other targets. Inspect adapter
+capabilities and documentation for transaction, overwrite, materialization and
+history behavior. Remote service configuration needs verification in the
+deployment environment.
 
-## What further extensions require
-
-These capabilities need either verified external environments or additional
-behavioral contracts, such as retention rules and transaction boundaries for
-multiple products. They remain explicit extension points. An embedded scheduler,
-permission system, visual ETL editor and complete column lineage from arbitrary
-R code are outside the current scope.
-
-## Documentation and references
-
-* [Executable quality guide](https://janwein.github.io/lakefold/articles/quality-gates.html)
-* [pointblank action levels](https://rstudio.github.io/pointblank/reference/action_levels.html)
-* [pointblank agent reports](https://rstudio.github.io/pointblank/reference/get_agent_report.html)
-* [R Packages: function documentation](https://r-pkgs.org/man.html)
-* [Posit skills](https://github.com/posit-dev/skills)
+The [modern data stack assessment](MODERN_DATA_STACK.md) distinguishes delivered
+capabilities, operational requirements and deliberate boundaries, including the
+comparison with Ab Initio. tidyweave integrates existing engines; distributed
+scheduling, enterprise IAM, a visual ETL editor and a streaming engine are not
+part of its core.

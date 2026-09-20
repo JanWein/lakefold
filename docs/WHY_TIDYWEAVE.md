@@ -1,8 +1,8 @@
-# Architecture review
+# Why tidyweave?
 
 The canonical, executable guide is
-[Architecture review](https://janwein.github.io/tidyweave/articles/design-review.html).
-Its source is [the package vignette](../vignettes/design-review.Rmd).
+[Why tidyweave?](https://janwein.github.io/tidyweave/articles/why-tidyweave.html).
+Its source is [the package vignette](../vignettes/why-tidyweave.Rmd).
 
 Design findings and remaining gaps are maintained in
 [the critical review](REFACTOR_REVIEW.md) and
