@@ -107,6 +107,13 @@ DuckLake, OpenMetadata and report consumption. Shiny and Quarto use ordinary R
 tables. Power BI can consume an approved database or Parquet export through its
 existing connectors; deployment and refresh remain external responsibilities.
 
+For a complete worked example with several tables, the
+[relational insurance walkthrough](https://janwein.github.io/tidyweave/articles/relational-insurance.html)
+checks three deliveries, uses dm to enrich two independently contracted data
+products, builds dbt reporting models and preserves an issued report after a
+correction. It explains the meaning of each row and how to avoid counting
+premium due more than once when a policy has several payments.
+
 ## Learn by building
 
 1. [Why use it?](https://janwein.github.io/tidyweave/articles/why-tidyweave.html)
@@ -117,9 +124,11 @@ existing connectors; deployment and refresh remain external responsibilities.
    Accept a correction, reject a duplicate and reproduce an issued report.
 4. [A layered data stack](https://janwein.github.io/tidyweave/articles/layered-data-stack.html)
    Receive checked RAW data, build SQL layers and approve outputs for consumers.
-5. [Architecture](https://janwein.github.io/tidyweave/articles/workflow-design.html)
+5. [Relational insurance reporting](https://janwein.github.io/tidyweave/articles/relational-insurance.html)
+   Multiple inputs, real dm enrichment, reusable products, dbt and governed measures.
+6. [Architecture](https://janwein.github.io/tidyweave/articles/workflow-design.html)
    How a simple API supports interchangeable components.
-6. [Write an adapter](https://janwein.github.io/tidyweave/articles/extending-tidyweave.html)
+7. [Write an adapter](https://janwein.github.io/tidyweave/articles/extending-tidyweave.html)
    A complete source, target and quality extension.
 
 [Function reference](https://janwein.github.io/tidyweave/reference/index.html) ·
