@@ -32,7 +32,7 @@ articles:
     contents: [why-tidyweave, composing-products, getting-started]
   - title: Add capabilities
     navbar: Guides
-    contents: [layered-data-stack, optional-integrations, everyday-workflows, quality-gates, quality-history, products-metrics, dbt-workflows]
+    contents: [layered-data-stack, relational-insurance, optional-integrations, everyday-workflows, quality-gates, quality-history, products-metrics, dbt-workflows]
   - title: Understand and extend
     navbar: Architecture
     contents: [workflow-design, extending-tidyweave, design-review]
