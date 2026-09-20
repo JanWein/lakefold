@@ -142,7 +142,7 @@ test_that("explicit publication destination and layer override root defaults", {
     captured <<- apply_execution_defaults(pipeline, execution)
     captured
   })
-  root <- withr::local_tempdir()
+  root <- normalizePath(withr::local_tempdir(), winslash = "/", mustWork = TRUE)
   definition <- product("orders", data.frame(id = 1L))
   execution <- execution_config(
     to = file.path(root, "defaults"),

@@ -41,7 +41,7 @@ mutate.tw_product <- function(.data, ...) {
   dplyr_product_step(.data, "mutate", rlang::enquos(...))
 }
 #' @rdname product-dplyr
-#' @exportS3Method dplyr::filter
+#' @export
 filter.tw_product <- function(.data, ..., .by = NULL, .preserve = FALSE) {
   args <- rlang::enquos(...)
   if (!missing(.by)) {

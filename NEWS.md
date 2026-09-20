@@ -1,5 +1,9 @@
 # tidyweave 0.12.0
 
+* Products built from published results reuse a retained open lake connection
+  and can reopen the pinned release after that connection closes. This avoids
+  opening the same DuckDB file twice on Windows.
+* `dplyr::filter()` uses standard S3 registration compatible with R 4.2 checks.
 * Product definitions retain explicit execution defaults. Stable primary source
   names and execution-time `data` or named `sources` replacements reuse the
   existing transformations, checks and dependencies for another delivery.
