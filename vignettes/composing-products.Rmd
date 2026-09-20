@@ -1,352 +1,221 @@
 ---
-title: "From one table to a reusable data product"
+title: "Compose a product, one useful step at a time"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{From one table to a reusable data product}
+  %\VignetteIndexEntry{Compose a product, one useful step at a time}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
-library(lakefold)
+```{r setup, include=FALSE, purl=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", message = FALSE)
 ```
 
-## Why does lakefold exist?
+A product names the table you want and describes how to produce it. The smallest
+useful product has one source. Everything else in this guide is an addition,
+not a prerequisite. No service or database is needed for the first six steps.
 
-You have data, some preparation code, and checks that must pass before anyone
-uses the result. At first, one R script is enough. Later you need to rerun it,
-change its source, explain a failure, keep an earlier result, or reuse the same
-preparation in several reports.
-
-lakefold gives these operations one consistent structure. Describe a **data
-product**, add the parts it needs, then run it. Your data remain ordinary R
-tables and your preparation remains ordinary R code. You can introduce durable
-storage and specialist integrations later.
-
-A data product is simply a named table plus the instructions for producing and
-checking it. It does not require a server, an owner field, a catalog, a database,
-or a manually maintained version number.
-
-lakefold does not provide a scheduler, a database driver, a complete enterprise
-catalog, authentication, or a replacement for dbt or pointblank. Those tools
-retain their own responsibilities.
-
-## Step 1: make a useful result
+## 1. Make your first result
 
 ```{r minimal}
-orders <- data.frame(id = 1:3, amount = c(25, 75, 50))
-
-product <- dl_product("orders") |>
-  dl_add_source(orders)
-
-result <- dl_run(product)
-dl_collect(result)
-stopifnot(sum(dl_collect(result)$amount) == 150)
+library(tidyweave)
+input <- data.frame(id = 1:3, amount = c(25, 75, 50))
+orders <- product("orders") |> add_source(input, name = "delivery")
+result <- run(orders)
+collect(result)
+stopifnot(sum(collect(result)$amount) == 150)
 ```
 
-There are four ideas here:
+`orders` is the definition. `result` is one execution with data, status and
+metadata. `collect(result)` returns a tibble. Nothing has been written to disk.
 
-1. `dl_product("orders")` names the result you want.
-2. `dl_add_source(orders)` supplies its input.
-3. `dl_run()` executes the instructions.
-4. `dl_collect()` returns a tibble you can use in ordinary R code.
+Sources accept an R table, a file path, a zero-argument function or an adapter.
+For example, `add_source("orders.csv")` chooses a CSV reader. Excel uses optional
+readxl. Defining or printing a product does not fetch its data.
 
-**Nothing has been saved to disk.** The result and its execution evidence are
-in memory. DuckDB and other optional integrations are unnecessary for this
-workflow. Creating or printing the product does not read files or run callbacks.
+## 2. Add preparation and a business check
 
-## Step 2: add an ordinary transformation
-
-```{r transform}
-clean_orders <- function(data) {
-  transform(data, amount = round(amount, 2))
-}
-
-product <- product |>
-  dl_add_transform(clean_orders, name = "round_amount")
+```{r transform-and-quality}
+orders <- orders |>
+  add_transform(function(data) transform(data, amount = round(amount, 2))) |>
+  add_quality(~ amount >= 0, name = "nonnegative")
+quality(run(orders))
 ```
 
-Each transformation receives a data frame or tibble and returns one. Add more
-transformations in the order you want them applied. An R function needs no
-special specification class. A formula such as
-`~ dplyr::filter(.x, amount >= 0)` also works.
+Transformations run in addition order. A check happens after preparation and
+never silently drops bad rows. Formulas and functions can return a logical
+value per row; `NA` counts as failure. A function may also return one overall
+decision or `quality_counts(n_failed, n_total)` for an aggregate check.
 
-Preparation is your decision. Quality checks never silently delete bad rows.
-For example, rounding an amount is preparation; rejecting a negative amount is
-a quality decision.
+For an R-only transform following a lazy source, collect explicitly:
+`add_transform(function(data) my_r_algorithm(collect(data)))`.
 
-## Step 3: describe the table you expect
+## 3. State the table you expect, if you need to
 
 ```{r contract}
-product <- product |>
-  dl_add_contract(c(id = "integer", amount = "numeric"))
+orders <- orders |> add_contract(c(id = "integer", amount = "numeric"))
 ```
 
-This requires two columns with the declared types and non-missing values.
-`numeric` accepts integers and decimals; `integer` stays strict. Explicit
-contracts reject extra columns and empty data unless you opt into them.
+This compact contract requires the declared columns and non-missing values.
+`numeric` accepts integer or decimal values; `integer` is stricter. Explicit
+contracts reject extra columns and empty tables by default. For a business key,
+use a reusable contract:
 
-For reusable rules or optional metadata, create a contract explicitly:
-
-```{r richer-contract}
-order_contract <- dl_contract(
-  columns = list(id = integer(), amount = double()),
-  key = "id",
-  owner = "Analytics",
-  description = "One row per order"
+```{r reusable-contract}
+order_contract <- contract(
+  columns = list(id = integer(), amount = double()), key = "id"
 )
-product <- product |> dl_add_contract(order_contract)
+orders <- orders |> add_contract(order_contract)
 ```
 
-`integer()` and `double()` describe types; they are zero-length prototypes,
-not sample values. Use `as.Date(character())` for a Date column.
-The anonymous contract automatically gets the product's identity when added.
-Ownership, description, column metadata, keys and a manual version are optional.
-A plain type vector is often enough.
+The zero-length values describe types, not sample rows. Use
+`as.Date(character())` for dates. Descriptions, owners, freshness deadlines and
+manual versions are optional. Without a contract, tidyweave checks inferred
+structure and nonempty data; it does not guess your business key.
+`validate(input, order_contract)` returns a quality table immediately.
 
-Without an explicit contract, lakefold checks inferred structure and rejects
-empty outputs. It does not guess business keys or non-missing requirements.
-A lake target remembers the first published automatic schema for future writes.
-An in-memory run has no persistent previous schema to compare with.
-
-## Step 4: add a quality rule
-
-```{r quality}
-product <- product |>
-  dl_add_quality(~ amount >= 0, name = "nonnegative")
-
-result <- dl_run(product)
-dl_quality(result)
-stopifnot(all(dl_quality(result)$status == "passed"))
-```
-
-A formula evaluates one logical result per row. Missing results count as
-failures. A function can instead return one logical decision or
-`dl_quality_counts(failed, total)` for a custom aggregate check.
-
-For tolerances or warning-only checks, use the optional explicit rule object:
-
-```{r warning-rule}
-dl_rule("small_amounts", ~ amount >= 10,
-  severity = "warning", max_failure = 0.05)
-```
-
-The native engine has no pointblank dependency. `dl_pointblank()` delegates
-advanced checks to pointblank and retains its existing threshold policies.
-Both engines return the same quality evidence. Failed, errored, skipped and
-empty checks block publication; warnings permit it.
-
-To validate an existing table immediately, use
-`dl_validate(orders, order_contract)`. It returns a **quality report**, not the
-input data. To compose preparation and publication, use the product verbs.
-
-## Step 5: inspect before running
+## 4. Inspect the definition and a failed attempt
 
 ```{r inspect}
-product
-product |> dl_validate()
-product |> dl_plan()
-product |> dl_explain()
+orders
+explain(orders)
+validate(orders)
 ```
 
-These operations do different jobs:
+Preflight checks configuration, required dependencies and supported components.
+It does not execute a source callback or predict remote data quality. `run()`
+always performs preflight, so a separate call is optional.
 
-| Call | What you learn |
-|---|---|
-| Print the product | A concise overview |
-| `dl_inspect(product)` | Its source, transformations, contract and target |
-| `dl_validate(product)` | Whether the definition and required adapters are configured |
-| `dl_plan(product)` | The execution order |
-| `dl_explain(product)` | A plain-language explanation of the planned work |
-
-Preflight checks missing files, missing dependencies, missing sources, duplicate
-rules, unsupported components and read-only targets. It does not run your source
-function, query a remote table or predict data quality. `dl_run()` repeats
-preflight automatically.
-
-The product stays a definition. The run is a separate result with timestamps,
-status, quality evidence, source and output information, schema, row count and
-lineage. No mutable platform object owns the whole system.
-
-## Step 6: publish when you need durable history
-
-Install the optional `duckdb` package (version 1.5.5 or later), then choose a
-local folder:
-
-```r
-published <- product |> dl_publish(to = "reporting-lake")
-dl_collect(published)
+```{r failed-attempt}
+bad_input <- data.frame(id = 1:2, amount = c(10, -1))
+bad_orders <- orders |>
+  add_source(bad_input, name = "delivery", replace = TRUE)
+blocked <- run(bad_orders, stop_on_failure = FALSE)
+incidents(blocked)
+stopifnot(blocked$status == "blocked")
 ```
 
-Or save the target in the product and use the same execution verb:
+`add_source()` adds inputs. It does not silently replace an existing one.
+Use the same name and `replace = TRUE` when changing a delivery. By default a
+failed run raises an error carrying `condition$result`; the option above lets
+this tutorial inspect its result directly.
 
-```r
-product <- product |> dl_add_target("reporting-lake")
-published <- dl_run(product)
+## 5. Combine several named sources
+
+With one source, a transform receives a table. With several, the first transform
+receives a named list of tables and returns the one table being produced.
+
+```{r multiple-sources}
+customers <- data.frame(customer = c(1L, 2L), region = c("North", "South"))
+sales <- data.frame(customer = c(1L, 2L), amount = c(100, 250))
+regional <- product("regional_orders") |>
+  add_source(sales, name = "orders") |>
+  add_source(customers, name = "customers") |>
+  add_transform(function(inputs) {
+    dplyr::left_join(inputs$orders, inputs$customers, by = "customer")
+  }) |>
+  add_quality(~ !is.na(region))
+collect(run(regional))
 ```
 
-`dl_publish()` defaults to the `lakefold` folder if no target was supplied.
-Publication makes data available in your selected storage; it does not upload
-it to the public internet.
+The names make joins explicit. The framework does not guess which keys join
+which tables. Use `quality_reference()` for reusable relationship checks,
+or the optional dm integration for a declared relational model.
 
-With a lake target, each successful publication creates an immutable release.
-Original files are archived before parsing. Data-frame and DBI sources are
-archived as RDS snapshots of the received table. The full candidate, including
-retained partitions, is checked before the release marker is committed.
-Earlier releases remain readable after a correction. Failed checks leave the
-current successful release available.
+## 6. Reuse a product as an input
 
-```{r publication, eval=requireNamespace("duckdb", quietly=TRUE)}
+```{r nested-product}
+summary <- product("regional_summary") |>
+  add_source(regional) |>
+  add_transform(function(data) {
+    dplyr::summarise(data, total = sum(amount))
+  })
+summary_result <- run(summary)
+collect(summary_result)
+stopifnot(collect(summary_result)$total == 350)
+```
+
+There is one product class for both source preparation and derived tables.
+Within one execution, shared product dependencies run once. Preflight rejects
+cycles and conflicting definitions with the same product identity. A product
+definition is not a frozen input: use `source_release()` with a release ID when
+you need an exact previously published version.
+
+## 7. Choose a destination
+
+| Destination | Add to the product | Important boundary |
+|---|---|---|
+| R session | Nothing | Result stays in memory |
+| Lake with history | `set_target(target_lake("reporting-lake"))` | Immutable releases; one coordinated writer |
+| Database table | `set_target(target_database(con, "orders"))` | Driver transaction and isolation guarantees |
+| Local Parquet file | `set_target(target_parquet("orders.parquet"))` | Single file; Arrow optional; no release registry |
+| Pin | `set_target(target_pins(board, "orders"))` | Versioning depends on the pins board |
+
+`run()` executes the configured target. `publish()` supplies a local lake target
+if the product has none. Publishing means writing data to that destination,
+not publishing it on the internet.
+
+```{r durable-example, eval=requireNamespace("duckdb", quietly=TRUE), purl=FALSE}
 local({
-  root <- tempfile("lakefold-guide-")
+  root <- tempfile("orders-lake-")
   on.exit(unlink(root, recursive = TRUE))
-  first <- product |> dl_publish(to = root)
-  stopifnot(sum(dl_collect(first)$amount) == 150)
-  bad <- product |> dl_add_source(data.frame(id = c(1L, 1L), amount = c(10, -1)))
-  blocked <- bad |> dl_publish(to = root, stop_on_failure = FALSE)
-  stopifnot(blocked$status == "blocked")
-  stopifnot(sum(dl_collect(first)$amount) == 150)
-  dl_status(blocked)
+  published <- orders |> publish(to = root)
+  stopifnot(published$status == "published")
+  collect(published)
 })
 ```
 
-For a table you already prepared, the immediate shortcut is:
+The lake gate checks the complete candidate before making it current. It also
+archives inputs and preserves earlier releases. The lake adapter materializes
+its input for archival; it is not an end-to-end lazy warehouse executor.
 
-```r
-orders |> dl_publish("orders", to = "reporting-lake")
-```
+## 8. Keep database work lazy
 
-The existing `dl_open()`, `dl_write()` and `dl_read()` interface remains useful
-when you want to manage one connection explicitly.
-
-## Sources: change acquisition without rewriting the workflow
-
-| Input | Example |
-|---|---|
-| Table in R | `dl_add_source(orders)` |
-| CSV, TSV, RDS or Excel file | `dl_add_source("orders.xlsx")` |
-| Custom file reader | `dl_add_source(path, reader = my_reader)` |
-| API/client callback | `dl_add_source(fetch_orders)` |
-| DBI table | `dl_add_source(dl_source_database(con, table = "orders"))` |
-| Parameterized query | `dl_source_database(con, query = "SELECT * FROM orders WHERE id > ?", params = list(100))` |
-
-Excel uses optional readxl. An existing API, S3 or HANA client can be called from
-a source function; lakefold does not invent another connection protocol.
-`dl_source_database()` accepts ordinary DBI connections and `DBI::Id()` names.
-A connection factory defers opening until execution and gives lakefold ownership
-of closing that connection. Existing connections remain caller-owned.
-
-## An advanced workflow with optional components
-
-This complete example combines a DBI source, DuckDB SQL transformation,
-pointblank quality checks, governed storage and a metadata callback. Only the
-adapter configuration is technical; the product grammar is unchanged.
-
-```{r advanced, eval=requireNamespace("duckdb", quietly=TRUE) && requireNamespace("pointblank", quietly=TRUE)}
+```{r lazy-example, eval=requireNamespace("duckdb", quietly=TRUE), purl=FALSE}
 local({
-  root <- tempfile("lakefold-advanced-")
-  dir.create(root)
-  on.exit(unlink(root, recursive = TRUE), add = TRUE)
-
-  source_con <- DBI::dbConnect(duckdb::duckdb())
-  on.exit(DBI::dbDisconnect(source_con, shutdown = TRUE), add = TRUE)
-  DBI::dbWriteTable(source_con, "orders", orders)
-
-  target <- dl_target_lake(file.path(root, "published"))
-  save_metadata <- function(metadata) {
-    jsonlite::write_json(metadata, file.path(root, "run.json"),
-      auto_unbox = TRUE, pretty = TRUE, null = "null", na = "null")
-  }
-
-  advanced <- dl_product("orders", code_version = "example-v1") |>
-    dl_add_source(dl_source_database(source_con, table = "orders")) |>
-    dl_add_transform(dl_sql("SELECT id, round(amount, 2) AS amount FROM data")) |>
-    dl_add_contract(c(id = "integer", amount = "numeric")) |>
-    dl_add_quality(dl_pointblank("amounts", function(data) {
-      pointblank::create_agent(data) |>
-        pointblank::col_vals_gte("amount", 0)
-    })) |>
-    dl_add_target(target) |>
-    dl_add_catalog(save_metadata)
-
-  result <- advanced |> dl_validate() |> dl_run()
-  stopifnot(result$status == "published")
-  stopifnot(file.exists(file.path(root, "run.json")))
-  stopifnot(sum(dl_collect(result)$amount) == 150)
-  stopifnot(DBI::dbIsValid(source_con))
-  dl_status(result)
+  con <- DBI::dbConnect(duckdb::duckdb())
+  on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbWriteTable(con, "orders", input)
+  remote <- product("large_orders") |>
+    add_source(source_database(con, table = "orders")) |>
+    add_transform(function(data) dplyr::filter(data, amount >= 50)) |>
+    add_quality(~ amount >= 0)
+  result <- run(remote)
+  collect(result)
 })
 ```
 
-To use DuckLake, replace only the target with a `dl_target_lake(dl_config(...,
-backend = "ducklake"))`. PostgreSQL catalog and S3 storage details belong inside
-that configuration. They do not become arguments to every transformation.
-A backend switch selects a destination; it does not migrate previous data.
+Supported dplyr transformations and native checks can run against a lazy DBI
+table. Data collection is explicit at `collect()` or required by a selected
+adapter. Arbitrary R functions and SQL translations are not automatically
+portable between backends. `capabilities()` and `explain()` show declared
+boundaries. Arrow datasets use the same idea with `source_parquet()`.
 
-The SQL adapter executes trusted SQL against a private temporary DuckDB table
-named `data`. For a remote SQL query use the DBI source, including bound
-parameters. These are intentional escape hatches, not SQL sandboxing.
+Keep a caller-supplied connection open while using its lazy result. A source
+factory is useful when tidyweave should own the connection; factory-backed
+sources return materialized data and close their owned connection. Requesting
+lazy output from a factory is rejected.
+See [resource ownership](workflow-design.html#resource-ownership).
 
-## dbt and other specialist tools
+## 9. Keep execution evidence separately
 
-Use `dl_run(dl_dbt_project(...))` or `dl_dbt_build()` for dbt's own model graph,
-materializations and tests. Use `dl_dbt_publish()` to snapshot and validate a
-successful model as a governed release. A dbt model is not presented as a
-function of an in-memory R table: dbt owns its connections and project inputs.
-Close local catalog connections before invoking dbt in another process.
-The [dbt guide](dbt-workflows.html) contains a runnable starter.
+```{r evidence}
+evidence_path <- tempfile("orders-runs-")
+result <- run(orders, evidence = evidence_path)
+run_history(evidence_path)
+read_run(evidence_path, result$run_id)$status
+unlink(evidence_path, recursive = TRUE)
+```
 
-Existing multi-input derived products still use named pinned releases and a
-builder through `dl_product(inputs = ..., build = ..., contract = ...,
-code_version = ...)`. They remain executable with `dl_run()` or `dl_build()`.
-This preserves established lazy database behavior for larger workflows.
+Evidence stores run metadata and check counts, not source rows or credentials.
+It also records failed and blocked attempts. Catalog delivery is separate from
+writing data: a catalog outage does not undo a published output. Use
+`retry_catalogs()` with freshly supplied adapters to retry pending deliveries.
+OpenLineage events are delivered after execution, not as live progress updates.
 
-## Metadata, versions and practical limits
-
-Most metadata comes from execution: timestamps, input hashes, source descriptors,
-output references, schema, row counts, checks and lineage. Business ownership
-and descriptions remain optional. Catalog callbacks receive metadata, not input
-rows or live connections. Custom descriptors and written code can still include
-sensitive literals: keep credentials in runtime configuration, not source code.
-
-An in-memory run retains its evidence in the returned result. A lake run also
-records durable ingestion and release evidence. Source-factory and preflight
-failures occurring before a lake ingestion starts are returned locally and do
-not create a registry run. Catalog delivery occurs after successful data
-publication; a catalog failure produces a warning without undoing the data.
-
-Composed products rerun callbacks by default. Enable `cache = TRUE` only with
-an explicit `code_version` covering imported functions, captured values and
-dependencies. Cache reuse selects only the current matching release.
-Explicit product and contract versions reject changed registered definitions.
-Do not assume an inspected JSON description can recreate a closure environment
-or live DBI connection. Keep executable product definitions in versioned R code.
-
-The new composition path materializes source data in R and gives ordinary R
-tables to transformations. For workloads larger than R memory, use the existing
-lazy `dl_pipeline()` and derived-product APIs or delegate processing to dbt.
-The lake registry still requires one coordinated writer. Custom targets have
-only the guarantees their adapter provides.
-
-## Why this architecture
-
-The external API is intentionally small: **name, add, run, collect, publish**.
-It follows tidyverse principles of readable verbs, pipes and ordinary objects.
-A beginner does not need to learn adapters, execution plans or metadata schemas.
-
-Internally, lakefold separates normalization, specifications, validation,
-planning and execution. This takes structural inspiration from tidymodels:
-components can be exchanged while the composition remains stable. There are no
-model-fitting concepts or copied machine-learning APIs.
-
-![The user describes a product with simple verbs. Internally it is normalized and validated, then executed through native R, lake storage or a custom adapter.](figures/composition-architecture.svg)
-
-Ordinary functions remain functions. Explicit objects exist where they add
-meaning: a contract, a database query with connection ownership, a SQL
-transformation, a product or a storage target. The lake adapter reuses the
-proven publication engine; the native executor shares the same source,
-transformation and quality interfaces with custom targets.
-
-See the [extension guide](extending-lakefold.html) for a complete S3 adapter,
-method contracts and tests you can use in another R package.
+Keep executable definitions in version-controlled R files. Inspection metadata
+cannot recreate closure environments, live connections or installed packages.
+Use `init_project()` for a small project template and optional targets, renv
+or Connect files. Continue with [monthly reporting](getting-started.html),
+[optional integrations](optional-integrations.html),
+[workflow design](workflow-design.html), or [extensions](extending-tidyweave.html).

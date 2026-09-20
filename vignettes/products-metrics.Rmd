@@ -1,122 +1,154 @@
 ---
-title: "Products and metrics"
+title: "Products, relationships and reproducible metrics"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Products and metrics}
+  %\VignetteIndexEntry{Products, relationships and reproducible metrics}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
 
-# Products, relational models, metrics and reports
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", message = FALSE)
+library(tidyweave)
+```
 
-This is an advanced reference with illustrative snippets that assume your own
-connected lake, contracts and registered assets. For a complete runnable example,
-start with the [monthly reporting walkthrough](https://janwein.github.io/lakefold/articles/getting-started.html),
-which introduces products and metrics only after a working import and quality check.
+A product gives a useful result a name and a repeatable definition. A metric
+gives a business calculation explicit meaning. Add each only when you need
+it: an ordinary `dplyr::summarise()` remains useful for exploration.
 
-## Build a product from releases
+## Start with ordinary tables and functions
 
-```r
-product <- dl_product(
-  "finance.reporting", inputs = c(reserves = "finance.reserves"),
-  build = function(inputs) inputs$reserves,
-  contract = contract, code_version = "reporting-v1"
+One source gives a transformation one table. Multiple named sources give it a
+named list. Both use the same product object and execution function:
+
+```{r multiple-sources}
+orders <- data.frame(id = 1:3, customer_id = c("a", "a", "b"),
+  amount = c(10, 20, 30))
+customers <- data.frame(customer_id = c("a", "b"), region = c("EU", "US"))
+regional <- product("regional_orders") |>
+  add_source(orders, name = "orders") |>
+  add_source(customers, name = "customers") |>
+  add_transform(function(inputs) {
+    dplyr::left_join(inputs$orders, inputs$customers, by = "customer_id")
+  }) |>
+  add_quality(~ !is.na(region))
+collect(run(regional))
+```
+
+The join remains ordinary R code. Review its cardinality and the meaning of one
+row. A product publishes one table; multiple sources do not imply an atomic
+multi-table publication. A product can also be the source of another product:
+shared dependencies run once within a single execution.
+
+## Use governed releases as interchangeable sources
+
+This section requires DuckDB and creates a temporary local lake. A contract is
+optional until you need a promise beyond the inferred structure:
+
+```{r source-releases, eval=requireNamespace("duckdb", quietly = TRUE)}
+root <- tempfile("tidyweave-products-")
+lake <- open_lake(root)
+orders_release <- write_data(lake, orders, "orders")
+customers_release <- write_data(lake, customers, "customers")
+definition <- product("regional_orders") |>
+  add_source(source_release(lake, "orders", orders_release$release_id),
+    name = "orders") |>
+  add_source(source_release(lake, "customers", customers_release$release_id),
+    name = "customers") |>
+  add_transform(function(inputs) {
+    dplyr::left_join(inputs$orders, inputs$customers, by = "customer_id")
+  }) |>
+  add_contract(contract(columns = c(id = "integer", customer_id = "character",
+    amount = "numeric", region = "character"), key = "id")) |>
+  set_target(lake)
+published <- run(definition)
+read_release(lake, "regional_orders")
+lineage(lake, "regional_orders")
+```
+
+The source implementation changed from R tables to pinned lazy tables; the
+transformation stayed the same. Explicit release IDs reproduce exact inputs.
+An omitted ID resolves the current release once during execution. Later source
+publication does not automatically rerun this product; use your scheduler or
+the optional targets integration when you need that automation.
+
+## Add relationship exploration with dm
+
+`quality_reference()` is sufficient for an individual foreign-key check. Use
+optional `dm` when you also want a native relational model for several tables:
+
+```{r relational-model, eval=requireNamespace("duckdb", quietly = TRUE) && requireNamespace("dm", quietly = TRUE)}
+relationships <- model(
+  lake,
+  tables = c(orders = "orders", customers = "customers"),
+  primary_keys = list(orders = "id", customers = "customer_id"),
+  foreign_keys = list(list(table = "orders", columns = "customer_id",
+    ref_table = "customers", ref_columns = "customer_id")),
+  releases = c(orders = orders_release$release_id,
+    customers = customers_release$release_id)
 )
-product |> dl_execute(lake)
+dm::dm_examine_constraints(relationships)
 ```
 
-`inputs` is a named vector of asset IDs. The builder receives a named list of
-lazy tables. Specific input releases are resolved before the build and recorded
-in lineage. A later source release does not automatically rebuild the product.
-Pin every input when explicit repeatability is required:
+Declared keys and relationships are checked. The result is a normal dm object
+containing lazy tables. It does not choose your joins or replace review of the
+intended row grain.
 
-```r
-dl_build(lake, product, releases = c(reserves = input_release_id))
+## Turn an agreed calculation into a metric
+
+For a governed metric, define its input asset, formula and permitted grouping.
+Approval and code identity are explicit because reports reuse this definition;
+owner, description and unit are optional:
+
+```{r metric, eval=requireNamespace("duckdb", quietly = TRUE)}
+revenue <- metric("orders.revenue", "regional_orders", sum(amount),
+  dimensions = "region", approved = TRUE, code_version = "revenue-v1")
+values <- measure(lake, revenue, by = "region", release = published$release_id)
+values
 ```
 
-The product contract describes the output, which may differ from the source
-schemas. Join multiple inputs with dplyr inside the builder. Review grain,
-cardinality and potential row multiplication as part of the business logic.
-A product currently publishes one result table, not an atomic multi-table bundle.
+The values are 30 for EU and 30 for US. `approved = TRUE` records your declared
+decision; it is not a separate authorization system. Change `code_version`
+when custom code, captured values or dependencies change. Arbitrary closure
+environments are not fingerprinted.
 
-## Declare relationships with dm
-
-```r
-model <- dl_model(
-  lake, tables = c(reserves = "finance.reserves"),
-  primary_keys = list(reserves = c("id", "date"))
-)
-```
-
-The optional dm integration returns a native model containing lazy tables and
-pinned releases. Declared primary and foreign keys are checked. The product
-function still determines joins and the desired grain. Power BI/DAX semantics
-are not emulated.
-
-## Define metric semantics
-
-| Definition | Rule |
+| Choice | Meaning |
 |---|---|
-| `time_behavior = "stock"` | Exactly one non-missing business date in the selected input |
-| `time_behavior = "flow"` | Multiple dates are allowed; the formula determines aggregation |
-| `dimensions` | Only these columns are permitted in `by` and filters |
+| No `time_column` | A flow metric may aggregate several dates |
+| A `time_column` | A stock metric requires exactly one selected date |
+| `dimensions` | Allowed grouping and filter columns |
 | `na_policy = "reject"` | Missing relevant inputs block calculation |
-| `na_policy = "expression"` | The expression determines how missing values are handled |
-| `approved = FALSE` | Calculation is blocked |
+| `na_policy = "expression"` | The formula deliberately handles missing inputs |
 
-Using `expr = sum(amount, na.rm = TRUE)` with `na_policy = "reject"` still blocks
-missing inputs at the preceding check. Choose `na_policy = "expression"`
-explicitly when ignoring missing values is justified. Missing or non-finite
-numeric outputs and empty custom outputs are rejected in either case.
+`sum(amount, na.rm = TRUE)` does not bypass the default missing-input gate.
+For ratios or other custom calculations, supply
+`compute = function(data, dimensions, params) ...` and declare `input_columns`.
+The callback must implement the requested grouping and return its required
+columns. Missing or non-finite numeric outputs and empty outputs are rejected.
 
-```r
-value <- metric |> dl_execute(lake,
-  by = "company", at = as.Date("2026-08-31"),
-  filters = list(company = c("Alpha", "Beta"))
-)
+## Save the values and their explanation together
+
+```{r report, eval=requireNamespace("duckdb", quietly = TRUE)}
+report <- report_release(lake, "regional-report-v1", list(revenue = values),
+  code_version = "report-v1")
+report_read(lake, "regional-report-v1", values_only = TRUE)
 ```
 
-This example assumes a metric with `company` as an approved dimension.
-Use `compute = function(data, dimensions, params) ...` for ratios, weighted means
-or more complex metrics. The callback must implement the requested grouping and
-return the required columns. The framework cannot establish the economic
-correctness of a formula.
+The measurement's manifest records the formula, parameters, pinned input
+release, input quality and result hash. The report stores those values and
+their manifests. Reading it does not recalculate the metric. Identical retries
+preserve the first saved timestamps; changed data, definitions, parameters or
+values need a new report ID. A report ID identifies a published report, while a
+metric version identifies its definition.
 
-## Record a report release
+Use `measure(..., record = FALSE)` for an exploratory calculation without
+registry writes, or open a read-only lake. PDF/Word rendering, authentication
+and scheduling belong to the surrounding tools. The calculation itself does
+not need an LLM or a BI server.
 
-`dl_measure()` attaches a `dl_manifest` to its result. It contains the definition,
-input release, parameters, input quality and result hash. `dl_report_release()`
-stores the manifest and values. Later changes to those values are rejected;
-an existing report identifier cannot be reused with different contents.
-
-A new calculation of the same metric may carry a different calculation time in
-its manifest. For an idempotent report-publication retry, reuse the same result
-object or assign a new report version. PDF/Word rendering is a separate concern.
-
-## Integrate with AI tools explicitly
-
-The package calculates metrics without an LLM. The commons YAML export is a
-limited declarative interface. It does not provide a tested chat/agent server,
-authentication, a protected SQL endpoint or automatic validation of LLM queries.
-Those components must be supplied separately for an authenticated chat service.
-
-
-## Simpler metrics and reusable reports
-
-Owner, description and unit are optional. Without `time_column` a metric defaults
-to flow; with a time column it defaults to stock. Approval and `code_version`
-remain explicit. `input_columns` declares inputs for unresolved selection or
-custom functions. The default missing-value gate checks static data pronouns as
-well as ordinary column symbols.
-
-Use `dl_measure(..., record = FALSE)` for an exploratory calculation without
-registry writes, or open the lake with `read_only = TRUE`. Result manifests still
-contain full formula identity and pinned inputs. Identical recorded measurements
-reuse their lineage edge. Use `dl_build(..., cache = FALSE)` to re-evaluate a
-product builder that consults external state.
-
-`dl_report_read(lake, "report-id", values_only = TRUE)` returns saved result
-tables without recalculating. Identical retries of `dl_report_release()` keep
-the original timestamps; a changed release, definition, parameter or value
-requires a new report ID. See [Everyday workflows](https://janwein.github.io/lakefold/articles/everyday-workflows.html)
-for an executable example and the migration guide for pre-0.6.0 metric versions.
+```{r cleanup, include=FALSE, eval=requireNamespace("duckdb", quietly = TRUE)}
+stopifnot(sum(values$value) == 60,
+  nrow(report_read(lake, "regional-report-v1", values_only = TRUE)$revenue) == 2)
+close_lake(lake)
+unlink(root, recursive = TRUE)
+```

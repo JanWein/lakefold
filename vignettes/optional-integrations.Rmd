@@ -1,0 +1,286 @@
+---
+title: "Add integrations only when you need them"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Add integrations only when you need them}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+library(tidyweave)
+root <- tempfile("tidyweave-integrations-")
+dir.create(root)
+```
+
+Start with [composing products](composing-products.html) if you are new to
+tidyweave. A data frame and a function are enough for useful work. This guide
+explains what to add when a workflow needs another storage system, an HTTP
+source, dependency-aware execution or a deployment environment.
+
+## Keep the product, change its destination
+
+The business definition stays small. This product does not choose infrastructure.
+
+```{r definition}
+orders_definition <- product("orders") |>
+  add_source(data.frame(id = 1:3, amount = c(25, 75, 50))) |>
+  add_transform(function(data) dplyr::mutate(data, amount = amount * 2)) |>
+  add_quality(~ amount >= 0)
+
+collect(run(orders_definition))
+```
+
+Choose a target when you need to write the checked result. `set_target()` replaces
+only that component; the transformations and quality gate stay the same.
+
+```{r sqlite, eval=requireNamespace("RSQLite", quietly=TRUE)}
+con <- DBI::dbConnect(RSQLite::SQLite(), ":memory:")
+result <- orders_definition |>
+  set_target(target_database(con, "orders")) |>
+  run(evidence = file.path(root, "evidence"))
+DBI::dbReadTable(con, "orders")
+
+# A caller-owned connection permits lazy database transformations.
+from_database <- product("large.orders") |>
+  add_source(source_database(con, table = "orders")) |>
+  add_transform(function(data) dplyr::filter(data, amount >= 100)) |>
+  add_quality(~ amount >= 0) |>
+  run()
+collect(from_database)
+DBI::dbDisconnect(con)
+```
+
+`source_database()` accepts a `DBI::Id()` or SQL query as well as a plain table
+name. Parameterized queries use `params` and return materialized data.
+Caller-owned connections stay open; close them after collecting lazy results.
+A zero-argument connection factory opens a fresh connection during execution,
+materializes the source and closes it, including after failure.
+
+```{r parquet, eval=requireNamespace("arrow", quietly=TRUE)}
+parquet_path <- file.path(root, "orders.parquet")
+orders_definition |>
+  set_target(target_parquet(parquet_path)) |>
+  run()
+
+from_parquet <- product("parquet.orders") |>
+  add_source(source_parquet(parquet_path)) |>
+  add_transform(function(data) dplyr::filter(data, amount >= 100)) |>
+  add_quality(~ amount >= 0) |>
+  run()
+collect(from_parquet)
+```
+
+An Arrow source stays lazy through supported dplyr transformations and native
+aggregate checks. `collect()` and targets that require ordinary R tables create
+materialization boundaries. A lazy workflow can still issue count/schema queries;
+"lazy" does not mean "no queries until collect".
+
+```{r pins, eval=requireNamespace("pins", quietly=TRUE)}
+board <- pins::board_folder(file.path(root, "pins"), versioned = TRUE)
+pinned <- orders_definition |>
+  set_target(target_pins(board, "orders")) |>
+  run()
+
+read_source(source_pins(board, "orders", version = pinned$outputs$version))
+```
+
+Version retention and authentication belong to the pins board. Reading a reported
+pin version is distinct from the immutable-release guarantees of a governed lake.
+
+## Know each adapter's boundaries
+
+| Component | Lazy or materialized? | History and write boundary | Resource ownership |
+|---|---|---|---|
+| R data frame/function | Ordinary R objects; a function may return a supported lazy table | No persistence without a target | Your R session |
+| DBI source | Lazy with an open caller connection; factories and parameterized queries collect | Reads the current table/query, without a source snapshot guarantee | Caller closes borrowed connections; factories close automatically |
+| DBI target | Collects the checked candidate | Transaction required by default; driver determines isolation and transactional DDL; no immutable history | Caller or factory, as above |
+| Arrow/Parquet source | Lazy by default | Reads current files/dataset; remote support and credentials belong to Arrow | Arrow manages dataset handles |
+| Parquet target | Collects to one local file | Temporary sibling file plus rename; replacement depends on filesystem support; no version history | No retained connection |
+| pins source/target | Materialized | Board-defined storage/versioning; no package-wide atomicity promise | Configured pins board |
+| Lake target | Materializes for governed publication | Immutable releases and full-candidate gates; one coordinated writer | Owned connections close; caller connections remain open |
+| httr2 API source | Collects pages into one table | No consistent remote snapshot unless the API supplies one | Request factory obtains runtime authentication |
+| dbt transform | Stages input and materializes selected output | dbt owns model writes; failed final product checks do not undo them | Fresh connections close before/after the CLI |
+
+`capabilities(component)` describes declared support; it does not prove remote
+permissions or a driver's transaction guarantees. For DBI append, the adapter
+checks the combined existing and incoming table inside its transaction. This
+requires collecting the existing table. `collect(result)` still represents the
+incoming batch; `result$outputs$rows` reports the full destination size.
+
+`target_parquet()` writes a **single local file**, not a remote object or a
+partitioned dataset. It refuses replacement unless `overwrite = TRUE`. For larger
+storage requirements choose an appropriate backend or implement a target adapter.
+
+## PostgreSQL and SAP HANA through DBI
+
+Keep credentials and driver choices in a factory. The product grammar is the same.
+These examples require your installed driver, configured service and permissions;
+local SQLite tests do not verify a PostgreSQL or HANA deployment.
+
+```{r enterprise-dbi, eval=FALSE}
+postgres_connection <- function() {
+  DBI::dbConnect(RPostgres::Postgres(),
+    host = Sys.getenv("PGHOST"), dbname = Sys.getenv("PGDATABASE"),
+    user = Sys.getenv("PGUSER"), password = Sys.getenv("PGPASSWORD"))
+}
+hana_connection <- function() {
+  DBI::dbConnect(odbc::odbc(), dsn = Sys.getenv("HANA_DSN"))
+}
+
+product("contracts") |>
+  add_source(source_database(hana_connection,
+    table = DBI::Id(schema = "RISK", table = "CONTRACTS"))) |>
+  add_quality(~ amount >= 0) |>
+  set_target(target_database(postgres_connection,
+    DBI::Id(schema = "analytics", table = "contracts"))) |>
+  run(evidence = "runs")
+```
+
+Factories prioritize clear connection ownership and return materialized sources.
+Keep a caller-owned connection open for database-side dplyr execution. Supported
+SQL translation depends on [dbplyr](https://dbplyr.tidyverse.org/) and the driver.
+
+## HTTP requests, pagination and credentials
+
+Use [httr2](https://httr2.r-lib.org/) for authentication, retry policy and throttling.
+The following API example expects `data` and `next_cursor` fields. Adapt the
+parser and pagination callback to the actual API contract.
+
+```{r api, eval=FALSE}
+make_request <- function(cursor = NULL) {
+  httr2::request(Sys.getenv("ORDERS_API_URL")) |>
+    httr2::req_auth_bearer_token(Sys.getenv("ORDERS_API_TOKEN")) |>
+    httr2::req_url_query(cursor = cursor) |>
+    httr2::req_retry(max_tries = 4) |>
+    httr2::req_throttle(rate = 5)
+}
+api <- source_api(
+  request = function() make_request(),
+  parse = function(response) {
+    body <- httr2::resp_body_json(response, simplifyVector = TRUE)
+    tibble::as_tibble(body$data)
+  },
+  next_request = function(response) {
+    cursor <- httr2::resp_body_json(response)$next_cursor
+    if (is.null(cursor)) NULL else make_request(cursor)
+  },
+  max_pages = 100
+)
+api_definition <- product("api.orders") |>
+  add_source(api) |>
+  add_quality(~ amount >= 0)
+run(api_definition, evidence = "runs")
+```
+
+The factory reads fresh credentials when execution starts. The callback rebuilds
+subsequent requests with the same policies. Repeated requests, inconsistent page
+schemas and exceeding `max_pages` fail the run instead of silently truncating
+it. Without a configured retry bound, the adapter uses up to three httr2 attempts.
+
+## DuckLake, S3 and external catalogs
+
+A lake's technical registry records releases and execution. An external catalog
+receives descriptive metadata. Configure these independently.
+
+```{r remote-storage, eval=FALSE}
+config <- lake_config(
+  catalog = registry_postgres("DUCKLAKE_PG_CONNECTION"),
+  storage = storage_s3(
+    bucket = Sys.getenv("TIDYWEAVE_S3_BUCKET"),
+    prefix = "tidyweave/production",
+    endpoint = Sys.getenv("TIDYWEAVE_S3_ENDPOINT")
+  ),
+  landing = "landing-cache",
+  backend = "ducklake"
+)
+orders_definition |>
+  set_target(target_lake(config)) |>
+  run(evidence = "runs")
+```
+
+This configuration provisions no services and migrates no existing local lake.
+Verify DuckLake, S3 conditional writes, PostgreSQL permissions, backups and restore
+in your own environment. The full configuration example is
+`system.file("examples", "setup_s3.R", package = "tidyweave")`.
+See the [operations guide](https://github.com/JanWein/tidyweave/blob/main/docs/OPERATIONS.md)
+for OpenLineage, OpenMetadata and retrying pending metadata deliveries.
+
+## Let targets manage product dependencies
+
+A nested product is an upstream dependency. `as_targets()` converts the same
+composition to real [targets](https://books.ropensci.org/targets/) targets.
+Save the following as `_targets.R`; this example is displayed without executing
+a build inside the vignette.
+
+```{r targets-script, eval=FALSE}
+library(tidyweave)
+
+orders_definition <- product("orders") |> add_source("orders.csv")
+totals_definition <- product("totals") |>
+  add_source(orders_definition) |>
+  add_transform(function(data) dplyr::summarise(data, total = sum(amount)))
+
+as_targets(totals_definition, evidence = "runs")
+```
+
+Then run:
+
+```{r targets-run, eval=FALSE}
+targets::tar_make()
+collect(targets::tar_read(totals))
+```
+
+Each product executes once. Downstream products consume the completed upstream
+output and retain its run/release reference. Local file changes invalidate the
+affected products. Unchanged targets are reused, so they keep the original run
+ID and timestamps and create no new execution-evidence record. Ordinary statically
+referenced function globals are tracked; dynamic lookups, mutable environments
+and remote database/API changes need an explicit cue:
+
+```{r targets-cue, eval=FALSE}
+as_targets(api_definition, cue = targets::tar_cue(mode = "always"),
+  evidence = "runs")
+```
+
+Use connection factories in stored pipelines. A live DBI connection or lazy-table
+handle cannot be safely serialized into a targets cache. Definition variables
+such as `orders_definition` avoid colliding with the target named `orders`.
+Targets provides dependency scheduling and caching; a clock-based schedule still
+belongs to your CI runner, scheduler or deployment platform.
+
+## Start a project without configuring everything now
+
+```{r project}
+project_path <- file.path(root, "project")
+init_project(project_path, targets = TRUE, renv = TRUE, connect = TRUE)
+list.files(project_path)
+```
+
+The generated project runs with `source("run.R")` from its directory. Optional
+files have separate purposes:
+
+| File | What you do next |
+|---|---|
+| `_targets.R` | Install targets and call `targets::tar_make()` |
+| `init-renv.R` | Install renv and explicitly run the script to create a lockfile |
+| `job.qmd` | Render locally, publish to Posit Connect, then configure its schedule |
+
+Project creation installs nothing and publishes nothing. Keep the resulting
+`renv.lock` under version control, and restore it on another machine. Set deployment
+credentials in the runtime, and choose persistent storage for `TIDYWEAVE_EVIDENCE`.
+See [renv](https://rstudio.github.io/renv/) and
+[Connect scheduling](https://docs.posit.co/connect/user/scheduling/) for their
+respective lifecycle responsibilities.
+
+For an independently runnable synthetic example combining SQLite, Parquet, pins,
+quality, evidence and a metadata callback:
+
+```{r standalone-example, eval=FALSE}
+source(system.file("examples", "advanced_integrations.R", package = "tidyweave"))
+```
+
+```{r cleanup, include=FALSE}
+unlink(root, recursive = TRUE)
+```

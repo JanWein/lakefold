@@ -1,93 +1,144 @@
 ---
-title: "Workflow design"
+title: "Why this architecture: simple products, interchangeable components"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Workflow design}
+  %\VignetteIndexEntry{Why this architecture: simple products, interchangeable components}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
-library(lakefold)
-knitr::opts_chunk$set(eval = requireNamespace("duckdb", quietly = TRUE))
+## Begin with what the user wants
+
+A user wants a named, usable table. Its inputs, preparation, checks and destination
+fit in one product definition. There is no required platform object and no
+separate product type for derived data.
+
+```{r definition}
+library(tidyweave)
+orders <- product("orders") |>
+  add_source(data.frame(id = 1:2, amount = c(10, 20))) |>
+  add_transform(function(data) transform(data, amount = amount * 2)) |>
+  add_quality(~ amount >= 0)
+orders
+explain(orders)
 ```
 
-This storage guide uses optional DuckDB >= 1.5.5. For a database-free start,
-see [composing products](composing-products.html).
+Definition is separate from execution. Ordinary values are normalized at the
+composition boundary: a path becomes a file source; a formula becomes a rule;
+an R transform remains a function. A specification is useful when it carries
+configuration, ownership or reusable intent. It is unnecessary for every
+trivial operation.
 
+![Simple product composition is normalized and validated before component adapters execute it.](figures/composition-architecture.svg)
 
-## Define before executing
+## Separate intent from implementation
 
-A lakefold specification describes work before it is executed. This separation
-lets you assemble reusable components, inspect them and introduce more explicit
-steps as a workflow grows. `dl_plan()` inspects structure; it does not execute
-SQL or perform a data dry run.
-
-```{r specification}
-config <- dl_config(backend = "duckdb")
-source <- dl_source("orders.file", "orders.csv", utils::read.csv)
-contract <- dl_contract(
-  "orders.contract", "1.0.0", "Analytics", "Order amounts", "One order",
-  c(order_id = "integer", amount = "numeric"), key = "order_id"
-)
-pipeline <- dl_pipeline("orders.import", config, code_version = "v1") |>
-  dl_step_land(source) |>
-  dl_step_extract() |>
-  dl_step_transform(\(data) dplyr::mutate(data, amount = amount * 100),
-    id = "amount_in_cents") |>
-  dl_step_validate(contract) |>
-  dl_step_publish("orders")
-pipeline
-dl_plan(pipeline)
-```
-
-These chunks do not open connections, read `orders.csv` or create folders.
-Transforms are applied in order after extraction. They leave the landed original
-and raw table intact, and return data frames or lazy tables. Use `collect()`
-explicitly when an R-only algorithm needs in-memory data.
-
-## Execute with an object-first API
-
-| Specification | Unified entry point | Specific operation |
+| Intent | Simple representation | Interchangeable implementation |
 |---|---|---|
-| Pipeline | `dl_execute(pipeline)` | `dl_run(pipeline)` |
-| R product | `dl_execute(product, lake)` | `dl_build(lake, product)` |
-| Metric | `dl_execute(metric, lake)` | `dl_measure(lake, metric)` |
-| dbt project | `dl_execute(project)` | `dl_dbt_build(project)` |
+| Acquire data | Table, function or path | DBI, Arrow/Parquet, httr2 API, pins, custom source |
+| Prepare a table | R function | Supported lazy dplyr operations, SQL or dbt adapter |
+| Define expectations | Type vector or contract | Native schema and key checks |
+| Check business rules | Formula or function | Native counts, pointblank or custom quality engine |
+| Write the result | Target | Lake, DBI table, Parquet file, pin or custom writer |
+| Deliver metadata | Optional catalog | Callback, OpenLineage or OpenMetadata |
 
-A pipeline carries its connection-free config. Products and metrics need an
-explicit connection or config. Execution closes connections it opens; supplied
-connections remain caller-owned. dbt opens its own connections in a separate
-process, so do not pass `lake` when executing a dbt project.
+Backend-specific arguments live in adapter constructors. A different destination
+can keep the same source, transformation and rule composition. It can still have
+different limits: a Parquet file does not become a lake release merely because
+both implement `write_target()`.
 
-The result types reflect their operation: run result, metric tibble or dbt
-result. `dl_status()` and `dl_quality()` inspect R and dbt execution results.
-`dl_releases()` and `dl_lineage()` expose publication history and provenance.
-Metric tibbles carry a manifest with the input release and calculation details.
+## The internal layers have small responsibilities
 
-## Inspect incomplete definitions
+1. **Normalization** accepts convenient R inputs and gives them a consistent role.
+2. **Composition** records named sources, ordered transforms and optional checks,
+   one target and metadata destinations in a product.
+3. **Preflight** checks the graph, dependencies and adapter configuration without
+   running source callbacks. It cannot verify every remote permission or query.
+4. **Execution** resolves dependencies, reads inputs, prepares the candidate,
+   checks it and invokes the chosen target.
+5. **Evidence** describes the outcome. Catalog delivery is a separate operation.
 
-```{r incomplete}
-incomplete <- dl_pipeline("orders.import", config, code_version = "v1") |>
-  dl_step_land(source)
-dl_plan(incomplete)
-attr(dl_plan(incomplete), "complete")
+The lake adapter owns archival, full-candidate gates, release history and its
+publication transaction. Internal storage helpers support that job; they are
+not another public workflow language. `run()` is the common execution verb.
+`publish()` is a convenience that supplies a local lake target when absent.
+
+## Lifecycle and results
+
+```{r result}
+result <- run(orders)
+result$lifecycle
+status(result)
+quality(result)
+collect(result)
 ```
 
-`complete` only means the declared steps and layers form a valid sequence.
-Availability of files, credentials, SQL translations and data quality are
-checked at execution. Errors while adding steps explain invalid ordering early.
+The definition remains a definition. The separate run result records lifecycle
+states, timestamps, inputs, outputs, quality, status and available schema/row
+metadata. A run can complete in memory, publish, reuse a cached release, be
+blocked by quality, or fail during execution. Printing and accessors show the
+useful summary; raw conditions remain available locally for debugging.
 
-## Version definitions deliberately
+Metadata is inferred from execution where possible. Manual metadata is mainly
+business meaning: ownership, descriptions, declared keys and expectations.
+Input fingerprints mean different things on different sources: a lazy query
+fingerprint describes the query and is not proof that remote rows are unchanged.
 
-Registered `(kind, id, version)` definitions are immutable. Reconstruct a changed
-source or contract with a new version. Because a pipeline embeds these objects,
-increase its version too. Change `code_version` when callbacks, captured values
-or dependencies change; function-body hashes cannot capture all environments.
+`run(product, evidence = "runs")` adds durable local JSON evidence and a catalog
+outbox. It excludes input rows, executable definitions, connection/request
+objects and raw errors. Business descriptions and identifiers remain visible.
+The lake registry stores storage/release history; an external business catalog
+consumes metadata. These are separate responsibilities.
 
-Specifications can be saved as RDS but are not a portable language-independent
-format. Prefer version-controlled R definitions and explicit dependency locks.
-Update/remove-step helpers and an external adapter extension contract are future
-work. See the design review for the framework's composition principles and
-remaining extension boundaries.
+## Resource ownership
+
+| Resource | Who closes it? | What the user must remember |
+|---|---|---|
+| Caller-supplied DBI connection | Caller | Keep it open while using lazy results |
+| DBI source connection factory | tidyweave | Factory sources materialize before closing; lazy output is rejected |
+| Caller-supplied lake | Caller | Close with `close_lake()` when finished |
+| Folder/config opened by a lake target | tidyweave | The result keeps a durable release reference |
+| dbt subprocess connections | dbt | Close conflicting local database connections before invocation |
+| HTTP authentication | httr2 or your request factory | Supply fresh runtime credentials; do not store them in definitions |
+
+Lazy execution keeps supported computation in DBI/Arrow. R-only algorithms and
+certain targets need collection; use `collect()` deliberately. The lake target
+archives materialized inputs. A multi-source join across different backends also
+needs an explicit movement strategy; the framework does not silently invent one.
+
+## Guarantees stay with their owner
+
+Quality gates precede writes. Target adapters declare their storage guarantees
+through `capabilities()` and implement their own atomicity and cleanup. DBI
+transaction behavior depends on the driver. Local evidence requires one
+coordinated writer. No multi-system transaction connects a data target to a
+remote metadata service.
+
+A catalog failure leaves an already published output published. Durable pending
+deliveries can be retried with fresh adapters. Delivery is at least once, so
+remote consumers should deduplicate stable run/event identities. OpenLineage
+START and terminal events are buffered until execution finishes; this provides
+historical lineage, not live monitoring.
+
+Use targets for dependency caching and scheduling within its own model. Use an
+external scheduler, CI or Connect for recurring execution. Keep definitions in
+version control and use renv where dependency reproducibility matters. Inspection
+JSON is descriptive; it cannot reconstruct closure environments or credentials.
+
+## Why this architecture
+
+The external design follows tidyverse habits: object-first verbs, pipes, ordinary
+R objects and progressive configuration. Its internal structure draws on the
+useful parts of tidymodels: explicit intent, modular specifications, composition,
+validation and interchangeable implementations. There are no modeling APIs to
+learn and no reason to turn every function into a specification.
+
+This division makes the first example small while giving extension authors real
+interfaces. The same product remains useful as its source, checks and destination
+change. S3 and small capability declarations are sufficient; a plugin registry,
+large mutable platform object and separate package family would add concepts
+before they solve a current problem.
+
+See [the extension guide](extending-tidyweave.html), the
+[critical review](https://github.com/JanWein/tidyweave/blob/main/docs/REFACTOR_REVIEW.md)
+and the [modern data stack comparison](https://github.com/JanWein/tidyweave/blob/main/docs/MODERN_DATA_STACK.md).

@@ -1,465 +1,193 @@
 ---
-title: "Build a monthly reporting workflow, step by step"
+title: "Monthly deliveries, corrections and reproducible reports"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Build a monthly reporting workflow, step by step}
+  %\VignetteIndexEntry{Monthly deliveries, corrections and reproducible reports}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
 
 ```{r setup, include=FALSE, purl=FALSE}
-knitr::opts_chunk$set(collapse = TRUE, comment = "#>", message = FALSE)
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", message = FALSE,
+  eval = requireNamespace("duckdb", quietly = TRUE))
 ```
 
-This storage guide uses optional DuckDB >= 1.5.5. For a database-free start,
-see [composing products](composing-products.html).
+This guide uses optional DuckDB >= 1.5.5 and synthetic data. For a first example
+without infrastructure, start with [Compose a product](composing-products.html).
 
+We will publish August's total of **350**, accept a correction to **370**,
+reject a duplicate, add September's **390**, and read the original issued
+report. The same product grammar handles every delivery.
 
-## What you are building
+## 1. Describe one monthly delivery
 
-You receive a monthly spreadsheet with reserve amounts from two fictional
-entities. You want reports to read a reliable dataset, corrections to remain
-traceable, and last month's published report to remain explainable.
-
-This walkthrough follows that entire story. The numbers are deliberately small:
-**August starts at EUR 350, a correction changes it to EUR 370, and September
-adds a separate EUR 390.** No production data, credentials or external services
-are needed. If the purpose or terminology is unfamiliar, read
-[Why lakefold?](why-lakefold.html) first.
-
-| You can stop after... | What you will have |
-|---|---|
-| Step 2 | A local dataset that you can write and read |
-| Step 3 | Current data and reproducible historical versions |
-| Step 4 | A business check that prevents duplicate records |
-| Step 5 | Several months in one current table |
-| Steps 6 to 8 | Optional prepared products, reusable metrics and report records |
-
-Read the steps in order and reuse the same R session. Later steps build on the
-earlier objects. Step 6 is optional even if you continue to metrics in Step 7.
-Step 8 builds on the metric from Step 7.
-
-## Before you start
-
-Run this installation once. The online guide works without installing local
-vignettes or any optional integration.
-
-```{r installation, eval=FALSE, purl=FALSE}
-install.packages("remotes")
-remotes::install_github("JanWein/lakefold")
-```
-
-The package requires R >= 4.2 and DuckDB >= 1.5.5. The core example uses only
-lakefold and its normal dependencies. pointblank, dbt, dm, Shiny and Posit
-services are optional.
-
-## Step 1. Open a place for your reporting data
-
-```{r open-lake}
-library(lakefold)
-knitr::opts_chunk$set(eval = requireNamespace("duckdb", quietly = TRUE))
-root <- tempfile("lakefold-walkthrough-")
-lake <- dl_open(root)
-```
-
-**What changed:** a local folder now contains a DuckDB database, a delivery
-archive and a small configuration file. `lake` is the connection you pass to
-the next functions. This example uses a fresh temporary folder so it is safe to
-rerun. For a real project, use a dedicated path such as
-`dl_open("my-reporting-lake")`; reopening that folder reads the same data.
-
-You do not need to select layers, create a server, configure S3 or request a
-PostgreSQL database to try the workflow. Close the connection when you finish.
-
-## Step 2. Store the first August delivery
-
-Imagine that these rows have just been read from an Excel workbook. We create
-them directly in R so everyone can run the example without an input file.
-`amount` is a reserve amount in EUR, measured at the date in `date`.
-
-```{r first-delivery}
+```{r definition}
+library(tidyweave)
+root <- tempfile("monthly-reserves-")
 august_date <- as.Date("2026-08-31")
-august <- data.frame(
-  entity = c("North", "South"),
-  date = rep(august_date, 2),
-  amount = c(100, 250)
-)
+august <- data.frame(entity = c("North", "South"),
+  date = rep(august_date, 2), amount = c(100, 250))
 
-first <- dl_write(lake, august, "reserves")
-first$status
-dl_read(lake, "reserves")
-sum(dl_read(lake, "reserves")$amount)
+reserves <- product("reserves") |>
+  add_source(august, name = "delivery") |>
+  add_contract(contract(
+    columns = c(entity = "character", date = "Date", amount = "numeric"),
+    key = c("entity", "date")
+  )) |>
+  add_quality(~ amount >= 0, name = "nonnegative") |>
+  set_target(target_lake(root, partition_by = "date"))
+
+first <- run(reserves, business_date = "2026-08-31")
+sum(collect(first)$amount)
+stopifnot(first$status == "published", sum(collect(first)$amount) == 350)
 ```
 
-**Expected result: `published`, two rows, and a total of 350.**
+The contract requires one row per entity and date. The rule rejects negative
+amounts. The target replaces complete delivered dates and retains other dates.
+No owner, catalog service or manually assigned definition version is required.
 
-`"reserves"` is the dataset's stable name, called its **asset ID**. Your report
-can keep reading that name even when next month's input filename changes.
-`first` contains the outcome of writing the data; `dl_read()` returns the data
-itself as a tibble, an ordinary R table.
+`first$release_id` identifies a checked, immutable table state. A reporting date
+is a value inside the table; a release ID identifies its version. They are
+different things.
 
-Without a custom contract, lakefold remembers the column names and types from
-the first successful delivery. Future schema changes and empty tables are
-blocked. Missing values are allowed. This is structural protection; it cannot
-infer which business records should be unique or whether an amount is plausible.
+## 2. Record the report when it is issued
 
-Because we submitted an R data frame, the archive contains an RDS snapshot of
-that object. The [real-file example below](#use-a-real-excel-or-csv-file)
-explains how to preserve the original workbook instead.
+A metric gives the number an explicit meaning. A reserve is a stock at one date,
+so adding August and September is not a valid reserve total. The stock setting
+requires selection of one reporting date.
 
-## Step 3. Correct August without losing the first version
+```{r issued-report}
+lake <- open_lake(root)
+total_reserve <- metric("total_reserve", "reserves",
+  expr = sum(amount), time_column = "date", time_behavior = "stock",
+  unit = "EUR", approved = TRUE, code_version = "report-v1")
+as_reported <- measure(lake, total_reserve,
+  at = august_date, release = first$release_id)
+report_release(lake, "august-report-v1",
+  results = list(total_reserve = as_reported), code_version = "report-v1")
+close_lake(lake)
+stopifnot(as_reported$value == 350)
+```
 
-South sends a correction: its amount should have been 270, not 250.
+`approved = TRUE` records your declared business approval; it does not perform
+that review. The report manifest stores the value, metric definition and input
+release. It does not render a PDF or presentation. Your existing reporting tools
+can use the value.
+
+## 3. Accept a correction without changing the issued report
 
 ```{r correction}
 corrected <- august
 corrected$amount[corrected$entity == "South"] <- 270
-correction <- dl_write(lake, corrected, "reserves")
-
-sum(dl_read(lake, "reserves")$amount)
-sum(dl_read(lake, "reserves", release = first$release_id)$amount)
+reserves <- reserves |>
+  add_source(corrected, name = "delivery", replace = TRUE)
+correction <- run(reserves, business_date = "2026-08-31")
+sum(collect(correction)$amount)
+sum(collect(first)$amount)
+stopifnot(sum(collect(correction)$amount) == 370,
+  sum(collect(first)$amount) == 350)
 ```
 
-**Expected result: the current total is 370; the original total is still 350.**
+`replace = TRUE` replaces that named source in the product definition. The lake
+target separately controls how the resulting delivery updates stored data.
+The current release now totals 370. Reading the first run still selects its
+exact release, not whatever happens to be current.
 
-A successful write creates a **release**, a checked version of the entire
-published table. The default read selects the current release. Supplying
-`release` selects one exact historical version. Save the release ID when an
-analysis needs to keep referring to that version.
+## 4. Reject a duplicate delivery
 
-```{r repeat-delivery}
-again <- dl_write(lake, corrected, "reserves")
-again$status
-```
-
-**Expected result: `cached`.** The unchanged built-in workflow can reuse the
-current release. It does not create another copy just because you reran the
-same call. `dl_write()` only reuses the current release: deliberately writing an
-older payload after a different release makes it current through a new release.
-The advanced job runner has a separate historical retry policy, explained in
-[Quality and history](quality-history.html).
-
-## Step 4. Prevent a business mistake
-
-A file with South listed twice still has the correct column types. A schema
-check alone cannot know that it is wrong. Our business rule is:
-**one row per entity and reporting date**.
-
-Add a **contract**, the requirements that a proposed table must meet:
-
-```{r business-contract}
-contract <- dl_contract("reserves.contract",
-  columns = c(entity = "character", date = "Date", amount = "numeric"),
-  key = c("entity", "date"),
-  max_age_hours = NULL
-)
-dl_write(lake, corrected, "reserves", contract = contract)
-```
-
-The key makes each entity/date combination unique. Explicit contracts also
-require non-missing values in all declared columns by default. No owner or
-long description is required. We leave the age deadline unset because monthly
-deliveries need their own schedule, which can be added later.
-
-Now simulate a duplicate South record:
-
-```{r blocked-delivery}
+```{r duplicate}
 bad <- rbind(corrected, corrected[2, ])
-blocked <- dl_write(lake, bad, "reserves", contract = contract,
-  stop_on_failure = FALSE)
-blocked$status
-
-dl_quality(lake, run_id = blocked$run_id) |>
-  dplyr::filter(status == "failed") |>
-  dplyr::select(rule, status, n_failed)
-
-sum(dl_read(lake, "reserves")$amount)
+blocked <- reserves |>
+  add_source(bad, name = "delivery", replace = TRUE) |>
+  run(stop_on_failure = FALSE)
+incidents(blocked)
+stopifnot(blocked$status == "blocked")
 ```
 
-**Expected result: `blocked`, a failed `unique_key` check, and a current total
-of 370.** The duplicate would have inflated the total to 640. It never became
-the published dataset.
+The repeated South row violates the contract key. It never becomes current.
+The default raises an error on a failed run; `stop_on_failure = FALSE` lets
+this lesson inspect the outcome. Correcting data belongs in preparation or the
+upstream source, not inside a quality check that silently deletes a row.
 
-For this lesson, `stop_on_failure = FALSE` lets us inspect the result. The
-default raises an error after recording the failure, which is useful for jobs
-that should stop. Once an execution attempt uses an explicit contract, keep
-supplying one on later writes, even if the first contracted attempt failed.
-This prevents silently dropping the checks you chose.
+## 5. Add a complete September partition
 
-You can stop here. You already have a useful local workflow for complete
-replacement deliveries, corrections and a business quality rule.
-
-## Step 5. Keep several months in the current table
-
-A release is a version of a table; a reporting date is a value inside that
-table. Those are different things.
-
-`dl_write()` replaces the complete current data state. Writing only September
-with it would make September the current table; August would still be available
-in older releases. If each delivery contains one month and you want **August
-and September together in the current table**, use replacement by month.
-
-Create September's complete delivery and add one argument:
-
-```{r september-delivery}
-september <- data.frame(
-  entity = c("North", "South"),
-  date = rep(as.Date("2026-09-30"), 2),
-  amount = c(110, 280)
-)
-september_run <- dl_write(lake, september, "reserves", contract = contract,
-  partition_by = "date", business_date = "2026-09-30")
-dl_read(lake, "reserves") |>
-  dplyr::arrange(date, entity)
+```{r september}
+september <- data.frame(entity = c("North", "South"),
+  date = rep(as.Date("2026-09-30"), 2), amount = c(110, 280))
+latest <- reserves |>
+  add_source(september, name = "delivery", replace = TRUE) |>
+  run(business_date = "2026-09-30")
+collect(latest) |> dplyr::arrange(date, entity)
+stopifnot(nrow(collect(latest)) == 4L)
 ```
 
-**Expected result: four rows. August contains 100 and 270; September contains
-110 and 280.** Both months now belong to the current release.
+Both dates are now in the current table. Each supplied date must contain its
+complete replacement: sending only South for September would remove North from
+September. This is partition replacement, not a row upsert. The gate validates
+the complete candidate, including retained August rows.
 
-`partition_by = "date"` means: replace every date present in this delivery and
-retain the other dates. `business_date` separately records the delivery's
-reporting date in metadata; it does not create a column or select a partition.
-The same argument works with CSV files and a custom date reader.
+## 6. Reuse a pinned release in another product
 
-Each supplied month must be complete. A later September delivery replaces all
-of September, so sending only South would remove North from September's
-current state. This is month replacement, not a row-level upsert. The full
-resulting candidate is checked, including the retained months.
-
-No pipeline definition is needed for this common case. Introduce an explicit
-[pipeline](workflow-design.html) when you need named transformations or more
-control over execution. It uses the same landing, quality and release behavior.
-To inspect a change, try `dl_compare(lake, "reserves")`: the contract already
-declares its business key.
-
-## Step 6. Reuse a prepared reporting table (optional)
-
-Suppose several reports need monthly totals. Rather than repeating the same
-aggregation in each report, define a **product**: a prepared table built from
-recorded input releases.
-
-```{r prepared-product}
-totals_contract <- dl_contract("reserve_totals.contract",
-  columns = c(date = "Date", total_reserve = "numeric"),
-  key = "date", max_age_hours = NULL)
-
-totals <- dl_product("reserve_totals",
-  inputs = c(reserves = "reserves"),
-  build = function(inputs) {
-    inputs$reserves |>
-      dplyr::group_by(date) |>
-      dplyr::summarise(total_reserve = sum(amount, na.rm = TRUE), .groups = "drop")
-  },
-  contract = totals_contract, code_version = "tutorial-v1")
-
-dl_build(lake, totals)
-dl_read(lake, "reserve_totals") |> dplyr::arrange(date)
+```{r derived-product}
+lake <- open_lake(root)
+monthly_totals <- product("monthly_totals") |>
+  add_source(source_release(lake, "reserves", latest$release_id)) |>
+  add_transform(function(data) {
+    data |> dplyr::group_by(date) |>
+      dplyr::summarise(total = sum(amount), .groups = "drop")
+  })
+totals <- collect(run(monthly_totals)) |> dplyr::arrange(date)
+totals
+stopifnot(identical(totals$total, c(370, 390)))
 ```
 
-**Expected result: 370 for August and 390 for September.**
+This is the same kind of product as the delivery workflow. Its input happens
+to be a checked release rather than a spreadsheet. The source records the exact
+release it read. Keep `lake` open until the lazy result has been collected.
 
-The builder receives the input tables and returns one output table. lakefold
-records the exact input releases used and checks the output contract. In larger
-workflows, the builder can join several inputs or perform other dplyr operations.
-A new source release does not automatically rebuild this product; your job must
-call `dl_build()` again when the prepared table should be refreshed.
+## 7. Read the issued report, without recalculating it
 
-## Step 7. Define what a reported number means (optional)
-
-A reserve is a **stock** measured at a date. Adding August's 370 to September's
-390 produces 760, but that is not the reserve at either reporting date.
-
-A **metric** records the formula, unit, allowed grouping and time meaning. It
-can use the published `"reserves"` asset directly; Step 6's product is optional.
-
-```{r reusable-metric}
-total_reserve <- dl_metric("total_reserve", "reserves",
-  expr = sum(amount, na.rm = TRUE), dimensions = "entity",
-  time_column = "date", time_behavior = "stock",
-  unit = "EUR", owner = "Finance",
-  description = "Total reserve at one reporting date",
-  approved = TRUE, code_version = "tutorial-v1")
-
-current_august <- dl_measure(lake, total_reserve, at = august_date)
-current_august
-
-dl_measure(lake, total_reserve, by = "entity", at = august_date)
+```{r read-report}
+issued <- report_read(lake, "august-report-v1", values_only = TRUE)
+current <- measure(lake, total_reserve, at = august_date)
+issued$total_reserve$value
+current$value
+stopifnot(issued$total_reserve$value == 350, current$value == 370)
+close_lake(lake)
 ```
 
-**Expected result: 370 overall, or North 100 and South 270 when grouped.**
-
-The stock setting requires exactly one selected reporting date. Once the table
-contains both months, omitting `at` raises an error instead of adding the two
-stocks. You explicitly set `approved = TRUE` here because the synthetic metric's
-meaning has been reviewed for the example. This flag records a declared
-approval; it does not perform a business review for you.
-
-## Step 8. Preserve the number used in an earlier report (optional)
-
-Suppose the August report was issued before South's correction. Its figure was
-350. Recalculate against the original release, then record the result and its
-provenance:
-
-```{r report-record}
-as_reported <- dl_measure(lake, total_reserve,
-  at = august_date, release = first$release_id)
-report <- dl_report_release(lake, "august-report-v1",
-  results = list(total_reserve = as_reported), code_version = "tutorial-v1")
-
-as_reported$value
-current_august$value
-report$id
-```
-
-**Expected result: 350 as originally reported, 370 in the corrected view, and
-report ID `august-report-v1`.** This reconstruction assumes the same formula
-was used originally. In a real workflow, freeze the metric results when the
-report is issued so both the original formula and inputs are recorded.
-
-The report record contains values, metric versions and input release IDs. It
-does not render a document. Use those metric results in your existing Quarto,
-Shiny, Word or other reporting workflow. Treat issued metric definitions and
-report IDs as versioned records when business meaning changes.
-
-## Check the whole story
-
-| Event | Current published table | August in the original pinned release |
+| Event | Current data | Issued August report |
 |---|---|---|
-| First August delivery | August: 350 | 350 |
-| South's correction | August: 370 | 350 |
-| Duplicate South row | Unchanged: August 370 | 350 |
-| Complete September delivery through the monthly pipeline | August: 370; September: 390 | 350 |
+| First August delivery | August 350 | 350 |
+| August correction | August 370 | 350 |
+| Duplicate delivery | August 370, unchanged | 350 |
+| September delivery | August 370; September 390 | 350 |
 
-The value of the framework is this consistent behavior across steps. Your
-choice of an Excel reader, a dplyr transformation or an optional SQL model
-can change while the questions about inputs, checks and versions stay clear.
+The point is not to make 350 and 370 agree. It is to preserve which question
+each number answers, with the input and calculation needed to explain it.
 
-```{r verify-results, include=FALSE, purl=TRUE}
-stopifnot(
-  first$status == "published",
-  correction$status == "published",
-  again$status == "cached",
-  blocked$status == "blocked",
-  any(dl_quality(lake, run_id = blocked$run_id)$rule == "unique_key"),
-  nrow(dl_read(lake, "reserves")) == 4L,
-  sum(dl_read(lake, "reserves", release = first$release_id)$amount) == 350,
-  current_august$value == 370,
-  as_reported$value == 350,
-  dl_measure(lake, total_reserve, at = as.Date("2026-09-30"))$value == 390,
-  identical(dl_read(lake, "reserve_totals") |>
-    dplyr::arrange(date) |> dplyr::pull(total_reserve), c(370, 390))
-)
-```
+## Use your own file next
 
-## Use a real Excel or CSV file
+Replace only the source. A custom Excel reader can convert Excel timestamps to
+R dates so they match the contract:
 
-For your own workbook, run this after creating the contract in Step 4. The
-workbook must have a `Reserves` sheet with columns `entity`, `date`, `amount` in
-that order. This block needs your file and the optional readxl package, so it
-is not run as part of the bundled example.
-
-```{r real-excel, eval=FALSE, purl=FALSE}
-install.packages("readxl") # once
+```{r real-file, eval=FALSE, purl=FALSE}
 read_reserves <- function(path) {
-  readxl::read_excel(path, sheet = "Reserves",
-    col_types = c("text", "date", "numeric")) |>
+  readxl::read_excel(path, sheet = "Reserves") |>
     dplyr::mutate(date = as.Date(date))
 }
-dl_write(lake, "incoming/august.xlsx", "reserves",
-  contract = contract, reader = read_reserves)
+reserves |>
+  add_source("incoming/reserves.xlsx", name = "delivery",
+    reader = read_reserves, replace = TRUE) |>
+  run(evidence = "runs")
 ```
 
-Passing the path preserves the original workbook before parsing. If you
-instead read a workbook yourself and pass the resulting data frame, lakefold
-archives that R object, not the workbook. Excel dates are converted to R `Date`
-values here to match the contract. Use the same reader in `dl_source()` if you
-need Step 5's monthly replacement workflow for workbooks.
+Passing a file path lets the lake archive the original workbook. Passing an R
+table archives that table as RDS instead. Use one coordinated writer per lake.
+For shared infrastructure, configure a target once rather than adding backend
+arguments to every step. See [workflow design](workflow-design.html) and the
+[operations guide](https://github.com/JanWein/tidyweave/blob/main/docs/OPERATIONS.md).
 
-CSV, TSV and RDS have built-in readers. For the dated reserve schema, use an
-explicit CSV reader as in Step 5. Other CSV files can use
-`dl_write(lake, "orders.csv")` directly. Semicolon-separated files can use
-`reader = utils::read.csv2` when their number format matches that reader.
-Custom readers and rules are re-evaluated by default on the simple path; supply
-`code_version` only when you deliberately want versioned cache reuse.
-
-## Add pointblank checks when they help (optional)
-
-The contract key already catches duplicates. If you also want amounts to be
-nonnegative, pointblank can express that rule without writing a custom check
-function. Install pointblank separately to run this block. It validates an R
-data frame and needs no changes to the earlier published releases.
-
-```{r pointblank-rule, eval=requireNamespace("pointblank", quietly=TRUE), purl=FALSE}
-pb_contract <- dl_contract("reserves.with_amount_check",
-  columns = c(entity = "character", date = "Date", amount = "numeric"),
-  key = c("entity", "date"), max_age_hours = NULL,
-  rules = list(dl_pointblank("nonnegative", function(data) {
-    pointblank::create_agent(data) |>
-      pointblank::col_vals_gte(columns = "amount", value = 0)
-  })))
-negative <- corrected
-negative$amount[2] <- -270
-amount_check <- dl_validate(negative, pb_contract)
-amount_check |>
-  dplyr::filter(status != "passed") |>
-  dplyr::select(rule, status)
-stopifnot(any(amount_check$status == "failed"))
-```
-
-The default rule policy blocks a failed check. For graded warning/blocking
-thresholds, segments, an input gate before Raw and quality reports, continue
-with [Quality gates](quality-gates.html). To apply this new contract to future
-writes, supply it explicitly; updating an already registered definition requires
-a new version. Installing pointblank alone does not add business rules.
-
-## Inspect the history and close the connection
-
-```{r history}
-dl_releases(lake, "reserves") |>
-  dplyr::select(release_id, business_date, quality)
-dl_close(lake)
-
-lake <- dl_open(root)
-sum(dl_read(lake, "reserves", release = first$release_id)$amount)
-dl_close(lake)
-```
-
-**Expected result after reopening: the pinned August release still totals 350.**
-The data lives in the lake folder, not in the lifetime of the `lake` R variable.
-A lazy read with `lazy = TRUE` needs an open connection; the default read collects
-all rows into R. Filter or aggregate lazy tables before collecting large data.
-
-The downloadable script runs the core example in a temporary folder, checks
-these outcomes and cleans up its own demo data:
-
-```{r run-script, eval=FALSE, purl=FALSE}
-source(system.file("examples", "monthly_reporting.R", package = "lakefold"),
-  echo = TRUE)
-```
-
-## Turn the prototype into a recurring job
-
-Keep your contract and processing definitions in version-controlled R files.
-Wrap the run in a function, open the lake inside it, and register
-`on.exit(dl_close(lake), add = TRUE)` so errors also close the connection.
-Point the source at the next delivery and run that function from your existing
-scheduler. One coordinated process should write to a given lake.
-
-| When the prototype needs... | Next addition |
-|---|---|
-| An existing Posit environment | Develop in Workbench; schedule the R job and publish reports on Connect |
-| A visible history for colleagues | `dl_catalog_export()` and the optional read-only Shiny `dl_catalog()` |
-| Expected-delivery alerts | `dl_check_delivery()` from a scheduler with explicit dates and deadlines |
-| Shared Parquet storage | Create a DuckLake target with the required local or S3 storage configuration |
-| Remote catalog metadata | Configure PostgreSQL after it has been provisioned; this does not enable concurrent writers by itself |
-| A graph of SQL models | Add dbt, then explicitly publish checked snapshots when lakefold releases are needed |
-| Relationships across tables | Declare keys with dm |
-
-These are deployment or workflow choices, not prerequisites for the local
-example. See [Operations](https://github.com/JanWein/lakefold/blob/main/docs/OPERATIONS.md),
-[Workflow design](workflow-design.html), [dbt workflows](dbt-workflows.html)
-and [Products and metrics](products-metrics.html) for the next relevant step.
-
-```{r cleanup, include=FALSE, purl=FALSE}
+```{r cleanup}
 unlink(root, recursive = TRUE)
 ```

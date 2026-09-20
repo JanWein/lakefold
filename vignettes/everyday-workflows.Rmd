@@ -7,8 +7,10 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
-```{r setup, include=FALSE, purl=FALSE}
+```{r setup, include=FALSE}
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>", message = FALSE)
+library(tidyweave)
+knitr::opts_chunk$set(eval = requireNamespace("duckdb", quietly = TRUE))
 ```
 
 This storage guide uses optional DuckDB >= 1.5.5. For a database-free start,
@@ -27,12 +29,10 @@ key identifies a record; a partition identifies a complete group to replace.
 Choose those meanings for your own domain.
 
 ```{r open-and-write}
-library(lakefold)
-knitr::opts_chunk$set(eval = requireNamespace("duckdb", quietly = TRUE))
-root <- tempfile("lakefold-everyday-")
-lake <- dl_open(root)
+root <- tempfile("tidyweave-everyday-")
+lake <- open_lake(root)
 orders <- data.frame(id = c(1L, 2L), amount = c(10, 20))
-first <- dl_write(lake, orders, "orders")
+first <- write_data(lake, orders, "orders")
 ```
 
 An automatic structural schema allows integers and decimals in numeric columns.
@@ -46,8 +46,8 @@ A corrected delivery changes order 1, removes order 2, and introduces order 3:
 
 ```{r compare-releases}
 corrected <- data.frame(id = c(1L, 3L), amount = c(12, 30))
-second <- dl_write(lake, corrected, "orders")
-difference <- dl_compare(lake, "orders", key = "id")
+second <- write_data(lake, corrected, "orders")
+difference <- compare(lake, "orders", key = "id")
 difference
 difference$numeric_summary
 difference$changed
@@ -82,11 +82,11 @@ delivery contains a complete partition:
 ```{r partition-example}
 august <- data.frame(id = 1L, month = as.Date("2026-08-31"), amount = 100)
 september <- data.frame(id = 1L, month = as.Date("2026-09-30"), amount = 110)
-dl_write(lake, august, "monthly_orders", partition_by = "month")
-dl_write(lake, september, "monthly_orders", partition_by = "month")
+write_data(lake, august, "monthly_orders", partition_by = "month")
+write_data(lake, september, "monthly_orders", partition_by = "month")
 august$amount <- 105
-dl_write(lake, august, "monthly_orders", partition_by = "month")
-dl_read(lake, "monthly_orders") |> dplyr::arrange(month)
+write_data(lake, august, "monthly_orders", partition_by = "month")
+read_release(lake, "monthly_orders") |> dplyr::arrange(month)
 ```
 
 The current table contains August 105 and September 110. A correction for
@@ -96,7 +96,7 @@ region/date combination or another declared partition where that meaning fits.
 The resulting full table is validated before publication.
 
 Delivery monitoring checks the current date partitions. For a multi-date full
-replacement, pass `date_column = "month"` to `dl_check_delivery()`. If no date
+replacement, pass `date_column = "month"` to `check_delivery()`. If no date
 column can be identified, the recorded `business_date` is used. Historical
 deliveries removed from the current table do not satisfy a current expectation.
 
@@ -110,14 +110,19 @@ fetch_orders <- function() {
   # Replace this body with your existing authenticated client call.
   data.frame(id = 1:2, amount = c(25, 75))
 }
-dl_write(lake, fetch_orders, "api_orders")
+product("api_orders") |>
+  add_source(fetch_orders) |>
+  set_target(lake) |>
+  run()
 ```
 
 The function runs once per call; its returned table is archived as RDS. A
 changed response produces a new input fingerprint. This records the received
 R object. Use a file source when the exact original workbook or response bytes
-must be retained. Acquisition errors happen before a pipeline run is created.
-For very large inputs, this callback is not a streaming interface.
+must be retained. Pass `evidence = "runs"` to `run()` when source failures and
+other attempts need a durable execution record. For very large inputs, use a
+lazy DBI or Arrow source and backend-supported transformations. An ordinary
+callback returning a data frame holds that table in R memory.
 
 ## Calculate once, preserve the explanation
 
@@ -126,12 +131,12 @@ units are optional. A governed calculation still needs an explicit approval
 state and a code version:
 
 ```{r metric-and-report}
-total <- dl_metric("orders.total", "orders", sum(amount, na.rm = TRUE),
+total <- metric("orders.total", "orders", sum(amount, na.rm = TRUE),
   approved = TRUE, code_version = "analysis-v1")
-values <- dl_measure(lake, total)
-report <- dl_report_release(lake, "orders-report-v1", list(total = values),
+values <- measure(lake, total)
+report <- report_release(lake, "orders-report-v1", list(total = values),
   code_version = "reporting-v1")
-dl_report_read(lake, "orders-report-v1", values_only = TRUE)
+report_read(lake, "orders-report-v1", values_only = TRUE)
 ```
 
 The saved result is 42, together with its formula identity, input release,
@@ -154,27 +159,26 @@ check every input column.
 Repeat calculation and saving are safe when the report content is identical:
 
 ```{r repeat-report}
-again <- dl_measure(lake, total)
-saved_again <- dl_report_release(lake, "orders-report-v1", list(total = again),
+again <- measure(lake, total)
+saved_again <- report_release(lake, "orders-report-v1", list(total = again),
   code_version = "reporting-v1")
 saved_again$id
 ```
 
 Only the calculation time is ignored when comparing a retry. The first saved
 timestamps remain. Changed input releases, metric definitions, parameters,
-report code or values require a new report ID. `dl_report_read()` itself never
-recalculates a metric and can reopen reports created before 0.6.0. JSON readback
-represents date values as ISO strings.
+report code or values require a new report ID. `report_read()` itself never
+recalculates a metric. JSON readback represents date values as ISO strings.
 
 ## Analyze with a read-only connection
 
 Close the writer and reopen the existing folder:
 
 ```{r read-only}
-dl_close(lake)
-lake <- dl_open(root, read_only = TRUE)
-dl_measure(lake, total)
-dl_report_read(lake, "orders-report-v1", values_only = TRUE)
+close_lake(lake)
+lake <- open_lake(root, read_only = TRUE)
+measure(lake, total)
+report_read(lake, "orders-report-v1", values_only = TRUE)
 ```
 
 The persistent database is attached read-only. No schema migration runs, and
@@ -189,30 +193,32 @@ The backend's normal connection locking and storage access rules still apply.
 For a rule that fails during evaluation, retain its original local exception:
 
 ```{r local-errors}
-contract <- dl_contract("diagnostic", columns = c(id = "integer"),
-  rules = list(dl_rule("configuration", function(data) stop("Missing rule setting"))))
-quality <- dl_validate(data.frame(id = 1L), contract, keep_errors = TRUE)
-lapply(dl_quality_errors(quality), conditionMessage)
+contract <- contract("diagnostic", columns = c(id = "integer"),
+  rules = list(quality_rule("configuration", function(data) stop("Missing rule setting"))))
+quality <- validate(data.frame(id = 1L), contract, keep_errors = TRUE)
+lapply(quality_errors(quality), conditionMessage)
 ```
 
 The exception remains in memory. Raw exception text is not stored in the
 registry, because it may include private values. For pointblank, retain agents
-with `keep_agents = TRUE` and use `dl_pointblank_report()` for its native detail.
+with `keep_agents = TRUE` and use `pointblank_report()` for its native detail.
 
 For a crashed writer, first stop the original process and inspect
-`dl_interrupted()`. `dl_recover()` previews explicitly selected runs and staging
+`interrupted()`. `recover()` previews explicitly selected runs and staging
 slots, refuses known live processes, and leaves releases and quality evidence
 intact. Unknown ownership requires `writer_stopped = TRUE` after external
-verification. See the [operations guide](https://github.com/JanWein/lakefold/blob/main/docs/OPERATIONS.md)
+verification. See the [operations guide](https://github.com/JanWein/tidyweave/blob/main/docs/OPERATIONS.md)
 for the execution and retry procedure. Recovery is an occasional operational
 step, not part of an ordinary write.
 
 ## Boundaries to plan for
 
 The framework still needs one coordinated writer. It materializes a full
-candidate for partition corrections and retains each release table. Multi-table
-atomic publication, incremental upserts, distributed locking and automated
-retention are separate future work. Run the bundled `benchmark.R` against your
+candidate for partition corrections and retains each release table. Atomic
+multi-product publication, row-level upserts within a lake, distributed locking
+and retention of published data are separate concerns. Other targets can expose
+their own write modes; inspect their capabilities and transaction guarantees.
+Run the bundled `benchmark.R` against your
 own workload before selecting an operating configuration. Remote S3/PostgreSQL
 and backup restoration require verification in that environment.
 
@@ -220,8 +226,8 @@ and backup restoration require verification in that environment.
 stopifnot(values$value == 42,
   difference$counts[["changed"]] == 1,
   difference$numeric_summary$difference == 12,
-  sum(dl_read(lake, "monthly_orders")$amount) == 215,
-  nrow(dl_registry(lake, "reports")) == 1)
-dl_close(lake)
+  sum(read_release(lake, "monthly_orders")$amount) == 215,
+  nrow(registry(lake, "reports")) == 1)
+close_lake(lake)
 unlink(root, recursive = TRUE)
 ```
