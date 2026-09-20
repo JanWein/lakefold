@@ -1,5 +1,11 @@
 test_that("local shorthand defines a lake without creating anything", {
-  root <- file.path(withr::local_tempdir(), "new-lake")
+  # Resolve existing temporary-directory aliases before adding the absent lake.
+  parent <- normalizePath(
+    withr::local_tempdir(),
+    winslash = "/",
+    mustWork = TRUE
+  )
+  root <- file.path(parent, "new-lake")
   config <- lake_config(path = root)
   expect_s3_class(config, "tw_config")
   expect_identical(config$backend, "duckdb")
@@ -50,10 +56,9 @@ test_that("shorthand and open_lake reconnect to the same local storage", {
   skip_if_not_installed("duckdb")
   root <- file.path(withr::local_tempdir(), "lake")
   config <- lake_config(path = root)
-  expect_message(
-    accepted <- ingest(data.frame(id = 1L), to = config, name = "orders"),
-    NA
-  )
+  expect_message(lake <- connect_lake(config), NA)
+  accepted <- ingest(data.frame(id = 1L), to = lake, name = "orders")
+  close_lake(lake)
   expect_true(file.exists(file.path(root, "tidyweave.json")))
   lake <- open_lake(root)
   expect_equal(read_release(lake, "orders", accepted$release_id)$id, 1L)
