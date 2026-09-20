@@ -9,8 +9,7 @@ release candidate.
 | Check | Result |
 |---|---|
 | Full source build and `R CMD check --no-manual` | 0 errors, 0 warnings, 0 notes |
-| Installed package test suite, DuckDB default | 933 passed expectations; no failures, warnings or skips |
-| Complete source suite, DuckLake default | 176 tests; 930 passed expectations, no failures or warnings; one installed-worker test skipped here and passed in the package check |
+| Installed package test suite, DuckDB default | 961 passed expectations; no failures, warnings or skips; includes DuckLake integration tests and a separate installed-package worker |
 | Installation with hard dependencies only | Native workflow, contracts, quality, metadata and missing optional-backend preflight passed |
 | Documentation | All 12 vignettes built, extracted R scripts executed and outputs rebuilt in the package check |
 | Minimal installed workflow | Ordinary table to checked product to tibble passed |
@@ -34,6 +33,13 @@ rollback, and reject unsafe DuckDB BIGINT read modes. Lake checks retain complet
 candidate validation, original archives, pinned releases and quality evidence.
 Acquisition/combination failures create durable failed runs. Runtime input IDs
 remain separate from immutable product definitions, including targets execution.
+
+Final regression checks reproduce pins versions with identical timestamps and
+verify the exact written reference, latest data, historical reads, unchanged
+content and an explicit forced reversion after the timestamp advances. Ambiguous
+external pin order is rejected. Paths remain canonical before and after output
+directory creation; unchanged targets workflows retain the expected cache hits.
+The shared path correction also covers Windows normalization.
 
 HTTP fixtures exercise API pagination and retry, OpenMetadata requests and
 OpenLineage events. Payloads were also checked against official JSON schemas.
