@@ -83,4 +83,4 @@ are pinned release sources; other results reuse submitted data or a lazy query
 with its backend's mutability. `measure(lake_result, metric)` retains the lake
 release identity.
 Managed dbt projects own generated profiles and bindings, while normal SQL,
-contracts and tests stay in the project. See [the design plan](docs/UNIFIED_GRAMMAR_PLAN.md).
+contracts and tests stay in the project. See [the design plan](https://github.com/JanWein/tidyweave/blob/main/docs/UNIFIED_GRAMMAR_PLAN.md).
