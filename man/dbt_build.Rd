@@ -13,7 +13,8 @@ dbt_build(
   vars = list(),
   echo = TRUE,
   timeout = Inf,
-  stop_on_failure = TRUE
+  stop_on_failure = TRUE,
+  catalog = NULL
 )
 
 dbt_test(
@@ -23,7 +24,8 @@ dbt_test(
   vars = list(),
   echo = TRUE,
   timeout = Inf,
-  stop_on_failure = TRUE
+  stop_on_failure = TRUE,
+  catalog = NULL
 )
 }
 \arguments{
@@ -46,11 +48,20 @@ rejected.}
 exit
 status, failed nodes or missing artifacts. The condition's \code{result} field
 retains diagnostics. Set \code{FALSE} to inspect failures as ordinary results.}
+
+\item{catalog}{Optional \code{\link[=catalog_openmetadata_dbt]{catalog_openmetadata_dbt()}} adapter, a function
+receiving the dbt result, or an S3 catalog whose \code{capabilities()} declares
+\code{metadata_inputs = "tw_dbt_result"} and implements \code{publish_metadata()}.
+After dbt
+finishes, hand this invocation's artifacts to OpenMetadata's ingestion
+engine. A delivery failure warns and leaves the dbt outcome unchanged.
+Retry with \code{publish_metadata(catalog, result)} without rebuilding models.}
 }
 \value{
 A \code{tw_dbt_result} list with \code{status} (integer exit code), \code{success}
 (logical), \code{command}, \code{results} (node tibble), parsed \code{manifest},
-\code{artifacts_dir}, \code{stdout}, \code{stderr} and \code{artifact_error}. Warnings reported
+\code{artifacts_dir}, \code{stdout}, \code{stderr}, \code{artifact_error}, \code{invocation_id},
+\code{artifact_hashes} and optional \code{catalog_delivery}. Warnings reported
 by dbt are retained and do not by themselves count as failure.
 }
 \description{

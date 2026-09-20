@@ -7,19 +7,26 @@
 source_release(lake, asset, release_id = NULL)
 }
 \arguments{
-\item{lake}{Connected lake, kept open by its caller.}
+\item{lake}{Connected lake or \code{\link[=lake_config]{lake_config()}} describing an existing lake.}
 
 \item{asset}{Published asset name.}
 
 \item{release_id}{Optional immutable release identifier.}
 }
 \value{
-A source adapter; reads return a lazy table.
+A source adapter. Reads return a lazy table for a connected lake or
+a tibble for a configuration, with the exact release reference attached.
 }
 \description{
 Execution resolves an omitted \code{release_id} once and records its immutable
-identity. The connected lake remains caller-owned. This source connects
-governed releases to ordinary product composition.
+identity. Pass a configuration to open an existing lake read-only, collect
+the selected release into an ordinary tibble, and close the owned connection.
+This requires enough memory for the release. A connected lake instead returns
+a lazy table and remains caller-owned; keep it open while using that table.
+Construction and validation do not open or create a lake. This source connects
+governed releases to ordinary product composition and consumer exports.
+When publishing back to the same lake, execution can reuse its open handle;
+configuration sources still return materialized values without owning it.
 }
 \examples{
 if (FALSE) {
