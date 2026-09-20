@@ -1,37 +1,38 @@
-url: https://janwein.github.io/lakefold/
+url: https://janwein.github.io/tidyweave/
 destination: site
 home:
-  title: lakefold
-  description: Compose simple R data workflows with optional quality and governed storage.
+  title: tidyweave
+  description: Reusable R data products with optional checks, storage and integrations.
 template:
   bootstrap: 5
 reference:
-  - title: Package overview
-    contents: lakefold-package
-  - title: Start here
-    contents: [dl_product, dl_add_source, dl_publish, dl_collect, dl_inspect]
-  - title: Local storage shortcuts
-    contents: [dl_open, dl_write, dl_read, dl_compare]
-  - title: Sources and transformations
-    contents: [dl_source_database, dl_sql, dl_target_lake]
-  - title: Extension interfaces
-    contents: [dl_check_component, dl_read_source, dl_execute_transform, dl_run_quality, dl_execute_target, dl_write_target, dl_publish_metadata]
-  - title: Configure and connect
-    contents: [dl_config, dl_catalog_duckdb, dl_setup, dl_disconnect, dl_capabilities]
-  - title: Ingest and publish
-    contents: [dl_ingest, dl_ingest_data, dl_source, dl_pipeline, dl_step_precheck, dl_step_transform, dl_plan, dl_execute, dl_run, dl_interrupted]
+  - title: Start with a product
+    contents: [tidyweave-package, product, add_source, run, publish, collect, inspect, plan, validate]
   - title: Contracts and quality
-    contents: [dl_contract, dl_contract_from, dl_contract_confirm, dl_contract_diff, dl_rule, dl_validate, dl_quality, dl_quality_report, dl_quality_errors, dl_pointblank_report, dl_expect_quality, dl_contract_yaml]
-  - title: Build with dbt
-    contents: [dl_dbt_init, dl_dbt_project, dl_dbt_build, dl_dbt_status, dl_dbt_lineage, dl_dbt_model, dl_dbt_publish]
-  - title: Products, models and metrics
-    contents: [dl_build, dl_model, dl_tbl, dl_metric, dl_measure, dl_report_release, dl_report_read, dl_commons_yaml]
-  - title: Metadata and catalog
-    contents: [dl_register, dl_registry, dl_status, dl_releases, dl_lineage, dl_freshness, dl_check_delivery, dl_recover, dl_cleanup, dl_catalog_export, dl_catalog]
+    contents: [contract, contract_from, contract_confirm, contract_diff, quality_rule, quality_reference, quality, expect_quality, profile_data, quality_report, quality_errors, pointblank_report, contract_yaml]
+  - title: Sources and transformations
+    contents: [source_file, source_database, source_release, source_parquet, source_api, source_pins, sql_transform, transform_dbt]
+  - title: Choose a destination
+    contents: [target_lake, target_database, target_parquet, target_pins]
+  - title: Execution evidence and metadata
+    contents: [status, run_history, retry_catalogs, catalog_openlineage, catalog_openmetadata, catalog_export, catalog_app]
+  - title: Projects and orchestration
+    contents: [init_project, as_targets]
+  - title: Lake configuration and history
+    contents: [open_lake, lake_config, registry_duckdb, setup_lake, disconnect_lake, write_data, read_release, tbl, compare, releases, lineage, register, registry, freshness, check_delivery, interrupted, recover, cleanup]
+  - title: Metrics and issued reports
+    contents: [model, metric, measure, report_release, report_read, commons_yaml]
+  - title: Work with dbt
+    contents: [dbt_init, dbt_project, dbt_build, dbt_status, dbt_lineage, dbt_model, dbt_publish]
+  - title: Write an extension
+    contents: [capabilities, check_component, read_source, execute_transform, run_quality, write_target, publish_metadata]
 articles:
   - title: Start here
     navbar: Start here
-    contents: [composing-products, why-lakefold, getting-started]
-  - title: Go further
+    contents: [why-tidyweave, composing-products, getting-started]
+  - title: Add capabilities
     navbar: Guides
-    contents: [extending-lakefold, everyday-workflows, quality-history, quality-gates, workflow-design, products-metrics, dbt-workflows, design-review]
+    contents: [optional-integrations, everyday-workflows, quality-gates, quality-history, products-metrics, dbt-workflows]
+  - title: Understand and extend
+    navbar: Architecture
+    contents: [workflow-design, extending-tidyweave, design-review]
