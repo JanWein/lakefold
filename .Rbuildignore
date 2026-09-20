@@ -10,3 +10,4 @@
 ^site$
 ^check$
 ^.*\.Rproj$
+^\.git$
