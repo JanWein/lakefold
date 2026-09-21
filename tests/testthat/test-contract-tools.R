@@ -4,20 +4,20 @@ test_that("drafts infer types only and require an explicit review transition", {
     amount = c(10, 20),
     date = as.Date(c("2026-01-01", "2026-01-02"))
   )
-  draft <- contract_from(data, "orders", "Analytics", "Orders", "One order")
+  draft <- tw_contract_from(data, "orders", "Analytics", "Orders", "One order")
   expect_s3_class(draft, "tw_contract_draft")
   expect_equal(draft$required, character())
   expect_equal(draft$key, character())
-  expect_snapshot(error = TRUE, validate(data, draft))
+  expect_snapshot(error = TRUE, tw_validate(data, draft))
   draft$key <- "id"
-  contract <- contract_confirm(draft)
+  contract <- tw_contract_confirm(draft)
   expect_equal(
     contract$columns,
     list(id = "integer", amount = "numeric", date = "Date")
   )
-  expect_quality(validate(data, contract))
+  tw_expect_quality(tw_validate(data, contract))
   expect_equal(
-    contract_from(
+    tw_contract_from(
       data.frame(x = factor("a")),
       "x",
       "Analytics",
@@ -29,7 +29,7 @@ test_that("drafts infer types only and require an explicit review transition", {
 })
 
 test_that("contract differences distinguish tightening from metadata and semantic changes", {
-  old <- contract(
+  old <- tw_contract(
     "orders",
     "1",
     "Analytics",
@@ -43,9 +43,9 @@ test_that("contract differences distinguish tightening from metadata and semanti
   new$required <- c("id", "amount")
   new$grain <- "One order at a date"
   new$owner <- "Finance"
-  difference <- contract_diff(old, new)
+  difference <- tw_contract_diff(old, new)
   expect_equal(difference$breaking[difference$field == "required"], TRUE)
   expect_equal(difference$breaking[difference$field == "owner"], FALSE)
   expect_equal(is.na(difference$breaking[difference$field == "grain"]), TRUE)
-  expect_equal(nrow(contract_diff(old, old)), 0L)
+  expect_equal(nrow(tw_contract_diff(old, old)), 0L)
 })

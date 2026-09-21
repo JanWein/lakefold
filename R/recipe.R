@@ -2,78 +2,85 @@
 #'
 #' A recipe contains ordered transformations, independently of product identity,
 #' primary inputs, output contracts and destinations. Construction never reads
-#' data. Attach it with [add_recipe()] to a product or [workflow()]. Recipes are
+#' data. Attach it with [tw_add_recipe()] to a product or [tw_workflow()]. Recipes are
 #' ordinary R values: adding a step returns a new value and leaves the original
 #' unchanged. Expressions use dplyr data masking and retain their environments.
 #'
 #' These are data preparation instructions, not fitted preprocessing models.
-#' There is no training or implicit `prep()`/`bake()` phase. Use [trial()] on
-#' the assembled workflow to inspect checked output, then [publish()] to save it.
+#' There is no training or implicit `prep()`/`bake()` phase. Use [tw_trial()] on
+#' the assembled workflow to inspect checked output, then [tw_publish()] to save it.
 #' @returns A recipe specification.
 #' @export
 #' @examples
-#' preparation <- recipe() |>
-#'   step_mutate(amount = round(amount, 2)) |>
-#'   step_filter(amount >= 0)
-#' product("orders", data.frame(amount = c(10.123, 20))) |>
-#'   add_recipe(preparation) |>
-#'   trial() |>
-#'   collect()
-recipe <- function() {
+#' preparation <- tw_recipe() |>
+#'   tw_step_mutate(amount = round(amount, 2)) |>
+#'   tw_step_filter(amount >= 0)
+#' tw_product("orders", data.frame(amount = c(10.123, 20))) |>
+#'   tw_add_recipe(preparation) |>
+#'   tw_trial() |>
+#'   tw_collect()
+tw_recipe <- function() {
   structure(list(steps = list()), class = "tw_recipe")
 }
 
 assert_recipe <- function(x) {
   if (!inherits(x, "tw_recipe")) {
-    abort("Start with recipe() before adding preparation steps.")
+    abort("Start with tw_recipe() before adding preparation steps.")
   }
   invisible(x)
 }
 
 #' Add a deferred preparation step
 #'
+#' @section Available steps:
+#' Use `tw_step_mutate()` and `tw_step_rename()` to change columns;
+#' `tw_step_filter()` and `tw_step_select()` to select rows and columns;
+#' `tw_step_arrange()` and `tw_step_distinct()` to order and deduplicate;
+#' and `tw_step_summarise()` to aggregate.
+#'
+#' @section Execution:
 #' Steps execute in addition order using the existing dplyr and transformation
-#' adapters. No implicit collection is performed. Use `step_transform()` for
+#' adapters. No implicit collection is performed. Use `tw_step_transform()` for
 #' an ordinary function, formula using `.x`, or an existing transform adapter.
-#' It also accepts an engine-configured [lookup_spec()].
-#' @param x A [recipe()] specification.
+#' It also accepts an engine-configured [tw_lookup_spec()].
+#' @param x A [tw_recipe()] specification.
 #' @param ... Arguments passed to the corresponding dplyr verb at execution.
 #' @param transform Function, formula using `.x`, or transformation adapter.
-#' @param name Optional unique step name for `step_transform()`.
+#' @param name Optional unique step name for `tw_step_transform()`.
 #' @param .by,.preserve,.groups,.keep_all Arguments with their dplyr meanings.
 #' @returns An updated recipe. The original is unchanged.
 #' @export
 #' @examples
-#' recipe() |>
-#'   step_mutate(net = gross / 1.19) |>
-#'   step_select(id, net)
-step_transform <- function(x, transform, name = NULL) {
+#' tw_recipe() |>
+#'   tw_step_mutate(net = gross / 1.19) |>
+#'   tw_step_select(id, net)
+tw_step_transform <- function(x, transform, name = NULL) {
   assert_recipe(x)
-  holder <- product("recipe")
+  holder <- tw_product("recipe")
   holder$transforms <- x$steps
-  holder <- add_transform(holder, transform, name)
+  holder <- tw_add_transform(holder, transform, name)
   x$steps <- holder$transforms
   x
 }
 
 recipe_dplyr_step <- function(x, verb, args) {
   assert_recipe(x)
-  step_transform(
+  tw_step_transform(
     x,
     structure(list(verb = verb, args = args), class = "tw_dplyr_transform"),
     name = paste0(verb, "_", length(x$steps) + 1L)
   )
 }
 
-#' @rdname step_transform
+#' @rdname tw_step_transform
 #' @export
-step_mutate <- function(x, ...) {
+tw_step_mutate <- function(x, ...) {
   recipe_dplyr_step(x, "mutate", rlang::enquos(...))
 }
 
-#' @rdname step_transform
+#' @rdname tw_step_transform
 #' @export
-step_filter <- function(x, ..., .by = NULL, .preserve = FALSE) {
+tw_step_filter <- function(x, ..., .by = NULL, .preserve = FALSE) {
   args <- rlang::enquos(...)
   if (!missing(.by)) {
     args$.by <- rlang::enquo(.by)
@@ -84,27 +91,27 @@ step_filter <- function(x, ..., .by = NULL, .preserve = FALSE) {
   recipe_dplyr_step(x, "filter", args)
 }
 
-#' @rdname step_transform
+#' @rdname tw_step_transform
 #' @export
-step_select <- function(x, ...) {
+tw_step_select <- function(x, ...) {
   recipe_dplyr_step(x, "select", rlang::enquos(...))
 }
 
-#' @rdname step_transform
+#' @rdname tw_step_transform
 #' @export
-step_rename <- function(x, ...) {
+tw_step_rename <- function(x, ...) {
   recipe_dplyr_step(x, "rename", rlang::enquos(...))
 }
 
-#' @rdname step_transform
+#' @rdname tw_step_transform
 #' @export
-step_arrange <- function(x, ...) {
+tw_step_arrange <- function(x, ...) {
   recipe_dplyr_step(x, "arrange", rlang::enquos(...))
 }
 
-#' @rdname step_transform
+#' @rdname tw_step_transform
 #' @export
-step_summarise <- function(x, ..., .by = NULL, .groups = NULL) {
+tw_step_summarise <- function(x, ..., .by = NULL, .groups = NULL) {
   args <- rlang::enquos(...)
   if (!missing(.by)) {
     args$.by <- rlang::enquo(.by)
@@ -115,9 +122,9 @@ step_summarise <- function(x, ..., .by = NULL, .groups = NULL) {
   recipe_dplyr_step(x, "summarise", args)
 }
 
-#' @rdname step_transform
+#' @rdname tw_step_transform
 #' @export
-step_distinct <- function(x, ..., .keep_all = FALSE) {
+tw_step_distinct <- function(x, ..., .keep_all = FALSE) {
   args <- rlang::enquos(...)
   if (!missing(.keep_all)) {
     args$.keep_all <- rlang::enquo(.keep_all)
@@ -127,17 +134,17 @@ step_distinct <- function(x, ..., .keep_all = FALSE) {
 
 #' Add a checked lookup to a recipe
 #'
-#' Uses the same dependency resolution and relationship checks as [add_lookup()].
-#' Reusable lookup specifications can instead be passed to [step_transform()].
-#' @inheritParams add_lookup
-#' @param x A [recipe()] specification.
+#' Uses the same dependency resolution and relationship checks as [tw_add_lookup()].
+#' Reusable lookup specifications can instead be passed to [tw_step_transform()].
+#' @inheritParams tw_add_lookup
+#' @param x A [tw_recipe()] specification.
 #' @returns An updated recipe.
 #' @export
 #' @examples
-#' recipe() |>
-#'   step_lookup(data.frame(id = 1:2, region = c("North", "South")),
+#' tw_recipe() |>
+#'   tw_step_lookup(data.frame(id = 1:2, region = c("North", "South")),
 #'     by = "id", name = "customers")
-step_lookup <- function(
+tw_step_lookup <- function(
   x,
   source,
   by,
@@ -157,7 +164,7 @@ step_lookup <- function(
       as.character(substitute(source))
     }
   }
-  holder <- product("recipe")
+  holder <- tw_product("recipe")
   holder$transforms <- x$steps
   args <- list(
     x = holder,
@@ -171,13 +178,13 @@ step_lookup <- function(
   if (!missing(engine)) {
     args$engine <- match.arg(engine)
   }
-  x$steps <- do.call(add_lookup, args)$transforms
+  x$steps <- do.call(tw_add_lookup, args)$transforms
   x
 }
 
 #' @export
-inspect.tw_recipe <- function(x, ...) {
-  list(type = "recipe", steps = lapply(x$steps, inspect))
+tw_inspect.tw_recipe <- function(x, ...) {
+  list(type = "recipe", steps = lapply(x$steps, tw_inspect))
 }
 
 #' @export
@@ -186,7 +193,7 @@ print.tw_recipe <- function(x, ...) {
   if (length(x$steps)) {
     print(tibble::tibble(
       step = names(x$steps),
-      operation = vapply(x$steps, \(step) inspect(step)$type, character(1))
+      operation = vapply(x$steps, \(step) tw_inspect(step)$type, character(1))
     ))
   }
   invisible(x)

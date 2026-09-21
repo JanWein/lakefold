@@ -17,7 +17,7 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>", message = FALSE,
 **Before you start:** complete [Save a report](save-report.html). This guide needs
 optional DuckDB >= 1.5.5 and creates its own synthetic data and temporary storage.
 
-For a single product, `publish(orders, data = corrected)` is enough. Add a
+For a single product, `tw_publish(orders, data = corrected)` is enough. Add a
 workflow when you need to connect several steps and inspect which ones ran.
 
 ## Define the product and calculations
@@ -26,36 +26,36 @@ workflow when you need to connect several steps and inspect which ones ran.
 library(tidyweave)
 folder <- tempfile("repeat-workflow-")
 delivery <- data.frame(id = 1:3, amount = c(25, 75, 50))
-orders <- product("orders", delivery) |>
-  add_quality(~ amount >= 0) |>
-  set_target(folder)
-metrics <- metric_set("orders", total = sum(amount, na.rm = TRUE),
+orders <- tw_product("orders", delivery) |>
+  tw_add_quality(~ amount >= 0) |>
+  tw_set_target(folder)
+metrics <- tw_metric_set("orders", total = sum(amount, na.rm = TRUE),
   approved = TRUE, code_version = "orders-v1")
 ```
 
 ## Name the dependent steps
 
 ```{r workflow}
-monthly <- workflow(
-  accepted = function(delivery) orders |> publish(data = delivery),
-  measures = function(accepted) measure(accepted, metrics = metrics),
+monthly <- tw_workflow(
+  accepted = function(delivery) orders |> tw_publish(data = delivery),
+  measures = function(accepted) tw_measure(accepted, metrics = metrics),
   inputs = list(delivery = delivery), code_version = "monthly-v1")
-first <- run(monthly)
-status(first)
-collect(first$results$measures)
+first <- tw_run(monthly)
+tw_status(first)
+tw_collect(first$results$measures)
 ```
 
 Each argument names an input or another step. `measures` receives the successful
-result of `accepted`. `run()` executes this complete configuration, including its
+result of `accepted`. `tw_run()` executes this complete configuration, including its
 publication. The total is 150.
 
 ## Apply a correction
 
 ```{r correction}
 corrected <- data.frame(id = 1:3, amount = c(30, 75, 50))
-second <- run(monthly, inputs = list(delivery = corrected), previous = first)
-status(second)
-collect(second$results$measures)
+second <- tw_run(monthly, inputs = list(delivery = corrected), previous = first)
+tw_status(second)
+tw_collect(second$results$measures)
 ```
 
 The total is now 155. Passing `previous` lets the workflow reuse successful
@@ -67,17 +67,17 @@ must run. The first result still identifies the original saved data.
 ```{r failure}
 bad <- corrected
 bad$amount[1] <- -30
-failed <- run(monthly, inputs = list(delivery = bad), previous = second,
+failed <- tw_run(monthly, inputs = list(delivery = bad), previous = second,
   stop_on_failure = FALSE)
-status(failed)
+tw_status(failed)
 ```
 
 The dependent calculation cannot proceed after publication fails. The workflow
 retains conditions in `$errors`. Fix the delivery before an explicit retry:
 
 ```{r retry}
-retried <- run(monthly, inputs = list(delivery = corrected), previous = failed)
-collect(retried$results$measures)
+retried <- tw_run(monthly, inputs = list(delivery = corrected), previous = failed)
+tw_collect(retried$results$measures)
 ```
 
 Already committed steps are not rolled back. A workflow is not one transaction
@@ -89,8 +89,8 @@ without a new input value.
 
 ```{r report}
 retried$results$measures |>
-  report_release("orders-report-v1", code_version = "report-v1")
-report_read(folder, "orders-report-v1", values_only = TRUE)
+  tw_report_release("orders-report-v1", code_version = "report-v1")
+tw_report_read(folder, "orders-report-v1", values_only = TRUE)
 ```
 
 The report is an explicit decision after the workflow succeeds. Keeping it
@@ -98,10 +98,10 @@ outside the automatic steps avoids issuing a report for every trial delivery.
 For a larger flow with receipts and dbt, see [insurance reporting](relational-insurance.html).
 
 ```{r verify-and-cleanup, include=FALSE}
-stopifnot(collect(first$results$measures)$value == 150,
-  collect(second$results$measures)$value == 155,
-  collect(retried$results$measures)$value == 155,
-  report_read(folder, "orders-report-v1", values_only = TRUE)$value == 155)
+stopifnot(tw_collect(first$results$measures)$value == 150,
+  tw_collect(second$results$measures)$value == 155,
+  tw_collect(retried$results$measures)$value == 155,
+  tw_report_read(folder, "orders-report-v1", values_only = TRUE)$value == 155)
 unlink(folder, recursive = TRUE)
 ```
 

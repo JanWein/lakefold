@@ -2,7 +2,7 @@
 #'
 #' Ordinary dplyr verbs append deferred transformations to a product. They use
 #' the same data masking, tidy selection and grouping rules as dplyr on the
-#' acquired table. Nothing is read until [run()] or [publish()].
+#' acquired table. Nothing is read until [tw_run()] or [tw_publish()].
 #'
 #' Expressions retain their R environments. Inspection records expressions,
 #' not captured values or credentials. Changing an external binding can change
@@ -10,12 +10,12 @@
 #' an explicit targets cue for dynamic environment or external state. To freeze
 #' a small value in an expression, inject it with `!!`.
 #'
-#' Use [add_transform()] for other functions. Multiple primary sources must
-#' first be combined by a transformation; [add_lookup()] adds a checked
+#' Use [tw_add_transform()] for other functions. Multiple primary sources must
+#' first be combined by a transformation; [tw_add_lookup()] adds a checked
 #' auxiliary source without changing the primary table.
 #' `left_join()` on a product gives guidance rather than guessing relationship
-#' rules. Use `add_lookup(reference, by = ..., name = "reference")` for checked
-#' enrichment, or join ordinary tables inside `add_transform()` for other joins.
+#' rules. Use `tw_add_lookup(reference, by = ..., name = "reference")` for checked
+#' enrichment, or join ordinary tables inside `tw_add_transform()` for other joins.
 #' @param .data,x Product definition.
 #' @param ... Arguments captured and passed to the corresponding dplyr verb.
 #' @param .by,.preserve,.by_group,.add,.drop,.groups,.keep_all,.before,.after,wt,sort,name
@@ -24,10 +24,10 @@
 #' @name product-dplyr
 #' @importFrom dplyr mutate filter select rename relocate arrange group_by ungroup summarise distinct count left_join
 #' @examples
-#' orders <- product("orders", data.frame(group = c("a", "a"), amount = c(10, 20))) |>
+#' orders <- tw_product("orders", data.frame(group = c("a", "a"), amount = c(10, 20))) |>
 #'   dplyr::mutate(tax = amount * 0.2) |>
 #'   dplyr::summarise(total = sum(amount), .by = group)
-#' orders |> run() |> collect()
+#' orders |> tw_run() |> tw_collect()
 NULL
 
 #' @export
@@ -40,18 +40,14 @@ left_join.tw_product <- function(
   ...
 ) {
   abort(paste(
-    "To enrich a product with a reference table, use add_lookup(reference, by = ..., name = \"reference\").",
+    "To enrich a product with a reference table, use tw_add_lookup(reference, by = ..., name = \"reference\").",
     "It checks unique reference keys and matching input keys.",
-    "For other join relationships, use dplyr::left_join() on ordinary tables inside add_transform()."
+    "For other join relationships, use dplyr::left_join() on ordinary tables inside tw_add_transform()."
   ))
 }
 
-#' @rdname product-dplyr
-#' @export
-dplyr::filter
-
 dplyr_product_step <- function(x, verb, args) {
-  add_transform(
+  tw_add_transform(
     x,
     structure(list(verb = verb, args = args), class = "tw_dplyr_transform"),
     name = paste0(verb, "_", length(x$transforms) + 1L)
@@ -166,7 +162,7 @@ count.tw_product <- function(x, ..., wt = NULL, sort = FALSE, name = NULL) {
 }
 
 #' @export
-execute_transform.tw_dplyr_transform <- function(transform, data, ...) {
+tw_execute_transform.tw_dplyr_transform <- function(transform, data, ...) {
   table_result(data, paste0("dplyr::", transform$verb, "() input"))
   args <- as.list(transform$args)
   ordinary <- switch(
@@ -187,7 +183,7 @@ execute_transform.tw_dplyr_transform <- function(transform, data, ...) {
   rlang::inject(implementation(data, !!!args))
 }
 #' @export
-check_component.tw_dplyr_transform <- function(x, ...) {
+tw_check_component.tw_dplyr_transform <- function(x, ...) {
   if (
     !x$verb %in%
       c(
@@ -209,10 +205,10 @@ check_component.tw_dplyr_transform <- function(x, ...) {
   invisible(x)
 }
 #' @export
-inspect.tw_dplyr_transform <- function(x, ...) {
+tw_inspect.tw_dplyr_transform <- function(x, ...) {
   list(type = paste0("dplyr::", x$verb), arguments = canonical(x$args))
 }
 #' @export
-capabilities.tw_dplyr_transform <- function(x, ...) {
-  component_capabilities(lazy = TRUE)
+tw_capabilities.tw_dplyr_transform <- function(x, ...) {
+  tw_component_capabilities(lazy = TRUE)
 }

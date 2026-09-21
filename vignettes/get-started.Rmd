@@ -1,6 +1,5 @@
 ---
 title: "Get started"
-description: "A five-lesson path from a table to a reproducible monthly report."
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Get started}
@@ -8,47 +7,109 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
-You receive a table, calculate a number and send a report. Next month, another
-table arrives. Later, someone corrects an earlier delivery. These five lessons
-show how to repeat the work and keep the original report explainable.
-
-## Before you begin
-
-You should be comfortable creating an R data frame and using a pipe. Familiarity
-with `dplyr::mutate()` and `dplyr::summarise()` helps. You do not need a database,
-dbt, pointblank or a data catalog to start.
-
-```{r installation, eval=FALSE, purl=FALSE}
-install.packages("remotes")
-remotes::install_github("JanWein/tidyweave")
+```{r setup, include=FALSE, purl=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", message = FALSE)
 ```
 
-Use R 4.2 or later. This installs the development version, whose API can still
-change. Lessons 3 to 5 also use `install.packages("duckdb")` for local history.
+Build a checked table from three independent definitions, then reuse the same
+workflow for a new delivery. This introduction needs only tidyweave and its hard
+dependencies. Every example on this page runs in a fresh R session.
 
-## Follow the lessons in order
+## Define the product
 
-| Lesson | What you will be able to do | What you need |
-|---|---|---|
-| [1. Build a product](first-product.html) | Prepare a table and collect the result | R and tidyweave |
-| [2. Check a delivery](check-delivery.html) | Find a bad row, correct it and try again | R and tidyweave |
-| [3. Publish and correct data](publish-data.html) | Save a checked table while retaining earlier values | Optional DuckDB >= 1.5.5 |
-| [4. Save a report](save-report.html) | Save agreed calculations and read them without recalculating | Optional DuckDB >= 1.5.5 |
-| [5. Work through a reporting month](getting-started.html) | Handle complete monthly deliveries and a late correction | Optional DuckDB >= 1.5.5 |
+A product specification names the output and states its requirements. Here,
+each order has a unique integer ID and a nonnegative amount.
 
-Each lesson includes its own setup. Start a fresh R session and run its visible
-code from top to bottom; objects from another lesson are not required. Examples
-use synthetic data and temporary folders. Use a project folder for real work.
+```{r}
+library(tidyweave)
+orders <- tw_product("orders") |>
+  tw_add_contract(tw_contract(
+    columns = c(id = "integer", amount = "numeric"), key = "id"
+  )) |>
+  tw_add_quality(~ amount >= 0)
+orders
+```
 
-**[Begin lesson 1: Build a product](first-product.html)**
+## Describe preparation
 
-## After the basics
+A recipe is an ordered collection of deferred steps. Its expressions use dplyr
+data masking: `amount` refers to the column when the recipe is executed.
 
-[Learn](learn.html) organizes the remaining guides by task. The
-[function reference](../reference/index.html) lists arguments and return values.
-[Terms](glossary.html) explains the small vocabulary as you encounter it.
-If a call fails, use [troubleshooting](troubleshooting.html).
+```{r}
+preparation <- tw_recipe() |>
+  tw_step_mutate(amount = round(amount, 2))
+preparation
+```
 
-This learning structure follows the distinction between a guided
-[tidymodels introduction](https://www.tidymodels.org/start/) and its
-[task-focused learning articles](https://www.tidymodels.org/learn/).
+The product and recipe are ordinary R objects. Neither holds this delivery or
+opens a connection. The same recipe can serve several products.
+
+## Assemble the workflow
+
+```{r}
+flow <- tw_workflow() |>
+  tw_add_product(orders) |>
+  tw_add_recipe(preparation)
+flow
+```
+
+The workflow coordinates the components. An optional source or destination can
+be attached later. Keeping data outside the definition makes repeated deliveries
+explicit.
+
+## Try a delivery
+
+```{r}
+delivery <- data.frame(id = 1:3, amount = c(25, 75, 50))
+result <- tw_trial(flow, data = delivery)
+tw_collect(result)
+tw_status(result)
+```
+
+Preparation runs before the output checks. The result records the attempt;
+`tw_collect()` returns an ordinary tibble. Its amount totals **150**.
+`tw_trial()` disables framework publication and catalog writers, including those
+on dependencies. User-supplied functions remain responsible for their own effects.
+
+## Reuse and change components
+
+```{r}
+corrected <- data.frame(id = 1:3, amount = c(30, 75, 50))
+next_result <- tw_trial(flow, data = corrected)
+sum(tw_collect(next_result)$amount)
+
+whole_amounts <- tw_recipe() |> tw_step_mutate(amount = round(amount))
+alternate <- flow |> tw_update_recipe(whole_amounts)
+tw_extract_recipe(flow)
+tw_extract_recipe(alternate)
+```
+
+The corrected total is **155**. Updating a slot returns a new workflow; `flow`
+still has its original recipe. No delivery has been persisted by these trials.
+
+## Publish when ready
+
+With DuckDB >= 1.5.5 installed, save a checked delivery to a local folder:
+
+```{r eval=FALSE}
+saved <- tw_publish(flow, data = corrected, to = "data/orders")
+tw_collect(saved)
+```
+
+Publication means saving data to a destination. It does not make it public
+online. A lake result identifies an immutable release. Use `tw_run()` when you
+want to execute the destinations already configured on a definition.
+
+## Choose the next topic
+
+Read [product specifications](first-product.html),
+[preparation recipes](preparation-recipes.html) and
+[workflows](modular-workflows.html) for the component APIs.
+Then [diagnose a failed check](check-delivery.html),
+[publish corrections](publish-data.html), or [save report values](save-report.html).
+The [article index](learn.html) groups larger examples and integrations.
+
+```{r verify, include=FALSE}
+stopifnot(sum(tw_collect(result)$amount) == 150,
+          sum(tw_collect(next_result)$amount) == 155)
+```

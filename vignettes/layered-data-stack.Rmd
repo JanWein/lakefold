@@ -41,11 +41,11 @@ orders <- data.frame(
   amount = c(25, 75, 50)
 )
 
-checked <- product("orders", orders) |>
-  add_quality(~ amount >= 0) |>
-  run()
+checked <- tw_product("orders", orders) |>
+  tw_add_quality(~ amount >= 0) |>
+  tw_run()
 
-collect(checked)
+tw_collect(checked)
 ```
 
 The rest of this guide adds persistence and SQL models for work that needs them.
@@ -77,13 +77,13 @@ Install only the integrations used in this section:
 install.packages(c("duckdb", "yaml", "processx"))
 ```
 
-Configure the four layers explicitly. `lake_config()` describes a lake without
+Configure the four layers explicitly. `tw_lake_config()` describes a lake without
 opening it. Using a configuration lets ingestion and publication open and close
 their own connections, which avoids leaving a local catalog locked when dbt
 starts in another process.
 
 ```{r configure}
-config <- lake_config(
+config <- tw_lake_config(
   path = file.path(root, "lake"),
   layers = c("raw", "staging", "core", "marts"),
   backend = "duckdb"
@@ -97,9 +97,9 @@ the R and dbt processes both need compatible engines and extension access.
 [DuckLake introduction](https://ducklake.select/docs/stable/duckdb/introduction).
 
 ```{r configure-ducklake, eval=FALSE}
-ducklake_config <- lake_config(
-  registry_duckdb("ducklake-stack/metadata.ducklake"),
-  storage_local("ducklake-stack/data"),
+ducklake_config <- tw_lake_config(
+  tw_registry_duckdb("ducklake-stack/metadata.ducklake"),
+  tw_storage_local("ducklake-stack/data"),
   landing = "ducklake-stack/landing",
   layers = c("raw", "staging", "core", "marts"),
   backend = "ducklake"
@@ -113,12 +113,12 @@ layers; the starter does not silently migrate them.
 ## 2. Check the delivery before RAW
 
 ```{r accept-input, eval=requireNamespace("duckdb", quietly=TRUE)}
-accepted <- ingest(orders, quality = ~ amount >= 0, to = config)
-collect(accepted)
+accepted <- tw_ingest(orders, quality = ~ amount >= 0, to = config)
+tw_collect(accepted)
 accepted$outputs
 ```
 
-`ingest()` infers the asset name from `orders`. With a file, it can infer the name
+`tw_ingest()` infers the asset name from `orders`. With a file, it can infer the name
 from its basename. Use `name = "orders"` when the input expression would be less
 clear. No contract, owner or manual version is required. Without a contract, the
 first accepted delivery establishes the structural schema for later deliveries.
@@ -126,7 +126,7 @@ first accepted delivery establishes the structural schema for later deliveries.
 For example, the same operation can read a file:
 
 ```{r accept-file, eval=FALSE}
-accepted <- ingest("deliveries/orders.csv",
+accepted <- tw_ingest("deliveries/orders.csv",
   name = "orders", quality = ~ amount >= 0, to = config)
 ```
 
@@ -141,28 +141,28 @@ not a streaming or pushdown ingestion path.
 Make business requirements explicit when they matter:
 
 ```{r optional-input-contract}
-order_contract <- contract(
+order_contract <- tw_contract(
   columns = c(order_id = "integer", customer_id = "integer", amount = "numeric"),
   key = "order_id"
 )
 ```
 
-Pass this as `contract = order_contract` to `ingest()`. It adds the declared schema
+Pass this as `contract = order_contract` to `tw_ingest()`. It adds the declared schema
 and key checks before RAW persistence. Do not rely on inferred structure to
 discover a business key or a freshness deadline.
 
 The same simple predicate can use the optional Pointblank engine:
 
 ```{r pointblank-input, eval=FALSE}
-accepted <- product("orders", orders) |>
-  add_contract(order_contract) |>
-  add_quality(~ amount >= 0, engine = "pointblank") |>
-  ingest(to = config)
+accepted <- tw_product("orders", orders) |>
+  tw_add_contract(order_contract) |>
+  tw_add_quality(~ amount >= 0, engine = "pointblank") |>
+  tw_ingest(to = config)
 ```
 
 Omit `engine` for native checks. Both run at the same input boundary; missing
 predicate results fail. For richer Pointblank step types or action policies, pass
-`pointblank_checks()` to `add_quality()`. The optional adapter extends the simple
+`tw_pointblank_checks()` to `tw_add_quality()`. The optional adapter extends the simple
 grammar without forcing every workflow to build an agent.
 
 ## 3. Inspect a rejected delivery
@@ -170,12 +170,12 @@ grammar without forcing every workflow to build an agent.
 ```{r rejected-input, eval=requireNamespace("duckdb", quietly=TRUE)}
 bad_orders <- orders
 bad_orders$amount[1] <- -25
-rejected <- ingest(bad_orders, name = "orders",
+rejected <- tw_ingest(bad_orders, name = "orders",
   quality = ~ amount >= 0, stop_on_failure = FALSE, to = config)
 
 rejected$status
-quality(rejected)
-collect(accepted)
+tw_quality(rejected)
+tw_collect(accepted)
 ```
 
 The negative amount is not silently removed. The delivery and its failed checks
@@ -193,7 +193,7 @@ Install the dbt CLI and dbt-duckdb in a separate Python environment. The
 Project creation writes files; it does not install Python packages or run dbt.
 
 ```{r create-dbt-project, eval=requireNamespace("duckdb", quietly=TRUE) && requireNamespace("yaml", quietly=TRUE)}
-project <- dbt_init(
+project <- tw_dbt_init(
   file.path(root, "analytics"), config,
   sources = list(orders = accepted)
 )
@@ -217,9 +217,9 @@ No seed replaces your accepted input when `sources` is supplied.
 On a later delivery, select the new accepted release explicitly:
 
 ```{r rebind-source, eval=FALSE}
-new_raw <- ingest(next_orders, name = "orders",
+new_raw <- tw_ingest(next_orders, name = "orders",
   quality = ~ amount >= 0, to = config)
-project <- dbt_sources(project, list(orders = new_raw), name = "raw")
+project <- tw_dbt_sources(project, list(orders = new_raw), name = "raw")
 ```
 
 For the starter, keep its explicit `raw` group; managed existing projects default
@@ -233,9 +233,9 @@ The following commands require the external CLI and are not executed when this
 vignette is built:
 
 ```{r build-layers, eval=FALSE}
-built <- project |> run(echo = FALSE)
-dbt_status(built)
-dbt_lineage(built)
+built <- project |> tw_run(echo = FALSE)
+tw_dbt_status(built)
+tw_dbt_lineage(built)
 ```
 
 dbt owns model dependencies, SQL materialization, incremental logic and tests.
@@ -247,11 +247,11 @@ models from running; it does not undo models already written.
 Therefore, do not let consumers treat a mutable mart as an approved release.
 This guide's approval step comes next.
 
-An optional `dbt_contract()` converts supported schema expectations into normal
+An optional `tw_dbt_contract()` converts supported schema expectations into normal
 dbt model properties:
 
 ```{r export-contract}
-properties <- dbt_contract(order_contract, "stg_orders")
+properties <- tw_dbt_contract(order_contract, "stg_orders")
 properties$models[[1]]$columns
 ```
 
@@ -265,8 +265,8 @@ R freshness and empty-data policies still require R validation.
 ## 6. Publish an approved snapshot
 
 ```{r approve-mart, eval=FALSE}
-approved <- publish(built, "customer_revenue", to = config)
-revenue <- collect(approved)
+approved <- tw_publish(built, "customer_revenue", to = config)
+revenue <- tw_collect(approved)
 revenue
 approved$outputs
 ```
@@ -284,12 +284,12 @@ empty data; it does not invent business requirements.
 For an explicit consumer policy, provide a contract:
 
 ```{r approve-contract, eval=FALSE}
-revenue_contract <- contract(
+revenue_contract <- tw_contract(
   columns = c(customer_id = "integer", revenue = "numeric"),
   key = "customer_id",
-  rules = list(quality_rule("non_negative_revenue", ~ revenue >= 0))
+  rules = list(tw_quality_rule("non_negative_revenue", ~ revenue >= 0))
 )
-approved <- publish(built, "customer_revenue", to = config,
+approved <- tw_publish(built, "customer_revenue", to = config,
   contract = revenue_contract)
 ```
 
@@ -304,10 +304,10 @@ Publication covers one relation, not an atomic release of the entire dbt graph.
 ## 7. Give consumers ordinary data
 
 Shiny and Quarto do not need a tidyweave-specific reader. They can use the table
-returned by `collect(approved)`.
+returned by `tw_collect(approved)`.
 
 ```{r shiny-consumer, eval=FALSE}
-revenue <- collect(approved)
+revenue <- tw_collect(approved)
 ui <- shiny::fluidPage(shiny::tableOutput("revenue"))
 server <- function(input, output, session) {
   output$revenue <- shiny::renderTable(revenue)
@@ -324,7 +324,7 @@ rendering, or save the approved data as RDS when a self-contained report input i
 more convenient:
 
 ```{r quarto-consumer, eval=FALSE}
-saveRDS(collect(approved), "approved-revenue.rds")
+saveRDS(tw_collect(approved), "approved-revenue.rds")
 # In a Quarto R code cell:
 knitr::kable(readRDS("approved-revenue.rds"))
 ```
@@ -338,9 +338,9 @@ For Power BI, export the approved data to a supported file location or a databas
 that Power BI already knows how to query. A Parquet export is a small local example:
 
 ```{r parquet-consumer, eval=FALSE}
-exported <- product("revenue_export", approved) |>
-  set_target(target_parquet("approved-revenue.parquet")) |>
-  run()
+exported <- tw_product("revenue_export", approved) |>
+  tw_set_target(tw_target_parquet("approved-revenue.parquet")) |>
+  tw_run()
 ```
 
 Power Query's Parquet connector supports the local filesystem, Azure Blob
@@ -349,7 +349,7 @@ locations and refresh separately; exporting a file does not deploy a semantic
 model or dashboard.
 [Microsoft Parquet connector](https://learn.microsoft.com/en-us/power-query/connectors/parquet).
 
-Use `target_database(connection, "customer_revenue")` instead to write an approved
+Use `tw_target_database(connection, "customer_revenue")` instead to write an approved
 table through an existing DBI connection or factory. Power BI uses the database's
 supported connector or ODBC driver, not DBI itself. Choose access controls and
 refresh policy in that platform.
@@ -362,7 +362,7 @@ you need to prove which immutable snapshot a consumer received.
 The successful result preserves pinned release lineage in the export's execution
 metadata. Configuration-owned lake results open and close a read connection and return
 an in-memory table. A caller-owned live lake supports lazy access while it stays
-open. These ownership differences remain visible through adapter inspection. A simpler `add_source(collect(approved))` also works when only
+open. These ownership differences remain visible through adapter inspection. A simpler `tw_add_source(tw_collect(approved))` also works when only
 the ordinary data is needed, but does not infer that release lineage.
 
 ## 8. Send metadata only when you need a catalog
@@ -371,9 +371,9 @@ The local lake records input releases, checks and publication evidence. A dbt
 invocation also produces a manifest and run results. You do not have to type model
 lineage into another R object.
 
-If your team operates OpenMetadata, `catalog_openmetadata_dbt()` can hand these
+If your team operates OpenMetadata, `tw_catalog_openmetadata_dbt()` can hand these
 artifacts to OpenMetadata's **official Python ingestion engine**. This is separate
-from `catalog_openmetadata()`, which publishes ordinary product table metadata
+from `tw_catalog_openmetadata()`, which publishes ordinary product table metadata
 over HTTP.
 
 The external setup requires an existing OpenMetadata server, database service
@@ -384,14 +384,14 @@ variable in your deployment's secret settings.
 [OpenMetadata dbt workflow](https://docs.open-metadata.org/v2.0.x/connectors/database/dbt/run-dbt-workflow-externally).
 
 ```{r optional-catalog, eval=FALSE}
-catalog <- catalog_openmetadata_dbt(
+catalog <- tw_catalog_openmetadata_dbt(
   endpoint = "https://metadata.example.org",
   service = "analytics",
   token_env = "OPENMETADATA_JWT_TOKEN",
   executable = "/path/to/metadata"
 )
 
-built <- project |> run(catalog = catalog, echo = FALSE)
+built <- project |> tw_run(catalog = catalog, echo = FALSE)
 built$success
 built$catalog_delivery
 ```
@@ -407,7 +407,7 @@ physical tables. In particular, a new immutable RAW release has a new physical
 identifier. The dbt ingestion engine enriches existing entities; it does not
 create that database inventory. If the tables are new, build without `catalog`,
 run your existing database-ingestion process, then call
-`publish_metadata(catalog, built)`. The automatic hook is appropriate when the
+`tw_publish_metadata(catalog, built)`. The automatic hook is appropriate when the
 required table entities are already available.
 
 Metadata delivery and data success answer different questions:
@@ -424,7 +424,7 @@ publication. Restore connectivity or update the configured credentials, then
 retry using the original unchanged artifacts:
 
 ```{r retry-catalog, eval=FALSE}
-delivery <- publish_metadata(catalog, built)
+delivery <- tw_publish_metadata(catalog, built)
 delivery$status
 ```
 
@@ -436,7 +436,7 @@ If the earlier CLI run succeeded before all table entities existed, first refres
 the database inventory. Then deliberately resend those same artifacts:
 
 ```{r redeliver-after-inventory-refresh, eval=FALSE}
-delivery <- publish_metadata(catalog, built, force = TRUE)
+delivery <- tw_publish_metadata(catalog, built, force = TRUE)
 ```
 
 `force = TRUE` bypasses the successful-delivery receipt; it still validates the
@@ -453,7 +453,7 @@ and edges. A successful CLI exit alone does not prove lineage completeness.
 Local integration tests and real remote deployment are separate verification steps.
 
 The hook is interchangeable. `catalog = function(result) ...` receives the dbt
-result, or an extension can implement `publish_metadata()` and declare
+result, or an extension can implement `tw_publish_metadata()` and declare
 `metadata_inputs = "tw_dbt_result"` in its capabilities. A custom callback receives
 the full result, including local SQL artifacts and process output, and chooses
 which fields to send. Catalog callback errors remain separate from the dbt outcome.

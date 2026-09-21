@@ -36,57 +36,48 @@ new_product <- function(
     class = "tw_product"
   )
   if (!is.null(contract)) {
-    out <- add_contract(out, contract)
+    out <- tw_add_contract(out, contract)
   }
   out
 }
 
 editable_product <- function(x) {
   if (!inherits(x, "tw_product")) {
-    abort("Start with product('name') to compose a product with add_*().")
+    abort("Start with tw_product('name') to compose a product with add_*().")
   }
   attr(x, "tw_validated") <- NULL
   x
 }
 
-#' Compose a data product using ordinary R objects
+#' Bind a source to a product or workflow
 #'
-#' These functions describe work without executing it. Start with
-#' `product("orders", data)`, then add only the capabilities you need.
-#' Sources can be tables, file paths, functions or source adapters.
-#' Transformations run in addition order; the contract and quality checks run
-#' on the final candidate. Sources, transforms, rules and catalogs accumulate.
-#' A contract or target replaces the previously configured component.
-#'
-#' @param x Product created with `product("name")`. `add_source()` and
-#'   `set_target()` also accept modular [workflow()] definitions.
+#' Store a named primary input without reading it. A workflow can instead bind
+#' one delivery with `data =` at execution. For several primary sources, use a
+#' transformation that combines their named list before table operations.
+#' @param x A [tw_product()] or modular [tw_workflow()] definition.
 #' @param source Data frame, file path, function or source adapter.
-#' @param replace Replace a source with the same name explicitly.
+#' @param name Optional source name, generated when omitted.
 #' @param reader Optional file reader. CSV, TSV, RDS and Excel have defaults.
-#' @param transform R function, formula using `.x`, or transform adapter.
-#' @param name Optional source, step or catalog name, generated when omitted.
-#' @param contract Contract, named type vector, or named list of prototypes.
-#' @param quality One-sided row predicate, function, rule, or list of rules.
-#'   Formula `NA` results count as failures. Functions return scalar logicals
-#'   or [quality_counts()]. Names in rule lists become rule names.
-#' @param target Lake folder path, connected lake, configuration or target
-#'   adapter. Use [target_lake()] for partition or layer options.
-#' @param catalog Function receiving run metadata, or catalog adapter.
-#' @returns An updated product specification. No source data are read.
-#' @seealso [trial()], [run()], [publish()], [validate()], [inspect()]
+#' @param replace Replace a source with the same name explicitly.
+#' @returns An updated definition. No source data are read.
+#' @seealso [tw_replace_sources()], [tw_source_database()], [tw_trial()]
 #' @export
 #' @examples
-#' orders <- product("orders") |>
-#'   add_source(data.frame(id = 1:2, amount = c(25, 75))) |>
-#'   add_transform(function(data) transform(data, amount = amount * 2)) |>
-#'   add_contract(c(id = "integer", amount = "numeric")) |>
-#'   add_quality(~ amount >= 0)
-#' orders |> trial() |> collect()
-add_source <- function(x, source, name = NULL, reader = NULL, replace = FALSE) {
+#' flow <- tw_workflow() |>
+#'   tw_add_product(tw_product("orders")) |>
+#'   tw_add_source(data.frame(id = 1:2, amount = c(25, 75)), name = "orders")
+#' tw_collect(tw_trial(flow))
+tw_add_source <- function(
+  x,
+  source,
+  name = NULL,
+  reader = NULL,
+  replace = FALSE
+) {
   if (inherits(x, "tw_product_workflow")) {
-    holder <- product("workflow")
+    holder <- tw_product("workflow")
     holder$sources <- x$sources
-    holder <- add_source(holder, source, name, reader, replace)
+    holder <- tw_add_source(holder, source, name, reader, replace)
     x$sources <- holder$sources
     check_workflow_slots(x)
     return(x)
@@ -135,9 +126,9 @@ normalize_source <- function(source, id, name, reader = NULL) {
       is.null(reader) &&
         tolower(tools::file_ext(source)) %in% c("parquet", "pq")
     ) {
-      source <- source_parquet(source)
+      source <- tw_source_parquet(source)
     } else {
-      source <- source_file(
+      source <- tw_source_file(
         paste0(
           id,
           ".source.",
@@ -148,26 +139,38 @@ normalize_source <- function(source, id, name, reader = NULL) {
       )
     }
   }
-  if (!component_method("read_source", source)) {
+  if (!component_method("tw_read_source", source)) {
     abort(
       "source must be a table, path, function, product, successful run or source adapter."
     )
   }
   source
 }
-#' @rdname add_source
+#' Add a transformation directly to a product
+#'
+#' For modular workflows, prefer [tw_recipe()] with [tw_step_transform()]. This
+#' direct interface appends preparation to a product for compact pipelines.
+#' @param x A table product definition.
+#' @param transform R function, formula using `.x`, or transform adapter.
+#' @param name Optional unique step name, generated when omitted.
+#' @returns An updated product definition. Execution remains deferred.
 #' @export
-add_transform <- function(x, transform, name = NULL) {
+#' @examples
+#' tw_product("orders", data.frame(amount = c(10, 20))) |>
+#'   tw_add_transform(~ dplyr::mutate(.x, amount = amount * 2)) |>
+#'   tw_trial() |>
+#'   tw_collect()
+tw_add_transform <- function(x, transform, name = NULL) {
   if (inherits(x, "tw_model_product")) {
     abort(
-      "Transform a member table product, then use replace_sources(model, table_name = product)."
+      "Transform a member table product, then use tw_replace_sources(model, table_name = product)."
     )
   }
   x <- editable_product(x)
   if (inherits(transform, "formula")) {
     transform <- rlang::as_function(transform)
   }
-  if (!component_method("execute_transform", transform)) {
+  if (!component_method("tw_execute_transform", transform)) {
     abort(
       "transform must be a function, formula using .x, or transform adapter."
     )
@@ -180,12 +183,28 @@ add_transform <- function(x, transform, name = NULL) {
   x$transforms[[name]] <- transform
   x
 }
-#' @rdname add_source
+#' Attach output requirements to a product specification
+#'
+#' The contract describes shape and keys; quality rules describe acceptable
+#' values. Checks apply after preparation and gate framework writers.
+#' Adding a contract replaces the previous contract. Quality rules accumulate.
+#' @param x A [tw_product()] specification.
+#' @param contract Contract, named type vector, or named list of prototypes.
+#' @param quality One-sided row predicate, function, rule, or list of rules.
+#'   Formula `NA` results count as failures. Functions return scalar logicals
+#'   or [tw_quality_counts()]. Names in rule lists become rule names.
+#' @param name Optional quality rule name.
+#' @returns An updated product specification, without executing checks.
+#' @seealso [tw_contract()], [tw_quality_rule()], [tw_set_engine()]
 #' @export
-add_contract <- function(x, contract) {
+#' @examples
+#' tw_product("orders") |>
+#'   tw_add_contract(c(id = "integer", amount = "numeric")) |>
+#'   tw_add_quality(~ amount >= 0)
+tw_add_contract <- function(x, contract) {
   x <- editable_product(x)
   if (!inherits(contract, "tw_contract")) {
-    contract <- contract(paste0(x$id, ".contract"), columns = contract)
+    contract <- tw_contract(paste0(x$id, ".contract"), columns = contract)
   }
   if (isTRUE(attr(contract, "tw_anonymous"))) {
     contract$id <- paste0(x$id, ".contract")
@@ -195,11 +214,11 @@ add_contract <- function(x, contract) {
   x$contract <- contract
   x
 }
-#' @rdname add_source
+#' @rdname tw_add_contract
 #' @param engine Optional formula quality engine, `"native"` or
 #'   `"pointblank"`. Omit to preserve engines on existing rule specifications.
 #' @export
-add_quality <- function(x, quality, name = NULL, engine = NULL) {
+tw_add_quality <- function(x, quality, name = NULL, engine = NULL) {
   x <- editable_product(x)
   x$quality <- normalize_quality_rules(
     quality,
@@ -210,9 +229,20 @@ add_quality <- function(x, quality, name = NULL, engine = NULL) {
   x
 }
 
-#' @rdname add_source
+#' Set a publication destination
+#'
+#' Store or replace a destination without writing data. [tw_trial()] disables
+#' it; [tw_run()] and [tw_publish()] execute it after successful output checks.
+#' @param x A [tw_product()] or modular [tw_workflow()] definition.
+#' @param target Lake folder path, connected lake, configuration or target
+#'   adapter. Use [tw_target_lake()] for partition or layer options.
+#' @returns An updated definition.
 #' @export
-set_target <- function(x, target) {
+#' @examples
+#' tw_workflow() |>
+#'   tw_add_product(tw_product("orders")) |>
+#'   tw_set_target("data/orders")
+tw_set_target <- function(x, target) {
   if (inherits(x, "tw_product_workflow")) {
     x$target <- normalize_target(target)
     check_workflow_slots(x)
@@ -222,13 +252,24 @@ set_target <- function(x, target) {
   x$target <- normalize_target(target)
   x
 }
-#' @rdname add_source
+#' Attach a metadata destination to a product
+#'
+#' Catalog callbacks receive descriptive run metadata after execution. Delivery
+#' is outside the data transaction; retryable failures retain run evidence.
+#' @param x A [tw_product()] definition.
+#' @param catalog Function receiving run metadata, or catalog adapter.
+#' @param name Optional unique catalog name, generated when omitted.
+#' @returns An updated product definition.
+#' @seealso [tw_catalog_openlineage()], [tw_retry_catalogs()]
 #' @export
-add_catalog <- function(x, catalog, name = NULL) {
+#' @examples
+#' tw_product("orders") |>
+#'   tw_add_catalog(function(metadata) invisible(metadata), name = "audit")
+tw_add_catalog <- function(x, catalog, name = NULL) {
   x <- editable_product(x)
-  if (!component_method("publish_metadata", catalog)) {
+  if (!component_method("tw_publish_metadata", catalog)) {
     abort(
-      "catalog must be a function or an adapter with publish_metadata()."
+      "catalog must be a function or an adapter with tw_publish_metadata()."
     )
   }
   name <- name %||%
@@ -246,10 +287,10 @@ add_catalog <- function(x, catalog, name = NULL) {
 }
 
 #' @export
-validate.tw_product <- function(data, contract = NULL, ...) {
+tw_validate.tw_product <- function(data, contract = NULL, ...) {
   rlang::check_dots_empty()
   if (!is.null(contract)) {
-    abort("Add a contract with add_contract() before preflight.")
+    abort("Add a contract with tw_add_contract() before preflight.")
   }
   validate_product_graph(data)
   attr(data, "tw_validated") <- TRUE
@@ -289,7 +330,7 @@ validate_product_graph <- function(product) {
       return(invisible(NULL))
     }
     if (!length(data$sources)) {
-      abort("This product has no source. Add one with add_source().")
+      abort("This product has no source. Add one with tw_add_source().")
     }
     if (
       is.null(names(data$sources)) ||
@@ -303,38 +344,38 @@ validate_product_graph <- function(product) {
       if (inherits(source, "tw_product")) {
         visit(source, c(stack, data$id))
       } else {
-        assert_component(source, "read_source")
+        assert_component(source, "tw_read_source")
       }
     }
     for (step in data$transforms) {
-      assert_component(step, "execute_transform")
+      assert_component(step, "tw_execute_transform")
     }
     if (!is.null(data$contract)) {
       assert_contract_ready(data$contract)
       args <- data$contract
       args[c("kind", "automatic_schema")] <- NULL
       args$columns <- unlist(args$columns, use.names = TRUE)
-      do.call(contract, args)
+      do.call(tw_contract, args)
     }
     rules <- c(data$contract$rules, data$quality)
     if (anyDuplicated(vapply(rules, `[[`, character(1), "name"))) {
       abort("Contract and added quality rules must have unique names.")
     }
     for (rule in rules) {
-      assert_component(rule, "run_quality")
+      assert_component(rule, "tw_run_quality")
     }
     if (!is.null(data$target)) {
-      check_component(data$target)
+      tw_check_component(data$target)
       if (
         !component_method("tw_execute_target", data$target) &&
-          !component_method("write_target", data$target)
+          !component_method("tw_write_target", data$target)
       ) {
-        abort("The target needs a write_target() method.")
+        abort("The target needs a tw_write_target() method.")
       }
     }
     normalize_catalogs(data$catalogs)
     for (catalog in data$catalogs) {
-      assert_component(catalog, "publish_metadata")
+      assert_component(catalog, "tw_publish_metadata")
     }
     assign(data$id, data, seen)
     invisible(NULL)
@@ -349,35 +390,35 @@ validate_product_graph <- function(product) {
 #' contract, target and optional integrations. Data rows, connection credentials
 #' and closure environments are omitted. This is descriptive metadata, not a
 #' portable executable serialization. Save project R code for reproducibility.
-#' Extension packages may implement `inspect()` to provide safe descriptors.
+#' Extension packages may implement `tw_inspect()` to provide safe descriptors.
 #' @param x Product, run or component.
 #' @param ... Reserved for extensions.
-#' @returns `inspect()` returns a list. `explain()` returns a character
+#' @returns `tw_inspect()` returns a list. `tw_explain()` returns a character
 #'   vector invisibly after printing a plain-language explanation.
 #' @export
 #' @examples
-#' orders <- product("orders") |> add_source(data.frame(id = 1:2))
-#' inspect(orders)
-#' explain(orders)
-inspect <- function(x, ...) UseMethod("inspect")
+#' orders <- tw_product("orders") |> tw_add_source(data.frame(id = 1:2))
+#' tw_inspect(orders)
+#' tw_explain(orders)
+tw_inspect <- function(x, ...) UseMethod("tw_inspect")
 #' @export
-inspect.default <- function(x, ...) list(type = class(x)[[1]])
+tw_inspect.default <- function(x, ...) list(type = class(x)[[1]])
 #' @export
-inspect.NULL <- function(x, ...) list(type = "memory")
+tw_inspect.NULL <- function(x, ...) list(type = "memory")
 #' @export
-inspect.data.frame <- function(x, ...) {
+tw_inspect.data.frame <- function(x, ...) {
   list(type = "data.frame", rows = nrow(x), columns = names(x))
 }
 #' @export
-inspect.function <- function(x, ...) {
+tw_inspect.function <- function(x, ...) {
   list(type = "R function", code = canonical(x))
 }
 #' @export
-inspect.tw_source <- function(x, ...) {
+tw_inspect.tw_source <- function(x, ...) {
   list(type = "file", id = x$id, path = x$path, reader = canonical(x$reader))
 }
 #' @export
-inspect.tw_database_source <- function(x, ...) {
+tw_inspect.tw_database_source <- function(x, ...) {
   list(
     type = "DBI",
     table = if (inherits(x$table, "Id")) as.list(x$table@name) else x$table,
@@ -387,16 +428,16 @@ inspect.tw_database_source <- function(x, ...) {
   )
 }
 #' @export
-inspect.tw_sql_transform <- function(x, ...) {
+tw_inspect.tw_sql_transform <- function(x, ...) {
   list(type = "DuckDB SQL", query = x$query)
 }
 #' @export
-inspect.tw_product <- function(x, ...) {
+tw_inspect.tw_product <- function(x, ...) {
   sources <- lapply(x$sources, function(source) {
     if (inherits(source, "tw_product")) {
       list(type = "product", id = source$id, version = source$version)
     } else {
-      inspect(source)
+      tw_inspect(source)
     }
   })
   list(
@@ -405,18 +446,18 @@ inspect.tw_product <- function(x, ...) {
     code_version = x$code_version,
     status = if (isTRUE(attr(x, "tw_validated"))) "validated" else "defined",
     sources = sources,
-    transforms = lapply(x$transforms, inspect),
+    transforms = lapply(x$transforms, tw_inspect),
     contract = canonical(effective_product_contract(x)),
     quality = canonical(x$quality),
-    target = inspect(x$target),
-    catalogs = lapply(x$catalogs, inspect),
+    target = tw_inspect(x$target),
+    catalogs = lapply(x$catalogs, tw_inspect),
     owner = x$owner %||% x$contract$owner %||% "",
     description = x$description %||% x$contract$description %||% "",
     plan = product_plan(x, check = FALSE)
   )
 }
 #' @export
-inspect.tw_run_result <- function(x, ...) {
+tw_inspect.tw_run_result <- function(x, ...) {
   x[c(
     "run_id",
     "status",
@@ -433,12 +474,12 @@ inspect.tw_run_result <- function(x, ...) {
     "lifecycle"
   )]
 }
-#' @rdname inspect
+#' @rdname tw_inspect
 #' @importFrom dplyr explain
 #' @export
-dplyr::explain
+tw_explain <- function(x, ...) dplyr::explain(x, ...)
 
-#' @rdname inspect
+#' @rdname tw_inspect
 #' @export
 explain.tw_product <- function(x, ...) {
   rlang::check_dots_empty()
@@ -477,21 +518,21 @@ explain.tw_product <- function(x, ...) {
       " additional rule(s)."
     ),
     if (is.null(target)) {
-      "Return: checked data and run evidence. collect() materializes lazy output."
+      "Return: checked data and run evidence. tw_collect() materializes lazy output."
     } else {
       paste0(
         "Publish: ",
-        inspect(target)$type,
+        tw_inspect(target)$type,
         ". Failed checks block publication."
       )
     },
-    if (identical(capabilities(target)$lazy, FALSE)) {
+    if (identical(tw_capabilities(target)$lazy, FALSE)) {
       "Materialization: the target requires an ordinary table."
     } else {
       "Materialization: lazy tables remain lazy unless a component collects."
     },
     product_display_defaults(x),
-    "validate() checks configuration and dependency cycles; run() executes."
+    "tw_validate() checks configuration and dependency cycles; tw_run() executes."
   )
   cat(paste(text, collapse = "\n"), "\n")
   invisible(text)
@@ -521,7 +562,7 @@ print.tw_product <- function(x, ...) {
   )
   cat("Quality:", length(x$quality) + length(x$contract$rules), "rules\n")
   target <- product_display_target(x)
-  target_label <- inspect(target)$type
+  target_label <- tw_inspect(target)$type
   if (inherits(target, "tw_lake_target")) {
     target_label <- paste0(target_label, " (", target$layer, ")")
   }
@@ -565,7 +606,7 @@ product_display_defaults <- function(x) {
     execution$quality,
     "; relationships = ",
     execution$relationships,
-    ". Override with run(execution = )."
+    ". Override with tw_run(execution = )."
   )
 }
 
@@ -577,7 +618,7 @@ product_plan <- function(x, check = TRUE) {
       if (inherits(source, "tw_product")) {
         "product"
       } else {
-        inspect(source)$type
+        tw_inspect(source)$type
       }
     },
     character(1)
@@ -599,7 +640,7 @@ product_plan <- function(x, check = TRUE) {
   components <- c(sources, x$transforms, list(NULL, x$target), x$catalogs)
   lazy <- vapply(
     components,
-    function(component) capabilities(component)$lazy,
+    function(component) tw_capabilities(component)$lazy,
     logical(1)
   )
   out <- tibble::tibble(
@@ -608,9 +649,9 @@ product_plan <- function(x, check = TRUE) {
     id = ids,
     target = c(
       source_types,
-      vapply(x$transforms, function(step) inspect(step)$type, character(1)),
+      vapply(x$transforms, function(step) tw_inspect(step)$type, character(1)),
       "contract and quality",
-      inspect(x$target)$type,
+      tw_inspect(x$target)$type,
       rep("metadata only", length(x$catalogs))
     ),
     materializes = ifelse(is.na(lazy), NA, !lazy)
@@ -618,7 +659,7 @@ product_plan <- function(x, check = TRUE) {
   if (check) {
     attr(out, "complete") <- tryCatch(
       {
-        validate(x)
+        tw_validate(x)
         TRUE
       },
       error = function(e) FALSE

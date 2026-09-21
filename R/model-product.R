@@ -32,7 +32,7 @@ new_model_product <- function(x, data, contracts) {
   })
   x$sources <- stats::setNames(
     lapply(names(tables), function(name) {
-      product(
+      tw_product(
         paste(x$id, name, sep = "."),
         tables[[name]],
         contract = contracts[[name]],
@@ -46,7 +46,7 @@ new_model_product <- function(x, data, contracts) {
 }
 
 #' @export
-validate.tw_model_product <- function(data, contract = NULL, ...) {
+tw_validate.tw_model_product <- function(data, contract = NULL, ...) {
   rlang::check_dots_empty()
   if (
     !is.null(contract) ||
@@ -56,7 +56,7 @@ validate.tw_model_product <- function(data, contract = NULL, ...) {
       length(data$catalogs)
   ) {
     abort(
-      "Configure checks and transformations on the model's table products. Select a table with product(..., table = ) after trial() or publish()."
+      "Configure checks and transformations on the model's table products. Select a table with tw_product(..., table = ) after tw_trial() or tw_publish()."
     )
   }
   if (
@@ -73,7 +73,7 @@ validate.tw_model_product <- function(data, contract = NULL, ...) {
   ) {
     abort("Model members must be named table products.")
   }
-  invisible(lapply(data$sources, validate))
+  invisible(lapply(data$sources, tw_validate))
   if (!is.null(data$target)) {
     if (
       !inherits(data$target, "tw_lake_target") ||
@@ -81,21 +81,21 @@ validate.tw_model_product <- function(data, contract = NULL, ...) {
     ) {
       abort("Model products publish complete snapshots to a lake target.")
     }
-    check_component(data$target)
+    tw_check_component(data$target)
   }
   data
 }
 
 #' @export
-inspect.tw_model_product <- function(x, ...) {
+tw_inspect.tw_model_product <- function(x, ...) {
   list(
     id = x$id,
     version = x$version,
     kind = "model_product",
-    tables = lapply(x$sources, inspect),
+    tables = lapply(x$sources, tw_inspect),
     primary_keys = x$primary_keys,
     foreign_keys = x$foreign_keys,
-    target = inspect(x$target)
+    target = tw_inspect(x$target)
   )
 }
 
@@ -112,7 +112,7 @@ print.tw_model_product <- function(x, ...) {
 }
 
 #' @export
-run.tw_model_product <- function(
+tw_run.tw_model_product <- function(
   pipeline,
   lake = NULL,
   stop_on_failure = TRUE,
@@ -134,17 +134,17 @@ run.tw_model_product <- function(
   execution <- product_execution(x, execution)
   x <- apply_execution_defaults(x, execution)
   if (!is.null(lake)) {
-    x <- set_target(x, lake)
+    x <- tw_set_target(x, lake)
   }
-  x <- validate(x)
+  x <- tw_validate(x)
   result <- run_result(uid(), "completed")
   class(result) <- c("tw_model_result", class(result))
   result$asset <- x$id
   result$primary_keys <- x$primary_keys
   result$foreign_keys <- x$foreign_keys
-  result$members <- lapply(x$sources, function(member) trial(member))
+  result$members <- lapply(x$sources, function(member) tw_trial(member))
   checks <- lapply(names(result$members), function(name) {
-    out <- quality(result$members[[name]])
+    out <- tw_quality(result$members[[name]])
     out$rule <- paste(name, out$rule, sep = "/")
     out
   })
@@ -157,7 +157,7 @@ run.tw_model_product <- function(
   if (!all(good)) {
     result$status <- "blocked"
   } else {
-    candidate <- dm::dm(!!!lapply(result$members, collect))
+    candidate <- dm::dm(!!!lapply(result$members, tw_collect))
     checked <- tryCatch(
       dm_keys(candidate, x$primary_keys, x$foreign_keys, TRUE),
       error = identity
@@ -204,7 +204,7 @@ run.tw_model_product <- function(
   }
   if (stop_on_failure && result$status == "blocked") {
     abort(
-      paste("Model", x$id, "failed checks. Inspect quality_report(result)."),
+      paste("Model", x$id, "failed checks. Inspect tw_quality_report(result)."),
       "tw_model_failed",
       result = result
     )
@@ -217,7 +217,7 @@ collect.tw_model_result <- function(x, ...) {
   rlang::check_dots_empty()
   if (!x$status %in% c("completed", "published")) {
     abort(
-      "The model failed checks. Inspect quality_report(result) and quality_rows(result)."
+      "The model failed checks. Inspect tw_quality_report(result) and tw_quality_rows(result)."
     )
   }
   if (!is.null(x$data)) {
@@ -231,8 +231,8 @@ collect.tw_model_result <- function(x, ...) {
 with_model_lake <- function(x, fn) {
   lake <- x$output_lake
   if (is.null(lake) || !DBI::dbIsValid(lake$con)) {
-    lake <- connect_lake(x$output_config, read_only = TRUE)
-    on.exit(close_lake(lake), add = TRUE)
+    lake <- tw_connect_lake(x$output_config, read_only = TRUE)
+    on.exit(tw_close_lake(lake), add = TRUE)
   }
   fn(lake)
 }
@@ -243,7 +243,9 @@ model_member_result <- function(x, table) {
     !inherits(x, "tw_model_result") ||
       !x$status %in% c("completed", "published")
   ) {
-    abort("Select a table from a successful trial() or publish() model result.")
+    abort(
+      "Select a table from a successful tw_trial() or tw_publish() model result."
+    )
   }
   if (!table %in% names(x$members)) {
     abort(paste(
@@ -260,11 +262,11 @@ publish_model_result <- function(x, result, previous) {
   own <- !inherits(lake, "tw_lake")
   if (own) {
     lake <- if (inherits(lake, "tw_config")) {
-      connect_lake(lake)
+      tw_connect_lake(lake)
     } else {
-      open_lake(lake)
+      tw_open_lake(lake)
     }
-    on.exit(close_lake(lake), add = TRUE)
+    on.exit(tw_close_lake(lake), add = TRUE)
   }
   assert_writable(lake)
   check_previous_release(lake, x$id, previous)
@@ -281,14 +283,14 @@ publish_model_result <- function(x, result, previous) {
   if (!layer %in% lake$config$layers) {
     abort("Model target layer is missing from the lake.")
   }
-  definition <- inspect(x)
+  definition <- tw_inspect(x)
   definition$target <- NULL
   definition$version <- if (x$automatic_version) {
     paste0("auto-", fingerprint(definition))
   } else {
     x$version
   }
-  register(lake, definition)
+  tw_register(lake, definition)
   run <- new_run(
     lake,
     x$id,
@@ -358,7 +360,7 @@ publish_model_result <- function(x, result, previous) {
           asset,
           automatic_types(unlist(prior_contract$columns, use.names = TRUE))
         )
-        if (!quality_ok(validate(tables[[name]], contract))) {
+        if (!quality_ok(tw_validate(tables[[name]], contract))) {
           abort(paste(
             "Model table",
             name,
@@ -366,7 +368,7 @@ publish_model_result <- function(x, result, previous) {
           ))
         }
       }
-      register(lake, contract)
+      tw_register(lake, contract)
       DBI::dbWriteTable(
         lake$con,
         table_id(layer, table),
@@ -500,7 +502,7 @@ read_model_release <- function(lake, asset, release = NULL) {
     abort("Unsupported model manifest format.")
   }
   tables <- lapply(manifest$members, function(x) {
-    read_release(lake, x$asset, x$release_id)
+    tw_read_release(lake, x$asset, x$release_id)
   })
   pk <- lapply(manifest$primary_keys, unlist, use.names = FALSE)
   fk <- lapply(manifest$foreign_keys, function(x) {
@@ -517,5 +519,5 @@ explain.tw_model_product <- function(x, ...) {
   cat(
     "Define table checks with contracts = list(...). Replace deliveries by table name.\n"
   )
-  invisible(inspect(x))
+  invisible(tw_inspect(x))
 }

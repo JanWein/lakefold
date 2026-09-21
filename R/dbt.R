@@ -2,7 +2,7 @@
 #'
 #' Store paths and CLI settings without running dbt or opening a database.
 #' dbt remains responsible for SQL models, dependencies, tests and incremental
-#' strategies. Use [dbt_build()] or [run()] to execute the project.
+#' strategies. Use [tw_dbt_build()] or [tw_run()] to execute the project.
 #'
 #' @param path Character scalar giving the directory with `dbt_project.yml`.
 #'   The directory is checked when executing, not when constructing the object.
@@ -11,22 +11,22 @@
 #' @param target Optional character scalar naming a target in the dbt profile.
 #' @param executable Character scalar giving a dbt executable name or path.
 #'   It is passed to [processx::run()] without a shell.
-#' @param lake Optional connection-free [lake_config()] for local DuckDB or
+#' @param lake Optional connection-free [tw_lake_config()] for local DuckDB or
 #'   DuckLake. At execution, tidyweave writes a private profile for this catalog.
 #'   Omit `profiles_dir` when using `lake`. SQL and handwritten project files
 #'   stay unchanged. Close any caller-owned connections before running dbt.
 #' @param sources Optional named list of successful published lake results.
-#'   They become the `inputs` source group. Use [dbt_sources()] to add groups
+#'   They become the `inputs` source group. Use [tw_dbt_sources()] to add groups
 #'   from other physical schemas. Definitions retain exact release IDs;
 #'   registry resolution and YAML generation happen only at execution.
 #' @returns A serializable `dbt_project` specification. It contains no
 #'   database connection or resolved environment credentials.
-#' @seealso [dbt_init()], [dbt_status()], [dbt_model()]
+#' @seealso [tw_dbt_init()], [tw_dbt_status()], [tw_dbt_model()]
 #' @examples
-#' project <- dbt_project("analytics", profiles_dir = "analytics")
+#' project <- tw_dbt_project("analytics", profiles_dir = "analytics")
 #' project
 #' @export
-dbt_project <- function(
+tw_dbt_project <- function(
   path = "dbt",
   profiles_dir = NULL,
   target = NULL,
@@ -65,11 +65,11 @@ dbt_project <- function(
   if (!is.null(sources)) {
     if (is.null(lake)) {
       abort(
-        "Constructor sources require lake. For an external project use dbt_sources() explicitly.",
+        "Constructor sources require lake. For an external project use tw_dbt_sources() explicitly.",
         "tw_dbt_invalid"
       )
     }
-    project <- dbt_sources(project, sources, name = "inputs")
+    project <- tw_dbt_sources(project, sources, name = "inputs")
   }
   project
 }
@@ -87,7 +87,7 @@ dbt_project <- function(
 #' materialized even if a later model or test fails. dbt logs and artifacts can
 #' contain SQL, paths and database messages; treat them as project data.
 #'
-#' @param project A [dbt_project()] specification.
+#' @param project A [tw_dbt_project()] specification.
 #' @param select,exclude Optional character vectors of dbt selection
 #'   expressions.
 #'   Each element is one CLI argument; expressions starting with `-` are
@@ -100,26 +100,26 @@ dbt_project <- function(
 #'   exit
 #'   status, failed nodes or missing artifacts. The condition's `result` field
 #'   retains diagnostics. Set `FALSE` to inspect failures as ordinary results.
-#' @param catalog Optional [catalog_openmetadata_dbt()] adapter, a function
-#'   receiving the dbt result, or an S3 catalog whose `capabilities()` declares
-#'   `metadata_inputs = "tw_dbt_result"` and implements `publish_metadata()`.
+#' @param catalog Optional [tw_catalog_openmetadata_dbt()] adapter, a function
+#'   receiving the dbt result, or an S3 catalog whose `tw_capabilities()` declares
+#'   `metadata_inputs = "tw_dbt_result"` and implements `tw_publish_metadata()`.
 #'   After dbt
 #'   finishes, hand this invocation's artifacts to OpenMetadata's ingestion
 #'   engine. A delivery failure warns and leaves the dbt outcome unchanged.
-#'   Retry with `publish_metadata(catalog, result)` without rebuilding models.
+#'   Retry with `tw_publish_metadata(catalog, result)` without rebuilding models.
 #' @returns A `tw_dbt_result` list with `status` (integer exit code), `success`
 #'   (logical), `command`, `results` (node tibble), parsed `manifest`,
 #'   `artifacts_dir`, `stdout`, `stderr`, `artifact_error`, `invocation_id`,
 #'   `artifact_hashes`, original `project`, resolved `source_bindings`,
 #'   `source_catalog` and optional `catalog_delivery`. Warnings reported
 #'   by dbt are retained and do not by themselves count as failure.
-#' @seealso [dbt_status()], [dbt_lineage()], [dbt_model()]
+#' @seealso [tw_dbt_status()], [tw_dbt_lineage()], [tw_dbt_model()]
 #' @examplesIf nzchar(Sys.getenv("TIDYWEAVE_DBT_EXAMPLE_PROJECT"))
-#' project <- dbt_project(Sys.getenv("TIDYWEAVE_DBT_EXAMPLE_PROJECT"))
-#' result <- dbt_build(project, select = "tag:reporting", echo = FALSE)
-#' dbt_status(result)
+#' project <- tw_dbt_project(Sys.getenv("TIDYWEAVE_DBT_EXAMPLE_PROJECT"))
+#' result <- tw_dbt_build(project, select = "tag:reporting", echo = FALSE)
+#' tw_dbt_status(result)
 #' @export
-dbt_build <- function(
+tw_dbt_build <- function(
   project,
   select = NULL,
   exclude = NULL,
@@ -144,9 +144,9 @@ dbt_build <- function(
   )
 }
 
-#' @rdname dbt_build
+#' @rdname tw_dbt_build
 #' @export
-dbt_test <- function(
+tw_dbt_test <- function(
   project,
   select = NULL,
   exclude = NULL,
@@ -188,7 +188,7 @@ tw_execute.tw_dbt_project <- function(
     abort("dbt opens its own connections; omit lake.", "tw_dbt_invalid")
   }
   object <- replace_execution_sources(object, sources = sources)
-  dbt_build(object, ...)
+  tw_dbt_build(object, ...)
 }
 
 dbt_selection <- function(value, name) {
@@ -241,7 +241,7 @@ dbt_run <- function(
   catalog = NULL
 ) {
   if (!inherits(project, "tw_dbt_project")) {
-    abort("Use dbt_project() first.", "tw_dbt_invalid")
+    abort("Use tw_dbt_project() first.", "tw_dbt_invalid")
   }
   flag(full_refresh, "full_refresh")
   flag(echo, "echo")
@@ -277,7 +277,7 @@ dbt_run <- function(
   )
   if (!file.exists(file.path(project$path, "dbt_project.yml"))) {
     abort(
-      "No dbt_project.yml found. Use dbt_init() or supply an existing project.",
+      "No dbt_project.yml found. Use tw_dbt_init() or supply an existing project.",
       "tw_dbt_invalid"
     )
   }
@@ -298,8 +298,8 @@ dbt_run <- function(
   if (!is.null(prepared) && !length(project$source_groups)) {
     # Initialize even a source-free project through the lake lifecycle. dbt must
     # not create an unmarked catalog that publication later cannot recognize.
-    owned <- connect_lake(project$lake)
-    close_lake(owned)
+    owned <- tw_connect_lake(project$lake)
+    tw_close_lake(owned)
   }
   artifacts <- file.path(project$path, ".tidyweave", "runs", uid())
   if (!dir.create(artifacts, recursive = TRUE)) {
@@ -400,11 +400,11 @@ dbt_check_catalog <- function(catalog) {
     return(invisible(catalog))
   }
   if (
-    !component_method("publish_metadata", catalog) ||
-      !"tw_dbt_result" %in% capabilities(catalog)$metadata_inputs
+    !component_method("tw_publish_metadata", catalog) ||
+      !"tw_dbt_result" %in% tw_capabilities(catalog)$metadata_inputs
   ) {
     abort(
-      "catalog must be a function or a publish_metadata() adapter declaring metadata_inputs = 'tw_dbt_result' in capabilities().",
+      "catalog must be a function or a tw_publish_metadata() adapter declaring metadata_inputs = 'tw_dbt_result' in tw_capabilities().",
       "tw_dbt_invalid"
     )
   }
@@ -434,10 +434,10 @@ dbt_deliver_metadata <- function(catalog, result) {
     delivery$error_class <- "tw_dbt_artifact_invalid"
     delivery$message <- "Metadata delivery blocked: dbt artifacts are missing, malformed or changed. Use the original unchanged artifacts from this invocation."
   } else {
-    outcome <- tryCatch(publish_metadata(catalog, result), error = identity)
+    outcome <- tryCatch(tw_publish_metadata(catalog, result), error = identity)
     if (inherits(outcome, "error")) {
       delivery$error_class <- "tw_dbt_catalog_delivery_error"
-      delivery$message <- "Metadata delivery failed. Check the catalog configuration and connectivity, then retry publish_metadata(catalog, result)."
+      delivery$message <- "Metadata delivery failed. Check the catalog configuration and connectivity, then retry tw_publish_metadata(catalog, result)."
     } else if (
       !is.function(catalog) &&
         is.list(outcome) &&
@@ -573,12 +573,12 @@ dbt_read_manifest <- function(path) {
 #'   directory.
 #' @returns A tibble with character columns `unique_id`, `status`, `message`,
 #'   numeric `execution_time` (seconds) and integer `failures` (possibly `NA`).
-#' @seealso [dbt_build()], [dbt_lineage()]
+#' @seealso [tw_dbt_build()], [tw_dbt_lineage()]
 #' @examples
 #' artifacts <- system.file("extdata", "dbt-artifacts", package = "tidyweave")
-#' dbt_status(artifacts)
+#' tw_dbt_status(artifacts)
 #' @export
-dbt_status <- function(x) {
+tw_dbt_status <- function(x) {
   if (inherits(x, "tw_dbt_result")) {
     return(x$results)
   }
@@ -591,15 +591,15 @@ dbt_status <- function(x) {
 #' manifest nodes. Dependencies describe SQL builds, not primary/foreign keys
 #' or column-level lineage. No database connection or dbt installation is
 #'   needed.
-#' @inheritParams dbt_status
+#' @inheritParams tw_dbt_status
 #' @returns A tibble with character columns `from`, `to` and `resource_type`.
 #'   One row represents a dependency from a parent to a downstream resource.
-#' @seealso [dbt_model()], [dbt_status()]
+#' @seealso [tw_dbt_model()], [tw_dbt_status()]
 #' @examples
 #' artifacts <- system.file("extdata", "dbt-artifacts", package = "tidyweave")
-#' dbt_lineage(artifacts)
+#' tw_dbt_lineage(artifacts)
 #' @export
-dbt_lineage <- function(x) {
+tw_dbt_lineage <- function(x) {
   manifest <- dbt_manifest(x)
   nodes <- c(
     manifest$nodes,
@@ -651,26 +651,26 @@ dbt_manifest <- function(x) {
 #' The returned lazy model borrows the supplied connection; keep it open while
 #' querying. Ephemeral models cannot be opened. This function does not certify
 #' that tables were successfully built or that they still match the artifacts.
-#' @param lake A connected lake from [connect_lake()].
-#' @inheritParams dbt_status
+#' @param lake A connected lake from [tw_connect_lake()].
+#' @inheritParams tw_dbt_status
 #' @param tables Optional named character vector mapping R table aliases to dbt
 #'   unique IDs, such as `c(sales = "model.shop.sales")`. By default includes
 #'   all
 #'   non-ephemeral models, seeds and snapshots. Use a subset after selected
 #'   builds.
 #' @param database Character scalar: the attachment name in the R connection.
-#'   Defaults to `"lake"`, as created by [connect_lake()].
-#' @inheritParams model
+#'   Defaults to `"lake"`, as created by [tw_connect_lake()].
+#' @inheritParams tw_model
 #' @returns A lazy `dm` object with a `tw_dbt_nodes` attribute mapping aliases
 #'   to dbt unique IDs. Key violations raise `tw_model_invalid` when `check` is
 #'   `TRUE`; SQL and connection errors are propagated.
-#' @seealso [model()] for immutable releases, [dbt_lineage()]
+#' @seealso [tw_model()] for immutable releases, [tw_dbt_lineage()]
 #' @examplesIf nzchar(Sys.getenv("TIDYWEAVE_DBT_EXAMPLE_PROJECT"))
 #' # See vignette("dbt-workflows") for a complete build and reconnect example.
-#' project <- dbt_project(Sys.getenv("TIDYWEAVE_DBT_EXAMPLE_PROJECT"))
+#' project <- tw_dbt_project(Sys.getenv("TIDYWEAVE_DBT_EXAMPLE_PROJECT"))
 #' project
 #' @export
-dbt_model <- function(
+tw_dbt_model <- function(
   lake,
   x,
   tables = NULL,

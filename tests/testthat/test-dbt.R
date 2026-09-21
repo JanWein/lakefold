@@ -1,14 +1,14 @@
 test_that("dbt results and lineage are available without dbt", {
   path <- system.file("extdata", "dbt-artifacts", package = "tidyweave")
-  status <- dbt_status(path)
+  status <- tw_dbt_status(path)
   expect_equal(nrow(status), 3L)
   expect_equal(status$status, rep("success", 3))
   expect_equal(
-    dbt_lineage(path)$from,
+    tw_dbt_lineage(path)$from,
     c("seed.shop.raw_orders", "model.shop.stg_orders")
   )
   expect_equal(
-    dbt_lineage(path)$to,
+    tw_dbt_lineage(path)$to,
     c("model.shop.stg_orders", "model.shop.customer_revenue")
   )
 })
@@ -32,7 +32,7 @@ test_that("each invocation gets isolated artifacts and literal selector argument
     file.copy(list.files(fixtures, full.names = TRUE), target)
     list(status = 0L, stdout = "done", stderr = "")
   })
-  project <- dbt_project(root, executable = file.path(R.home("bin"), "R"))
+  project <- tw_dbt_project(root, executable = file.path(R.home("bin"), "R"))
   result <- tw_execute(
     project,
     select = "tag:monthly orders; echo nope",
@@ -43,8 +43,8 @@ test_that("each invocation gets isolated artifacts and literal selector argument
     captured[match("--select", captured) + 1L],
     "tag:monthly orders; echo nope"
   )
-  expect_equal(dbt_status(result)$status, rep("success", 3))
-  second <- dbt_test(project, echo = FALSE)
+  expect_equal(tw_dbt_status(result)$status, rep("success", 3))
+  second <- tw_dbt_test(project, echo = FALSE)
   expect_equal(second$command, "test")
   expect_length(unique(paths), 2L)
 })
@@ -58,8 +58,8 @@ test_that("a failed process cannot reuse previous successful artifacts", {
   testthat::local_mocked_bindings(dbt_process = function(...) {
     list(status = 2L, stdout = "", stderr = "bad profile")
   })
-  result <- dbt_build(
-    dbt_project(root, executable = file.path(R.home("bin"), "R")),
+  result <- tw_dbt_build(
+    tw_dbt_project(root, executable = file.path(R.home("bin"), "R")),
     echo = FALSE,
     stop_on_failure = FALSE
   )
@@ -81,13 +81,13 @@ test_that("inconsistent artifacts are rejected", {
     auto_unbox = TRUE,
     null = "null"
   )
-  expect_snapshot(error = TRUE, dbt_status(root))
+  expect_snapshot(error = TRUE, tw_dbt_status(root))
 })
 
 test_that("selectors cannot inject CLI flags", {
   expect_snapshot(
     error = TRUE,
-    dbt_build(dbt_project("."), select = "--profiles-dir")
+    tw_dbt_build(tw_dbt_project("."), select = "--profiles-dir")
   )
 })
 
@@ -108,9 +108,9 @@ test_that("dbt failures retain structured diagnostics", {
     )
     list(status = 0L, stdout = "", stderr = "")
   })
-  project <- dbt_project(root, executable = file.path(R.home("bin"), "R"))
+  project <- tw_dbt_project(root, executable = file.path(R.home("bin"), "R"))
   error <- tryCatch(
-    dbt_build(project, echo = FALSE),
+    tw_dbt_build(project, echo = FALSE),
     tw_dbt_failed = identity
   )
   expect_s3_class(error, "tw_dbt_failed")
@@ -128,7 +128,7 @@ test_that("dbt relations become a lazy dm with explicit keys", {
     "CREATE TABLE lake.marts.customer_revenue AS SELECT 101 AS customer_id, 100 AS revenue"
   )
   path <- system.file("extdata", "dbt-artifacts", package = "tidyweave")
-  model <- dbt_model(
+  model <- tw_dbt_model(
     f$lake,
     path,
     tables = c(revenue = "model.shop.customer_revenue"),
@@ -156,5 +156,5 @@ test_that("malformed optional fields cannot erase failed nodes", {
     auto_unbox = TRUE,
     null = "null"
   )
-  expect_snapshot(error = TRUE, dbt_status(root))
+  expect_snapshot(error = TRUE, tw_dbt_status(root))
 })

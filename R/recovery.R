@@ -62,7 +62,7 @@ writer_state <- function(owner) {
 #'
 #' Selected running jobs become errors, retaining their inputs and quality
 #' evidence. Selected data-frame staging slots are removed; immutable landing
-#' deliveries and published tables are retained. Use [cleanup()] separately
+#' deliveries and published tables are retained. Use [tw_cleanup()] separately
 #' for abandoned candidate tables. Run recovery with one coordinated writer.
 #' Database changes are transactional; staging removal happens afterwards and
 #' is reported separately, so an incomplete filesystem cleanup can be retried.
@@ -78,11 +78,11 @@ writer_state <- function(owner) {
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("tidyweave-")
-#' lake <- open_lake(root)
-#' recover(lake)
-#' close_lake(lake)
+#' lake <- tw_open_lake(root)
+#' tw_recover(lake)
+#' tw_close_lake(lake)
 #' unlink(root, recursive = TRUE)
-recover <- function(
+tw_recover <- function(
   lake,
   run_ids = character(),
   staging_assets = character(),
@@ -106,11 +106,11 @@ recover <- function(
     if (!dry_run) {
       abort("Select run_ids or staging_assets explicitly before recovery.")
     }
-    run_ids <- interrupted(lake)$run_id
+    run_ids <- tw_interrupted(lake)$run_id
   }
-  plan <- function() {
-    runs <- registry(lake, "runs")
-    owners <- registry(lake, "run_owners")
+  tw_plan <- function() {
+    runs <- tw_registry(lake, "runs")
+    owners <- tw_registry(lake, "run_owners")
     rows <- lapply(run_ids, function(id) {
       run <- runs[runs$run_id == id, ]
       if (nrow(run) != 1L || run$status[[1]] != "running") {
@@ -157,7 +157,7 @@ recover <- function(
     }
     dplyr::bind_rows(rows)
   }
-  out <- plan()
+  out <- tw_plan()
   if (dry_run || !nrow(out)) {
     return(out)
   }
@@ -170,7 +170,7 @@ recover <- function(
     )
   }
   DBI::dbWithTransaction(lake$con, {
-    if (!identical(out, plan())) {
+    if (!identical(out, tw_plan())) {
       abort("Recovery eligibility changed; request a fresh plan.")
     }
     for (id in run_ids) {

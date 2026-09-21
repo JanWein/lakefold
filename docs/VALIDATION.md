@@ -61,8 +61,8 @@ statuses, including blocked missing deliveries.
 The product remains one specification class. Supported dplyr methods defer real
 expressions until execution; inspection does not read sources or evaluate those
 expressions. Tests cover ordinary data masking, selection, grouping and external
-bindings, plus deterministic definition inspection. `collect()`, `explain()`
-and `tbl()` reuse the dplyr generics rather than competing with them.
+bindings, plus deterministic definition inspection. `tw_collect()`, `tw_explain()`
+and `tw_tbl()` reuse the dplyr generics rather than competing with them.
 
 Checked lookups treat their references as execution dependencies. Native and dm
 implementations enforce unique, non-missing parent keys and the declared policy
@@ -101,7 +101,7 @@ keys, reconciled totals and the preservation of independent staging releases.
 
 Managed dbt execution prepares connection profiles and source bindings from the
 selected releases. Tests retain explicit SQL models and the bounded
-`dbt_contract()` schema bridge. The final R mart gate keeps business rules and
+`tw_dbt_contract()` schema bridge. The final R mart gate keeps business rules and
 composite-key checks. Publication rejects unsuccessful selections or changed
 invocation artifacts; dbt's mutable build relations are distinct from approved
 immutable snapshots. Coordinate writers between build and publication.
@@ -208,8 +208,8 @@ BIGINT identifiers in stored tables.
 
 ### Remaining operating and usability boundaries
 
-A product with a configured destination can write when `run()` executes. The
-introductory trial uses an untargeted definition, and `publish()` makes the
+A product with a configured destination can write when `tw_run()` executes. The
+introductory trial uses an untargeted definition, and `tw_publish()` makes the
 intent to persist explicit. Stored configuration is an ordinary value, not a
 mutable global context.
 

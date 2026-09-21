@@ -62,7 +62,7 @@ point it is needed. Storage engines, connections, internal source paths and
 release IDs are not required for this task.
 
 General joins still use ordinary dplyr on tables; checked enrichment uses
-`add_lookup()`. The `left_join()` product method explains that boundary rather
+`tw_add_lookup()`. The `left_join()` product method explains that boundary rather
 than silently imposing different join semantics. Approval is never inferred.
 Full-snapshot replacement is never guessed from partial rows.
 

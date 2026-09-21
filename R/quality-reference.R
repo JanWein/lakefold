@@ -16,18 +16,18 @@
 #' @param by Character vector of key columns, or a named vector mapping input
 #'   columns to reference columns, for example `c(customer_id = "id")`.
 #' @param name Name of the quality check.
-#' @param severity,max_failure See [quality_rule()].
+#' @param severity,max_failure See [tw_quality_rule()].
 #' @param copy Explicitly permit moving reference keys between backends.
 #' @param na_matches Whether missing values never match (`"never"`, default)
 #'   or match other missing values (`"na"`).
-#' @returns A quality rule accepted by [add_quality()] or [contract()].
+#' @returns A quality rule accepted by [tw_add_quality()] or [tw_contract()].
 #' @export
 #' @examples
 #' customers <- data.frame(id = c("a", "b"))
 #' orders <- data.frame(customer_id = c("a", "missing", NA))
-#' rule <- quality_reference(customers, c(customer_id = "id"))
-#' run_quality(rule, orders)
-quality_reference <- function(
+#' rule <- tw_quality_reference(customers, c(customer_id = "id"))
+#' tw_run_quality(rule, orders)
+tw_quality_reference <- function(
   reference,
   by,
   name = "reference",
@@ -53,10 +53,10 @@ quality_reference <- function(
   flag(copy, "copy")
   na_matches <- match.arg(na_matches)
   if (!is.data.frame(reference) && !is_lazy_table(reference)) {
-    assert_component(reference, "read_source")
+    assert_component(reference, "tw_read_source")
   }
   force(reference)
-  rule <- quality_rule(
+  rule <- tw_quality_rule(
     name,
     function(data) {
       reference_quality_counts(data, reference, by, copy, na_matches)
@@ -72,7 +72,7 @@ quality_reference <- function(
 
 reference_quality_counts <- function(data, reference, by, copy, na_matches) {
   if (!is.data.frame(reference) && !is_lazy_table(reference)) {
-    reference <- read_source(reference)
+    reference <- tw_read_source(reference)
   }
   input_columns <- names(table_prototype(data))
   reference_columns <- names(table_prototype(reference))
@@ -107,5 +107,5 @@ reference_quality_counts <- function(data, reference, by, copy, na_matches) {
     copy = copy,
     na_matches = na_matches
   )
-  quality_counts(count_rows(failed), count_rows(data))
+  tw_quality_counts(count_rows(failed), count_rows(data))
 }

@@ -1,25 +1,25 @@
 #' Read a source using an interchangeable adapter
 #'
 #' Data frames and zero-argument functions work directly. File paths are
-#' normalized by [add_source()]. A source method returns a data frame or
+#' normalized by [tw_add_source()]. A source method returns a data frame or
 #' tibble or a lazy table. Use a function to call an API or another existing client.
 #' @param source Source object, data frame or zero-argument function.
 #' @param ... Adapter-specific options.
 #' @returns A data frame or tibble. Connections supplied by callers stay open.
 #' @export
 #' @examples
-#' read_source(function() data.frame(id = 1:2))
-read_source <- function(source, ...) UseMethod("read_source")
+#' tw_read_source(function() data.frame(id = 1:2))
+tw_read_source <- function(source, ...) UseMethod("tw_read_source")
 #' @export
-read_source.data.frame <- function(source, ...) source
+tw_read_source.data.frame <- function(source, ...) source
 #' @export
-read_source.function <- function(source, ...) source()
+tw_read_source.function <- function(source, ...) source()
 #' @export
-read_source.tw_source <- function(source, ...) source$reader(source$path)
+tw_read_source.tw_source <- function(source, ...) source$reader(source$path)
 #' @export
-read_source.default <- function(source, ...) {
+tw_read_source.default <- function(source, ...) {
   abort(
-    "This source needs a read_source() method. You can also pass a function returning a data frame."
+    "This source needs a tw_read_source() method. You can also pass a function returning a data frame."
   )
 }
 
@@ -37,14 +37,14 @@ read_source.default <- function(source, ...) {
 #' @param lazy Keep a caller-owned DBI table lazy. Defaults to `TRUE` for open
 #'   connections without parameters and `FALSE` for factories. Factories are
 #'   closed before returning and cannot provide lazy output.
-#' @returns A source specification accepted by [add_source()].
+#' @returns A source specification accepted by [tw_add_source()].
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' con <- DBI::dbConnect(duckdb::duckdb(), bigint = "integer64")
 #' DBI::dbWriteTable(con, "orders", data.frame(id = 1:2))
-#' read_source(source_database(con, table = "orders"))
+#' tw_read_source(tw_source_database(con, table = "orders"))
 #' DBI::dbDisconnect(con, shutdown = TRUE)
-source_database <- function(
+tw_source_database <- function(
   connection,
   table = NULL,
   query = NULL,
@@ -82,7 +82,7 @@ source_database <- function(
   )
 }
 #' @export
-read_source.tw_database_source <- function(source, ...) {
+tw_read_source.tw_database_source <- function(source, ...) {
   con <- source$connection
   if (is.function(con)) {
     con <- con()
@@ -124,17 +124,17 @@ read_source.tw_database_source <- function(source, ...) {
 #' @returns A data frame or tibble.
 #' @export
 #' @examples
-#' execute_transform(function(data) transform(data, doubled = amount * 2),
+#' tw_execute_transform(function(data) transform(data, doubled = amount * 2),
 #'   data.frame(amount = 10))
-execute_transform <- function(transform, data, ...) {
-  UseMethod("execute_transform")
+tw_execute_transform <- function(transform, data, ...) {
+  UseMethod("tw_execute_transform")
 }
 #' @export
-execute_transform.function <- function(transform, data, ...) transform(data)
+tw_execute_transform.function <- function(transform, data, ...) transform(data)
 #' @export
-execute_transform.default <- function(transform, data, ...) {
+tw_execute_transform.default <- function(transform, data, ...) {
   abort(
-    "This transformation needs a execute_transform() method. An ordinary R function also works."
+    "This transformation needs a tw_execute_transform() method. An ordinary R function also works."
   )
 }
 
@@ -207,7 +207,7 @@ normalize_result_source <- function(result) {
     nzchar(result$release_id)
   destination <- result$output_config %||% result$output_lake
   if (pinned && !is.null(destination)) {
-    source <- source_release(destination, result$asset, result$release_id)
+    source <- tw_source_release(destination, result$asset, result$release_id)
     source$output_lake <- result$output_lake
     source$run_id <- result$run_id
     return(source)
@@ -224,7 +224,7 @@ normalize_result_source <- function(result) {
 }
 
 #' @export
-read_source.tw_result_source <- function(source, ...) {
+tw_read_source.tw_result_source <- function(source, ...) {
   data <- source$data
   attr(data, "tw_input_reference") <- list(
     asset = source$asset,
@@ -233,13 +233,13 @@ read_source.tw_result_source <- function(source, ...) {
   data
 }
 #' @export
-check_component.tw_result_source <- function(x, ...) {
-  assert_component(x$data, "read_source")
+tw_check_component.tw_result_source <- function(x, ...) {
+  assert_component(x$data, "tw_read_source")
   invisible(x)
 }
 #' @export
-inspect.tw_result_source <- function(x, ...) {
-  data <- inspect(x$data)
+tw_inspect.tw_result_source <- function(x, ...) {
+  data <- tw_inspect(x$data)
   data$rows <- NULL
   list(type = "accepted run", asset = x$asset, data = data)
 }
@@ -250,19 +250,19 @@ inspect.tw_result_source <- function(x, ...) {
 #' SQL is executed unchanged by DuckDB and must return a table. This adapter is
 #' intended for trusted analytical queries; it does not sandbox SQL.
 #' @param query SQL query referencing the input table `data`.
-#' @returns A transformation accepted by [add_transform()].
+#' @returns A transformation accepted by [tw_add_transform()].
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
-#' product("totals") |>
-#'   add_source(data.frame(amount = c(10, 20))) |>
-#'   add_transform(sql_transform("SELECT sum(amount) AS total FROM data")) |>
-#'   run() |>
-#'   collect()
-sql_transform <- function(query) {
+#' tw_product("totals") |>
+#'   tw_add_source(data.frame(amount = c(10, 20))) |>
+#'   tw_add_transform(tw_sql_transform("SELECT sum(amount) AS total FROM data")) |>
+#'   tw_run() |>
+#'   tw_collect()
+tw_sql_transform <- function(query) {
   structure(list(query = scalar(query, "query")), class = "tw_sql_transform")
 }
 #' @export
-execute_transform.tw_sql_transform <- function(transform, data, ...) {
+tw_execute_transform.tw_sql_transform <- function(transform, data, ...) {
   need("duckdb")
   con <- DBI::dbConnect(duckdb::duckdb(), bigint = "integer64")
   on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
@@ -282,25 +282,25 @@ execute_transform.tw_sql_transform <- function(transform, data, ...) {
 #' @returns `x`, invisibly, when its configuration is valid.
 #' @export
 #' @examples
-#' check_component(quality_rule("nonnegative", ~ amount >= 0))
-check_component <- function(x, ...) UseMethod("check_component")
+#' tw_check_component(tw_quality_rule("nonnegative", ~ amount >= 0))
+tw_check_component <- function(x, ...) UseMethod("tw_check_component")
 #' @export
-check_component.default <- function(x, ...) {
-  abort("This component needs a check_component() preflight method.")
+tw_check_component.default <- function(x, ...) {
+  abort("This component needs a tw_check_component() preflight method.")
 }
 #' @export
-check_component.NULL <- function(x, ...) invisible(x)
+tw_check_component.NULL <- function(x, ...) invisible(x)
 #' @export
-check_component.data.frame <- function(x, ...) {
+tw_check_component.data.frame <- function(x, ...) {
   if (anyDuplicated(names(x)) || anyNA(names(x)) || any(!nzchar(names(x)))) {
     abort("Source column names must be non-empty and unique.")
   }
   invisible(x)
 }
 #' @export
-check_component.function <- function(x, ...) invisible(x)
+tw_check_component.function <- function(x, ...) invisible(x)
 #' @export
-check_component.tw_source <- function(x, ...) {
+tw_check_component.tw_source <- function(x, ...) {
   if (!is.function(x$reader)) {
     abort("The file source needs a reader function.")
   }
@@ -313,7 +313,7 @@ check_component.tw_source <- function(x, ...) {
   invisible(x)
 }
 #' @export
-check_component.tw_database_source <- function(x, ...) {
+tw_check_component.tw_database_source <- function(x, ...) {
   if (!is.function(x$connection) && !DBI::dbIsValid(x$connection)) {
     abort(
       "The source connection is closed. Open it or supply a connection factory."
@@ -322,13 +322,13 @@ check_component.tw_database_source <- function(x, ...) {
   invisible(x)
 }
 #' @export
-check_component.tw_sql_transform <- function(x, ...) {
+tw_check_component.tw_sql_transform <- function(x, ...) {
   scalar(x$query, "query")
   need("duckdb")
   invisible(x)
 }
 #' @export
-check_component.tw_rule <- function(x, ...) {
+tw_check_component.tw_rule <- function(x, ...) {
   scalar(x$name, "rule name")
   if (identical(x$engine, "pointblank")) {
     need("pointblank")
@@ -362,7 +362,7 @@ assert_component <- function(x, generic) {
       "() method."
     ))
   }
-  check_component(x)
+  tw_check_component(x)
   invisible(x)
 }
 
@@ -378,7 +378,7 @@ frame_result <- function(data, label) {
       "tw_component_result"
     )
   }
-  check_component.data.frame(data)
+  tw_check_component.data.frame(data)
   data
 }
 
@@ -414,16 +414,16 @@ table_result <- function(data, label) {
 }
 
 #' @export
-read_source.tbl_sql <- function(source, ...) source
+tw_read_source.tbl_sql <- function(source, ...) source
 #' @export
-check_component.tbl_sql <- function(x, ...) {
+tw_check_component.tbl_sql <- function(x, ...) {
   if (!DBI::dbIsValid(dbplyr::remote_con(x))) {
     abort("The lazy table connection is closed. Open it before running.")
   }
   invisible(table_result(x, "The source"))
 }
 #' @export
-inspect.tbl_sql <- function(x, ...) {
+tw_inspect.tbl_sql <- function(x, ...) {
   list(
     type = "lazy database table",
     columns = colnames(x),
@@ -431,9 +431,11 @@ inspect.tbl_sql <- function(x, ...) {
   )
 }
 #' @export
-read_source.tw_product <- function(source, ...) result_data(run(source, ...))
+tw_read_source.tw_product <- function(source, ...) {
+  result_data(tw_run(source, ...))
+}
 #' @export
-check_component.tw_product <- function(x, ...) invisible(validate(x))
+tw_check_component.tw_product <- function(x, ...) invisible(tw_validate(x))
 
 #' Read a pinned lake release as a product source
 #'
@@ -446,7 +448,7 @@ check_component.tw_product <- function(x, ...) invisible(validate(x))
 #' governed releases to ordinary product composition and consumer exports.
 #' When publishing back to the same lake, execution can reuse its open handle;
 #' configuration sources still return materialized values without owning it.
-#' @param lake Connected lake or [lake_config()] describing an existing lake.
+#' @param lake Connected lake or [tw_lake_config()] describing an existing lake.
 #' @param asset Published asset name.
 #' @param release_id Optional immutable release identifier.
 #' @returns A source adapter. Reads return a lazy table for a connected lake or
@@ -454,12 +456,12 @@ check_component.tw_product <- function(x, ...) invisible(validate(x))
 #' @export
 #' @examples
 #' if (FALSE) {
-#'   product("summary") |>
-#'     add_source(source_release(lake, "orders")) |>
-#'     add_transform(function(data) dplyr::summarise(data, rows = dplyr::n())) |>
-#'     run()
+#'   tw_product("summary") |>
+#'     tw_add_source(tw_source_release(lake, "orders")) |>
+#'     tw_add_transform(function(data) dplyr::summarise(data, rows = dplyr::n())) |>
+#'     tw_run()
 #' }
-source_release <- function(lake, asset, release_id = NULL) {
+tw_source_release <- function(lake, asset, release_id = NULL) {
   asset_id(asset)
   if (!is.null(release_id)) {
     scalar(release_id, "release_id")
@@ -468,27 +470,27 @@ source_release <- function(lake, asset, release_id = NULL) {
     list(lake = lake, asset = asset, release_id = release_id),
     class = "tw_release_source"
   )
-  check_component(source)
+  tw_check_component(source)
   source
 }
 #' @export
-check_component.tw_release_source <- function(x, ...) {
+tw_check_component.tw_release_source <- function(x, ...) {
   asset_id(x$asset)
   if (!is.null(x$release_id)) {
     scalar(x$release_id, "release_id")
   }
   if (inherits(x$lake, "tw_config")) {
-    do.call(lake_config, unclass(x$lake))
+    do.call(tw_lake_config, unclass(x$lake))
     need("duckdb")
   } else if (inherits(x$lake, "tw_lake")) {
     assert_lake(x$lake)
   } else {
-    abort("Use a connected lake or lake_config() for a release source.")
+    abort("Use a connected lake or tw_lake_config() for a release source.")
   }
   invisible(x)
 }
 #' @export
-inspect.tw_release_source <- function(x, ...) {
+tw_inspect.tw_release_source <- function(x, ...) {
   config <- if (inherits(x$lake, "tw_config")) x$lake else x$lake$config
   list(
     type = "lake release",
@@ -498,12 +500,12 @@ inspect.tw_release_source <- function(x, ...) {
   )
 }
 #' @export
-read_source.tw_release_source <- function(source, ...) {
+tw_read_source.tw_release_source <- function(source, ...) {
   read_release_source(source)
 }
 
 read_release_source <- function(source, execution_lake = NULL) {
-  check_component(source)
+  tw_check_component(source)
   materialized <- inherits(source$lake, "tw_config")
   if (
     materialized &&
@@ -523,12 +525,12 @@ read_release_source <- function(source, execution_lake = NULL) {
   lake <- if (reuse) {
     execution_lake
   } else if (owned) {
-    connect_lake(source$lake, read_only = TRUE)
+    tw_connect_lake(source$lake, read_only = TRUE)
   } else {
     source$lake
   }
   if (owned) {
-    on.exit(disconnect_lake(lake), add = TRUE)
+    on.exit(tw_disconnect_lake(lake), add = TRUE)
   }
   ref <- resolve_release(lake, source$asset, source$release_id)
   data <- dplyr::tbl(
@@ -536,7 +538,7 @@ read_release_source <- function(source, execution_lake = NULL) {
     table_id(ref$schema_name[[1]], ref$table_name[[1]])
   )
   if (materialized) {
-    data <- collect(data)
+    data <- tw_collect(data)
   }
   attr(data, "tw_input_reference") <- list(
     asset = source$asset,

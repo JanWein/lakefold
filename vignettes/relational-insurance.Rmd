@@ -118,19 +118,19 @@ insurance_contracts <- function() {
     payment_count = "integer",
     cash_collected = "numeric"
   )
-  policy_contract <- contract(
+  policy_contract <- tw_contract(
     "insurance.policy_months.schema", columns = policy_columns,
     key = c("policy_id", "month"),
     grain = "One monthly snapshot row per policy, including inactive policies.")
-  payment_contract <- contract(
+  payment_contract <- tw_contract(
     "insurance.payments.schema", columns = payment_columns,
     key = "payment_id",
     grain = "One cash transaction, assigned to its receipt month.")
-  mart_structure <- contract(
+  mart_structure <- tw_contract(
     "insurance.monthly_performance.structure", columns = mart_columns,
     grain = "One company-channel-month; all monetary values are synthetic EUR.")
   list(
-    brokers = contract(
+    brokers = tw_contract(
       "insurance.brokers.schema",
       columns = c(
         broker_id = "character",
@@ -142,28 +142,28 @@ insurance_contracts <- function() {
     ),
     policy_months = policy_contract,
     payments = payment_contract,
-    enriched_policy_months = contract_update(policy_contract,
+    enriched_policy_months = tw_contract_update(policy_contract,
       id = "insurance.enriched_policy_months.schema",
       columns = c(broker_name = "character", channel = "character"),
       required = c(policy_contract$required, "broker_name", "channel")),
-    enriched_payments = contract_update(payment_contract,
+    enriched_payments = tw_contract_update(payment_contract,
       id = "insurance.enriched_payments.schema",
       columns = c(company = "character", broker_id = "character",
         broker_name = "character", channel = "character", policy_status = "character"),
       required = c(payment_contract$required, "company", "broker_id", "broker_name",
         "channel", "policy_status")),
-    core_policy_monthly = contract(
+    core_policy_monthly = tw_contract(
       "insurance.core_policy_monthly.schema",
       columns = policy_summary,
       grain = "One company-channel-month policy aggregate."
     ),
-    core_cash_monthly = contract(
+    core_cash_monthly = tw_contract(
       "insurance.core_cash_monthly.schema",
       columns = payment_summary,
       grain = "One company-channel-month cash aggregate."
     ),
     mart_schema = mart_structure,
-    mart = contract_update(mart_structure,
+    mart = tw_contract_update(mart_structure,
       id = "insurance.monthly_performance.schema",
       key = c("company", "channel", "month"),
       rules = list(
@@ -175,7 +175,7 @@ insurance_contracts <- function() {
 }
 
 insurance_metrics <- function() {
-  metric_set("insurance.monthly_performance",
+  tw_metric_set("insurance.monthly_performance",
     active_policies = sum(active_policies, na.rm = TRUE),
     premium_due = sum(premium_due, na.rm = TRUE),
     cash_collected = sum(cash_collected, na.rm = TRUE),
@@ -221,7 +221,7 @@ or no payment in a month.
 `month` labels a reporting period using its first day. `2026-01-01` means the
 January month-end snapshot, not the policy's state on January 1. For payments it
 means receipt month, with `payment_date` retaining the actual transaction date.
-`measure(..., at = as.Date("2026-01-01"))` therefore selects January.
+`tw_measure(..., at = as.Date("2026-01-01"))` therefore selects January.
 
 | Table | One row means | Unique key | Lookup |
 |---|---|---|---|
@@ -287,9 +287,9 @@ coordination. A configuration opens no connection, so a dbt process can acquire
 the catalog after R publication closes its owned connection.
 
 ```{r configure, eval=isTRUE(knitr::opts_knit$get("tangle")) || run_stack}
-config <- lake_config(path = file.path(path, "lake"), backend = backend,
+config <- tw_lake_config(path = file.path(path, "lake"), backend = backend,
   layers = c("raw", "staging", "core", "marts"))
-execution <- execution_config(quality = "pointblank", relationships = "dm",
+execution <- tw_execution_config(quality = "pointblank", relationships = "dm",
   to = config)
 ```
 
@@ -311,14 +311,14 @@ contracts <- insurance_contracts()
 ```
 
 ```{r payment-contract, purl=FALSE}
-contract("insurance.payments.schema",
+tw_contract("insurance.payments.schema",
   columns = c(payment_id = "character", policy_id = "character", month = "Date",
     payment_date = "Date", cash_amount = "numeric"),
   key = "payment_id", grain = "One cash transaction in its receipt month.")
 ```
 
 A contract describes the expected columns, types, non-null fields and business
-key. `contract_update()` extends existing columns and preserves their expectations
+key. `tw_contract_update()` extends existing columns and preserves their expectations
 under a new explicit identity. The enriched products add descriptive columns;
 their keys and row meaning are unchanged. Added columns are optional unless
 included in `required`, so this example explicitly requires the new attributes.
@@ -332,26 +332,26 @@ Changing a contract's `grain` requires an explicit key decision, including
 `key = character()` when no uniqueness promise is intended. Existing business
 rules must also be reviewed explicitly when grain, column names or types change.
 Contracts are not silently propagated through arbitrary dplyr transformations.
-Named formulas in `rules` use the same predicate grammar as `add_quality()`;
+Named formulas in `rules` use the same predicate grammar as `tw_add_quality()`;
 there is no separate business-rule language to learn.
 
 ## 4. Accept the three deliveries
 
 ```{r accept-inputs, eval=isTRUE(knitr::opts_knit$get("tangle")) || run_stack}
 deliveries <- list(
-  brokers = product("insurance.brokers", inputs$brokers, execution = execution) |>
-    add_contract(contracts$brokers) |>
-    add_quality(~ channel %in% c("broker", "direct", "partner")),
-  policy_months = product("insurance.policy_months", inputs$policy_months,
+  brokers = tw_product("insurance.brokers", inputs$brokers, execution = execution) |>
+    tw_add_contract(contracts$brokers) |>
+    tw_add_quality(~ channel %in% c("broker", "direct", "partner")),
+  policy_months = tw_product("insurance.policy_months", inputs$policy_months,
     execution = execution) |>
-    add_contract(contracts$policy_months) |>
-    add_quality(~ status %in% c("active", "pending", "lapsed") & premium_due >= 0),
-  payments = product("insurance.payments", inputs$payments, execution = execution) |>
-    add_contract(contracts$payments) |>
-    add_quality(~ cash_amount > 0)
+    tw_add_contract(contracts$policy_months) |>
+    tw_add_quality(~ status %in% c("active", "pending", "lapsed") & premium_due >= 0),
+  payments = tw_product("insurance.payments", inputs$payments, execution = execution) |>
+    tw_add_contract(contracts$payments) |>
+    tw_add_quality(~ cash_amount > 0)
 )
-raw <- lapply(deliveries, ingest)
-quality(raw$payments)
+raw <- lapply(deliveries, tw_ingest)
+tw_quality(raw$payments)
 ```
 
 The execution configuration is retained by each delivery definition and selects
@@ -360,7 +360,7 @@ not require rewriting the declared contract version; the actual check engine
 is still recorded in execution evidence.
 Omitting that choice uses the native engine; it does not require learning another grammar for a simple
 logical check. Complex Pointblank agents remain available through
-`pointblank_checks()`. Missing logical results fail the check.
+`tw_pointblank_checks()`. Missing logical results fail the check.
 
 Input checks run before RAW writes. A rejected delivery stays in landing, while
 the previous accepted release remains available. Each successful result can be
@@ -374,13 +374,13 @@ ingestion.
 ## 5. Enrich policies with a checked lookup
 
 ```{r policy-product, eval=isTRUE(knitr::opts_knit$get("tangle")) || run_stack}
-policy_product <- product("insurance.policy_months.enriched", raw$policy_months,
+policy_product <- tw_product("insurance.policy_months.enriched", raw$policy_months,
   source_name = "policy_months", execution = execution) |>
-  add_lookup(raw$brokers, by = dplyr::join_by(broker_id)) |>
-  add_contract(contracts$enriched_policy_months)
+  tw_add_lookup(raw$brokers, by = dplyr::join_by(broker_id)) |>
+  tw_add_contract(contracts$enriched_policy_months)
 ```
 
-The primary table remains one policy-month per row. `add_lookup()` requires
+The primary table remains one policy-month per row. `tw_add_lookup()` requires
 unique, non-missing parent keys and, by default, a match for every child key.
 It rejects ambiguous parent rows and orphan children before enrichment. It does
 not expand policies into their payment transactions.
@@ -395,14 +395,14 @@ databases. Use explicit collection or connection-specific code for that boundary
 ## 6. Enrich payments at their own grain
 
 ```{r payment-product, eval=isTRUE(knitr::opts_knit$get("tangle")) || run_stack}
-policy_attributes <- product("insurance.payment_policy_attributes", raw$policy_months) |>
+policy_attributes <- tw_product("insurance.payment_policy_attributes", raw$policy_months) |>
   dplyr::select(policy_id, month, company, broker_id, policy_status = status)
 
-payment_product <- product("insurance.payments.enriched", raw$payments,
+payment_product <- tw_product("insurance.payments.enriched", raw$payments,
   source_name = "payments", execution = execution) |>
-  add_lookup(policy_attributes, by = dplyr::join_by(policy_id, month)) |>
-  add_lookup(raw$brokers, by = dplyr::join_by(broker_id)) |>
-  add_contract(contracts$enriched_payments)
+  tw_add_lookup(policy_attributes, by = dplyr::join_by(policy_id, month)) |>
+  tw_add_lookup(raw$brokers, by = dplyr::join_by(broker_id)) |>
+  tw_add_contract(contracts$enriched_payments)
 ```
 
 The first lookup uses **policy ID and month together**. A policy ID alone would
@@ -415,17 +415,17 @@ These are real dplyr methods on the existing product object. `select()`,
 expressions now and execute dplyr against the actual table later. They do not
 read data during definition or translate arbitrary R code into SQL themselves.
 Supported lazy behavior is inherited from dplyr/dbplyr and the chosen backend.
-An ordinary `add_transform(function(data) ...)` remains the escape hatch.
+An ordinary `tw_add_transform(function(data) ...)` remains the escape hatch.
 
 ## 7. Publish independently reusable staging products
 
 ```{r publish-staging, eval=isTRUE(knitr::opts_knit$get("tangle")) || run_stack}
 published <- list(
-  policies = policy_product |> publish(layer = "staging"),
-  payments = payment_product |> publish(layer = "staging")
+  policies = policy_product |> tw_publish(layer = "staging"),
+  payments = payment_product |> tw_publish(layer = "staging")
 )
-stopifnot(nrow(collect(published$policies)) == 12L,
-  nrow(collect(published$payments)) == 10L)
+stopifnot(nrow(tw_collect(published$policies)) == 12L,
+  nrow(tw_collect(published$payments)) == 10L)
 ```
 
 Each product has its own contract and immutable release. A portfolio report can
@@ -455,17 +455,17 @@ SQL tests enforce the corresponding SQL grain and reconciliation promises.
 
 ```{r export-sql-contracts, eval=isTRUE(knitr::opts_knit$get("tangle")) || run_stack}
 properties <- list(version = 2L, models = c(
-  dbt_contract(contracts$core_policy_monthly, "core_policy_monthly")$models,
-  dbt_contract(contracts$core_cash_monthly, "core_cash_monthly")$models,
-  dbt_contract(contracts$mart_schema, "monthly_performance")$models))
+  tw_dbt_contract(contracts$core_policy_monthly, "core_policy_monthly")$models,
+  tw_dbt_contract(contracts$core_cash_monthly, "core_cash_monthly")$models,
+  tw_dbt_contract(contracts$mart_schema, "monthly_performance")$models))
 yaml::write_yaml(properties, file.path(project_path, "models", "contracts.yml"))
 ```
 
 ```{r build-and-publish, eval=isTRUE(knitr::opts_knit$get("tangle")) || run_stack}
-project <- dbt_project(project_path, lake = config, sources = published,
+project <- tw_dbt_project(project_path, lake = config, sources = published,
   executable = executable)
-built <- project |> run(echo = FALSE)
-approved <- built |> publish("monthly_performance", contract = contracts$mart,
+built <- project |> tw_run(echo = FALSE)
+approved <- built |> tw_publish("monthly_performance", contract = contracts$mart,
   asset = "insurance.monthly_performance", layer = "marts")
 ```
 
@@ -498,13 +498,13 @@ cash. The SQL tests reconcile source totals with the mart, check unique reportin
 grains and require a payment's actual receipt date to belong to its labelled month.
 
 A successful dbt build is separate from consumer approval. dbt can write models
-before a later test fails; it does not roll back the whole graph. `publish()`
+before a later test fails; it does not roll back the whole graph. `tw_publish()`
 checks and snapshots the chosen successful model. A failed build cannot replace
 the prior approved release. Coordinate writers between building and snapshotting.
 
 ```{r inspect-mart, eval=run_stack, purl=FALSE}
-collect(approved)
-dbt_status(built)
+tw_collect(approved)
+tw_dbt_status(built)
 ```
 
 ## 9. Measure stock, flows and a ratio of sums
@@ -516,22 +516,22 @@ february <- as.Date("2026-02-01")
 ```
 
 ```{r measure-approved, eval=isTRUE(knitr::opts_knit$get("tangle")) || run_stack}
-measures <- measure(approved, metrics = metrics,
+measures <- tw_measure(approved, metrics = metrics,
   at = c(january, february), period = "each")
-summary <- collect(measures)
-totals <- measure(approved, metrics = metrics[c("cash_collected", "cash_to_due")],
+summary <- tw_collect(measures)
+totals <- tw_measure(approved, metrics = metrics[c("cash_collected", "cash_to_due")],
   at = c(january, february), period = "aggregate")
-by_channel <- measure(approved, metrics = metrics["cash_collected"],
+by_channel <- tw_measure(approved, metrics = metrics["cash_collected"],
   at = january, by = c("company", "channel"))
-collect(by_channel)
+tw_collect(by_channel)
 ```
 
-`metric_set()` defines the shared product, dimensions and time column once.
+`tw_metric_set()` defines the shared product, dimensions and time column once.
 Only formulas, units and stock-versus-flow meaning differ. Its result is an
 ordinary named list of metrics, so subsetting remains ordinary R syntax.
 
 `period = "each"` computes every named metric separately for each selected date.
-`collect()` returns one ordinary tidy table with `.metric`, `.period`, `.unit`
+`tw_collect()` returns one ordinary tidy table with `.metric`, `.period`, `.unit`
 and `value`, plus any grouping columns. `.period` is a list column: each entry
 retains the selected Date value or vector of dates. There is no need to assemble
 individual values into a reporting table. Keep the original measurement set for
@@ -557,10 +557,10 @@ authorization system. Code versions identify the reviewed calculation.
 ## 10. Issue a report, keeping values and their explanation
 
 ```{r issue-report, eval=isTRUE(knitr::opts_knit$get("tangle")) || run_stack}
-report <- report_release(measures, "insurance.report.initial", to = config,
+report <- tw_report_release(measures, "insurance.report.initial", to = config,
   code_version = "insurance-report-v1",
   params = list(currency = "EUR", months = c("2026-01", "2026-02")))
-initial <- list(build = built, release = approved, data = collect(approved),
+initial <- list(build = built, release = approved, data = tw_collect(approved),
   metrics = metrics, measures = measures, totals = totals, by_channel = by_channel,
   report = report, summary = summary)
 ```
@@ -577,11 +577,11 @@ five active policies, EUR 1,350 due and EUR 1,300 cash.
 ```{r reject-negative, eval=isTRUE(knitr::opts_knit$get("tangle")) || run_stack}
 bad_payments <- inputs$payments
 bad_payments$cash_amount[1] <- -60
-rejected <- product("insurance.payments", bad_payments) |>
-  add_contract(contracts$payments) |>
-  add_quality(~ cash_amount > 0) |>
-  ingest(execution = execution, stop_on_failure = FALSE)
-stopifnot(status(rejected)$outcome == "blocked")
+rejected <- tw_product("insurance.payments", bad_payments) |>
+  tw_add_contract(contracts$payments) |>
+  tw_add_quality(~ cash_amount > 0) |>
+  tw_ingest(execution = execution, stop_on_failure = FALSE)
+stopifnot(tw_status(rejected)$outcome == "blocked")
 ```
 
 The example does not model refunds, so negative cash fails before RAW. Supporting
@@ -592,12 +592,12 @@ retained. Now try a structurally valid but unknown broker identifier:
 orphan_policies <- inputs$policy_months
 orphan_policies$broker_id[1] <- "B404"
 orphan_run <- policy_product |>
-  publish(sources = list(policy_months = orphan_policies),
+  tw_publish(sources = list(policy_months = orphan_policies),
     layer = "staging", stop_on_failure = FALSE)
-stopifnot(status(orphan_run)$outcome == "failed")
-lake <- connect_lake(config, read_only = TRUE)
-current_policy_release <- releases(lake, published$policies$asset)$release_id[[1]]
-close_lake(lake)
+stopifnot(tw_status(orphan_run)$outcome == "failed")
+lake <- tw_connect_lake(config, read_only = TRUE)
+current_policy_release <- tw_releases(lake, published$policies$asset)$release_id[[1]]
+tw_close_lake(lake)
 stopifnot(identical(current_policy_release, published$policies$release_id))
 ```
 
@@ -608,9 +608,9 @@ For specialist diagnostics, construct a dm object explicitly and inspect
 `dm_examine_constraints()`; the simple product path already enforces its checks.
 
 ```{r reject-metric-scopes, eval=isTRUE(knitr::opts_knit$get("tangle")) || run_stack}
-two_month_stock <- tryCatch(measure(approved, metrics = metrics["active_policies"],
+two_month_stock <- tryCatch(tw_measure(approved, metrics = metrics["active_policies"],
   at = c(january, february), period = "aggregate"), error = identity)
-undefined_ratio <- tryCatch(measure(approved, metrics$cash_to_due,
+undefined_ratio <- tryCatch(tw_measure(approved, metrics$cash_to_due,
   at = february, filters = list(company = "Northstar", channel = "direct")),
   error = identity)
 stopifnot(inherits(two_month_stock, "error"), inherits(undefined_ratio, "error"))
@@ -622,28 +622,28 @@ A late correction adds a January receipt of EUR 250 for policy P5. This is a new
 full snapshot with eleven transactions. Brokers and policy snapshots are unchanged.
 
 ```{r accept-correction, eval=isTRUE(knitr::opts_knit$get("tangle")) || run_stack}
-monthly <- workflow(
+monthly <- tw_workflow(
   received = function(payments) {
     deliveries$payments |>
-      replace_sources(insurance.payments = payments) |> ingest()
+      tw_replace_sources(insurance.payments = payments) |> tw_ingest()
   },
   enriched = function(received) {
-    payment_product |> publish(sources = list(payments = received), layer = "staging")
+    payment_product |> tw_publish(sources = list(payments = received), layer = "staging")
   },
   built = function(enriched) {
-    project |> run(sources = list(payments = enriched), echo = FALSE)
+    project |> tw_run(sources = list(payments = enriched), echo = FALSE)
   },
   released = function(built) {
-    built |> publish("monthly_performance", contract = contracts$mart,
+    built |> tw_publish("monthly_performance", contract = contracts$mart,
       asset = "insurance.monthly_performance", layer = "marts")
   },
   measures = function(released) {
-    measure(released, metrics = metrics, at = c(january, february), period = "each")
+    tw_measure(released, metrics = metrics, at = c(january, february), period = "each")
   },
   inputs = list(payments = inputs$payments), code_version = "insurance-workflow-v1")
 corrected_inputs <- insurance_corrected_inputs(inputs)
-correction <- run(monthly, inputs = list(payments = corrected_inputs$payments))
-status(correction)
+correction <- tw_run(monthly, inputs = list(payments = corrected_inputs$payments))
+tw_status(correction)
 corrected_raw <- raw
 corrected_raw$payments <- correction$results$received
 corrected_products <- published
@@ -667,32 +667,32 @@ when changing the captured definitions. Report issuance stays explicit.
 
 ```{r measure-correction, eval=isTRUE(knitr::opts_knit$get("tangle")) || run_stack}
 corrected_measures <- correction$results$measures
-corrected_totals <- measure(corrected_release,
+corrected_totals <- tw_measure(corrected_release,
   metrics = metrics[c("cash_collected", "cash_to_due")],
   at = c(january, february), period = "aggregate")
 ```
 
 ```{r issue-correction, eval=isTRUE(knitr::opts_knit$get("tangle")) || run_stack}
-corrected_report <- report_release(corrected_measures, "insurance.report.corrected", to = config,
+corrected_report <- tw_report_release(corrected_measures, "insurance.report.corrected", to = config,
   code_version = "insurance-report-v1",
   params = list(currency = "EUR", months = c("2026-01", "2026-02")))
-preserved <- list(report = report_read(config, report$id, values_only = TRUE),
-  data = collect(approved))
-corrected_summary <- collect(corrected_measures)
+preserved <- list(report = tw_report_read(config, report$id, values_only = TRUE),
+  data = tw_collect(approved))
+corrected_summary <- tw_collect(corrected_measures)
 corrected <- list(raw = corrected_raw, products = corrected_products, build = rebuilt,
-  release = corrected_release, data = collect(corrected_release), metrics = metrics,
+  release = corrected_release, data = tw_collect(corrected_release), metrics = metrics,
   measures = corrected_measures, totals = corrected_totals,
   report = corrected_report, summary = corrected_summary)
 stopifnot(isTRUE(all.equal(preserved$report, summary)),
   identical(dplyr::filter(summary, .metric == "cash_collected")$value, c(980, 1300)),
   identical(dplyr::filter(corrected_summary, .metric == "cash_collected")$value, c(1230, 1300)),
-  dplyr::filter(collect(corrected_totals), .metric == "cash_to_due")$value == 2530 / 2850,
+  dplyr::filter(tw_collect(corrected_totals), .metric == "cash_to_due")$value == 2530 / 2850,
   sum(preserved$data$cash_collected[preserved$data$month == january]) == 980)
 ```
 
 The new report explains the correction. The original still contains its original
 EUR 980 January cash and references its original mart release. Consumers can use
-`collect(approved)` in Shiny or Quarto, or `product("export", approved)` with a
+`tw_collect(approved)` in Shiny or Quarto, or `tw_product("export", approved)` with a
 Parquet, DBI or pins target. BI service deployment and refresh remain external.
 
 ```{r runner-end, include=FALSE, eval=isTRUE(knitr::opts_knit$get("tangle"))}

@@ -1,7 +1,7 @@
 test_that("ordinary R prototypes preserve values and freshness is opt-in", {
   data <- data.frame(id = 1:2, label = factor(c("b", "a")))
   data$nested <- I(list(list(a = 1), list(a = 2)))
-  definition <- contract(
+  definition <- tw_contract(
     columns = list(
       id = integer(),
       label = factor(),
@@ -17,7 +17,7 @@ test_that("ordinary R prototypes preserve values and freshness is opt-in", {
       nested = "list"
     )
   )
-  expect_quality(validate(data, definition))
+  tw_expect_quality(tw_validate(data, definition))
   expect_s3_class(data$label, "factor")
   expect_equal(
     infer_column_types(data),
@@ -29,9 +29,9 @@ test_that("ordinary R prototypes preserve values and freshness is opt-in", {
   )
   plain_labels <- data
   plain_labels$label <- as.character(data$label)
-  expect_quality(validate(plain_labels, definition))
-  wrong <- contract(columns = c(label = "integer"))
-  expect_equal(validate(data["label"], wrong)$status[[2]], "failed")
+  tw_expect_quality(tw_validate(plain_labels, definition))
+  wrong <- tw_contract(columns = c(label = "integer"))
+  expect_equal(tw_validate(data["label"], wrong)$status[[2]], "failed")
 })
 
 test_that("integer64 contracts distinguish exact values from floating point", {
@@ -39,16 +39,16 @@ test_that("integer64 contracts distinguish exact values from floating point", {
   data <- data.frame(
     id = bit64::as.integer64(c("9007199254740993", "9007199254740995"))
   )
-  definition <- contract(columns = list(id = bit64::integer64()))
+  definition <- tw_contract(columns = list(id = bit64::integer64()))
   expect_equal(definition$columns$id, "integer64")
-  expect_quality(validate(data, definition))
+  tw_expect_quality(tw_validate(data, definition))
   expect_equal(as.character(data$id), c("9007199254740993", "9007199254740995"))
   expect_equal(
-    validate(data, contract(columns = c(id = "numeric")))$status[[2]],
+    tw_validate(data, tw_contract(columns = c(id = "numeric")))$status[[2]],
     "failed"
   )
   expect_equal(
-    validate(data.frame(id = c(1, 2)), definition)$status[[2]],
+    tw_validate(data.frame(id = c(1, 2)), definition)$status[[2]],
     "failed"
   )
 })
@@ -66,48 +66,62 @@ test_that("database integer64 profiles and validation preserve exact values", {
   )
   DBI::dbWriteTable(con, "large_identifiers", data)
   table <- dplyr::tbl(con, "large_identifiers")
-  expect_equal(profile_data(table), profile_data(data))
-  expect_quality(validate(table, contract(columns = c(id = "integer64"))))
+  expect_equal(tw_profile_data(table), tw_profile_data(data))
+  tw_expect_quality(tw_validate(
+    table,
+    tw_contract(columns = c(id = "integer64"))
+  ))
 })
 
 test_that("lake publication roundtrips integer64 values above double precision", {
   skip_if_not_installed("duckdb")
   skip_if_not_installed("bit64")
-  lake <- open_lake(withr::local_tempdir(), backend = "duckdb")
-  withr::defer(close_lake(lake))
+  lake <- tw_open_lake(withr::local_tempdir(), backend = "duckdb")
+  withr::defer(tw_close_lake(lake))
   data <- data.frame(
     id = bit64::as.integer64(c(
       "9007199254740993",
       "9007199254740995"
     ))
   )
-  definition <- contract(columns = c(id = "integer64"), key = "id")
-  result <- write_data(lake, data, "large_identifiers", contract = definition)
+  definition <- tw_contract(columns = c(id = "integer64"), key = "id")
+  result <- tw_write_data(
+    lake,
+    data,
+    "large_identifiers",
+    contract = definition
+  )
   expect_equal(result$status, "published")
-  output <- read_release(lake, "large_identifiers")
+  output <- tw_read_release(lake, "large_identifiers")
   expect_equal(as.character(output$id), as.character(data$id))
   expect_s3_class(output$id, "integer64")
-  expect_quality(validate(output, definition))
+  tw_expect_quality(tw_validate(output, definition))
   expect_equal(
-    profile_data(read_release(lake, "large_identifiers", lazy = TRUE)),
-    profile_data(data)
+    tw_profile_data(tw_read_release(lake, "large_identifiers", lazy = TRUE)),
+    tw_profile_data(data)
   )
 })
 
 test_that("logical function vectors and formulas have the same row evidence", {
   data <- data.frame(amount = c(10, -1, NA))
-  formula <- run_quality(quality_rule("positive", ~ amount > 0), data)
-  fun <- run_quality(quality_rule("positive", function(x) x$amount > 0), data)
+  formula <- tw_run_quality(tw_quality_rule("positive", ~ amount > 0), data)
+  fun <- tw_run_quality(
+    tw_quality_rule("positive", function(x) x$amount > 0),
+    data
+  )
   expect_equal(fun, formula)
   expect_equal(fun$n_failed, 2)
   expect_equal(fun$n_total, 3)
-  aggregate <- run_quality(quality_rule("aggregate", function(x) TRUE), data)
+  aggregate <- tw_run_quality(
+    tw_quality_rule("aggregate", function(x) TRUE),
+    data
+  )
   expect_equal(aggregate$n_total, 1)
-  unknown <- run_quality(quality_rule("aggregate", function(x) NA), data)
+  unknown <- tw_run_quality(tw_quality_rule("aggregate", function(x) NA), data)
   expect_equal(unknown$status, "failed")
   expect_equal(unknown$n_failed, 1)
   expect_equal(
-    run_quality(quality_rule("rows", ~TRUE), data)$n_total,
+    tw_run_quality(tw_quality_rule("rows", ~TRUE), data)$n_total,
     3
   )
 })
@@ -115,36 +129,39 @@ test_that("logical function vectors and formulas have the same row evidence", {
 test_that("wrong quality outputs and empty evidence never pass", {
   data <- data.frame(id = 1:3)
   expect_error(
-    run_quality(quality_rule("length", function(x) c(TRUE, FALSE)), data),
+    tw_run_quality(tw_quality_rule("length", function(x) c(TRUE, FALSE)), data),
     "one per row"
   )
   expect_error(
-    run_quality(quality_rule("type", function(x) 1), data),
+    tw_run_quality(tw_quality_rule("type", function(x) 1), data),
     "logical values"
   )
   expect_error(
-    run_quality(quality_rule("matrix", function(x) matrix(TRUE, 3, 1)), data),
+    tw_run_quality(
+      tw_quality_rule("matrix", function(x) matrix(TRUE, 3, 1)),
+      data
+    ),
     "logical values"
   )
-  expect_error(quality_counts(0.5, 1), "Invalid quality counts")
-  expect_error(quality_counts("0", "1"), "Invalid quality counts")
-  expect_error(quality_counts(2, 1), "Invalid quality counts")
-  expect_error(quality_rule("bad", ~TRUE, max_failure = "0"), "between")
-  empty <- run_quality(
-    quality_rule("empty", function(x) logical()),
+  expect_error(tw_quality_counts(0.5, 1), "Invalid quality counts")
+  expect_error(tw_quality_counts("0", "1"), "Invalid quality counts")
+  expect_error(tw_quality_counts(2, 1), "Invalid quality counts")
+  expect_error(tw_quality_rule("bad", ~TRUE, max_failure = "0"), "between")
+  empty <- tw_run_quality(
+    tw_quality_rule("empty", function(x) logical()),
     data[0, , drop = FALSE]
   )
   expect_equal(empty$status, "not_checked")
-  definition <- contract(
+  definition <- tw_contract(
     columns = c(id = "integer"),
     rules = list(
-      quality_rule("broken", function(x) numeric())
+      tw_quality_rule("broken", function(x) numeric())
     )
   )
-  evidence <- validate(data, definition, keep_errors = TRUE)
+  evidence <- tw_validate(data, definition, keep_errors = TRUE)
   expect_false(quality_ok(evidence))
   expect_match(
-    conditionMessage(quality_errors(evidence)$broken),
+    conditionMessage(tw_quality_errors(evidence)$broken),
     "logical values"
   )
 })
@@ -157,12 +174,12 @@ test_that("lazy formulas and native row functions agree", {
   DBI::dbWriteTable(con, "amounts", data)
   lazy <- dplyr::tbl(con, "amounts")
   expect_equal(
-    run_quality(quality_rule("positive", ~ amount > 0), lazy),
-    run_quality(quality_rule("positive", function(x) x$amount > 0), data)
+    tw_run_quality(tw_quality_rule("positive", ~ amount > 0), lazy),
+    tw_run_quality(tw_quality_rule("positive", function(x) x$amount > 0), data)
   )
   DBI::dbExecute(con, "DELETE FROM amounts")
   expect_equal(
-    run_quality(quality_rule("empty", ~ amount > 0), lazy)$status,
+    tw_run_quality(tw_quality_rule("empty", ~ amount > 0), lazy)$status,
     "not_checked"
   )
 })

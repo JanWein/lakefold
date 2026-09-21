@@ -1,5 +1,17 @@
 # tidyweave 0.12.0.9000
 
+* All public tidyweave functions now use a `tw_` prefix, including S3 extension
+  generics. This is a breaking development-API change without unprefixed aliases;
+  argument names, result fields and stored release identities are unchanged.
+  The new API migration guide covers existing code and adapter methods.
+
+* Documentation now follows product specifications, preparation recipes,
+  workflow assembly and execution. The README, getting-started guide, core
+  component guides, navigation and function reference share that structure.
+
+* `tw_collect()` and `tw_explain()` retain dplyr dispatch. Use `dplyr::filter()`
+  explicitly; tidyweave no longer re-exports unprefixed dplyr functions.
+
 * `add_product()` and `add_recipe()` assemble independent specifications in an
   empty `workflow()`. Update, remove and extract helpers make components reusable;
   trial, run and publish retain the existing product execution gates.

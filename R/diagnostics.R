@@ -1,6 +1,6 @@
 #' Inspect execution status across R and dbt workflows
-#' @param x A connected lake, [run()] result, [dbt_build()] result or a
-#'   measurement or measurement set from [measure()], or a [workflow()] result.
+#' @param x A connected lake, [tw_run()] result, [tw_dbt_build()] result or a
+#'   measurement or measurement set from [tw_measure()], or a [tw_workflow()] result.
 #' @param asset Optional asset ID when querying a lake.
 #' @returns A tibble with `engine`, `id`, `status`, `success`, `release_id`,
 #'   `asset`, `outcome` and `message`. `outcome` normalizes native statuses to
@@ -12,13 +12,13 @@
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("tidyweave-")
-#' lake <- connect_lake(lake_config(registry_duckdb(file.path(root, "lake.db")),
-#'   storage_local(file.path(root, "data")),
+#' lake <- tw_connect_lake(tw_lake_config(tw_registry_duckdb(file.path(root, "lake.db")),
+#'   tw_storage_local(file.path(root, "data")),
 #'   landing = file.path(root, "landing"), backend = "duckdb"))
-#' status(lake)
-#' disconnect_lake(lake)
+#' tw_status(lake)
+#' tw_disconnect_lake(lake)
 #' unlink(root, recursive = TRUE)
-status <- function(x, asset = NULL) {
+tw_status <- function(x, asset = NULL) {
   if (inherits(x, "tw_workflow_result")) {
     return(x$status)
   }
@@ -144,13 +144,13 @@ metadata_filter <- function(lake, table, asset = NULL, run_id = NULL) {
 #' @param release Exact release ID to inspect, together with `asset`.
 #' @returns A quality tibble. `failure_rate` is derived from available counts.
 #'   Native pointblank thresholds are recorded in the JSON `details` column.
-#' @seealso [quality_report()], [status()]
+#' @seealso [tw_quality_report()], [tw_status()]
 #' @export
 #' @examples
-#' contract <- contract("orders", "1", "Analytics", "Orders", "One order",
+#' contract <- tw_contract("orders", "1", "Analytics", "Orders", "One order",
 #'   c(id = "integer"), key = "id")
-#' quality(validate(data.frame(id = c(1L, 1L)), contract))
-quality <- function(x, run_id = NULL, asset = NULL, release = NULL) {
+#' tw_quality(tw_validate(data.frame(id = c(1L, 1L)), contract))
+tw_quality <- function(x, run_id = NULL, asset = NULL, release = NULL) {
   if (inherits(x, "tw_measurement_set")) {
     return(measurement_quality(x))
   }
@@ -184,7 +184,7 @@ quality <- function(x, run_id = NULL, asset = NULL, release = NULL) {
   } else if (inherits(x, "tw_run_result")) {
     x <- run_result_evidence(x)
     if (is.null(x$quality)) {
-      return(quality(quality_row(
+      return(tw_quality(quality_row(
         "execution",
         "not_checked",
         message = "No retained quality evidence is available for this result."
@@ -192,7 +192,7 @@ quality <- function(x, run_id = NULL, asset = NULL, release = NULL) {
     }
     out <- x$quality
   } else if (inherits(x, "tw_dbt_result")) {
-    states <- status(x)
+    states <- tw_status(x)
     out <- dplyr::bind_rows(lapply(seq_len(nrow(states)), function(i) {
       node <- states[i, ]
       status <- if (node$status %in% c("pass", "success")) {
@@ -252,13 +252,13 @@ quality <- function(x, run_id = NULL, asset = NULL, release = NULL) {
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("tidyweave-")
-#' lake <- connect_lake(lake_config(registry_duckdb(file.path(root, "lake.db")),
-#'   storage_local(file.path(root, "data")),
+#' lake <- tw_connect_lake(tw_lake_config(tw_registry_duckdb(file.path(root, "lake.db")),
+#'   tw_storage_local(file.path(root, "data")),
 #'   landing = file.path(root, "landing"), backend = "duckdb"))
-#' releases(lake)
-#' disconnect_lake(lake)
+#' tw_releases(lake)
+#' tw_disconnect_lake(lake)
 #' unlink(root, recursive = TRUE)
-releases <- function(lake, asset = NULL) {
+tw_releases <- function(lake, asset = NULL) {
   out <- metadata_filter(lake, "releases", asset = asset)
   out[order(out$published_at, out$release_id, decreasing = TRUE), ]
 }
@@ -280,8 +280,8 @@ releases <- function(lake, asset = NULL) {
 #' @export
 #' @examples
 #' path <- system.file("extdata", "dbt-artifacts", package = "tidyweave")
-#' lineage(path, "model.shop.customer_revenue")
-lineage <- function(
+#' tw_lineage(path, "model.shop.customer_revenue")
+tw_lineage <- function(
   x,
   asset = NULL,
   direction = c("upstream", "downstream"),
@@ -290,7 +290,7 @@ lineage <- function(
   direction <- match.arg(direction)
   flag(recursive, "recursive")
   if (inherits(x, "tw_lake")) {
-    edges <- registry(x, "lineage_edges")
+    edges <- tw_registry(x, "lineage_edges")
   } else if (inherits(x, "tw_run_result")) {
     edges <- run_result_lineage(x)
   } else if (inherits(x, "tw_measurement_set") || is_measurement(x)) {
@@ -307,7 +307,7 @@ lineage <- function(
       )
     })))
   } else {
-    source <- dbt_lineage(x)
+    source <- tw_dbt_lineage(x)
     edges <- tibble::tibble(
       run_id = rep("", nrow(source)),
       from_id = source$from,
@@ -463,7 +463,7 @@ run_result_message <- function(x) {
   } else if (any(checks$status == "warning")) {
     message <- paste(
       message,
-      "Quality warnings are available in quality(result)."
+      "Quality warnings are available in tw_quality(result)."
     )
   }
   message
@@ -514,10 +514,10 @@ measurement_quality <- function(x) {
               abort("The retained quality reference does not match the lake.")
             }
           } else {
-            lake <- connect_lake(reference$config, read_only = TRUE)
-            on.exit(disconnect_lake(lake), add = TRUE)
+            lake <- tw_connect_lake(reference$config, read_only = TRUE)
+            on.exit(tw_disconnect_lake(lake), add = TRUE)
           }
-          quality(lake, asset = reference$asset, release = reference$release)
+          tw_quality(lake, asset = reference$asset, release = reference$release)
         },
         error = function(e) unavailable()
       )
@@ -530,7 +530,7 @@ measurement_quality <- function(x) {
     checks$.release <- manifest$release_id
     checks
   })
-  quality(dplyr::bind_rows(out))
+  tw_quality(dplyr::bind_rows(out))
 }
 
 

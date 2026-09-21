@@ -6,11 +6,11 @@ checked publication, closing and reopening, another publication, and read-only
 access. Remote S3/PostgreSQL services are outside this test.
 
 The baseline reproduced the previous failure: custom layers were forgotten on
-`open_lake(folder)`, default schemas were added, and publishing again into `core`
+`tw_open_lake(folder)`, default schemas were added, and publishing again into `core`
 failed although the earlier data remained readable.
 
-The implementation has one path/configuration resolver for `open_lake()`,
-`setup_lake(path = )` and `lake_config(path = )`. It preserves ordered layers and
+The implementation has one path/configuration resolver for `tw_open_lake()`,
+`tw_setup_lake(path = )` and `tw_lake_config(path = )`. It preserves ordered layers and
 named roles as well as the backend. Different explicit choices and stale config
 objects fail before opening the database. No source callbacks are needed.
 

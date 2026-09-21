@@ -1,7 +1,7 @@
 #' Reuse explicit execution defaults
 #'
-#' Define execution choices once and pass the value to [run()], [publish()] or
-#' [ingest()], or store it once with `product(execution = )`. Construction
+#' Define execution choices once and pass the value to [tw_run()], [tw_publish()] or
+#' [tw_ingest()], or store it once with `tw_product(execution = )`. Construction
 #' neither reads sources nor opens destinations. Stored defaults require
 #' connection-free destinations and are used only for the root definition.
 #' Engine defaults apply recursively to dependencies without changing the
@@ -13,7 +13,7 @@
 #' without targets remain in memory. Configured targets and their layers remain
 #' unchanged. The layer default applies to a newly supplied root lake destination
 #' or a root target with no layer. Explicit
-#' `publish(to = , layer = )` arguments override the root product only.
+#' `tw_publish(to = , layer = )` arguments override the root product only.
 #' Ingestion always uses the raw layer and rejects another layer default.
 #' @param quality Default formula engine: `"native"` or `"pointblank"`.
 #' @param relationships Default checked lookup engine: `"native"` or `"dm"`.
@@ -22,12 +22,12 @@
 #' @returns An ordinary execution configuration value. No global state is changed.
 #' @export
 #' @examples
-#' execution <- execution_config()
-#' product("orders", data.frame(amount = c(10, 20))) |>
-#'   add_quality(~ amount > 0) |>
-#'   run(execution = execution) |>
-#'   collect()
-execution_config <- function(
+#' execution <- tw_execution_config()
+#' tw_product("orders", data.frame(amount = c(10, 20))) |>
+#'   tw_add_quality(~ amount > 0) |>
+#'   tw_run(execution = execution) |>
+#'   tw_collect()
+tw_execution_config <- function(
   quality = "native",
   relationships = "native",
   to = NULL,
@@ -46,10 +46,10 @@ execution_config <- function(
       abort("An execution layer requires a lake target.")
     }
     if (
-      !component_method("write_target", to) &&
+      !component_method("tw_write_target", to) &&
         !component_method("tw_execute_target", to)
     ) {
-      abort("The execution target needs a write_target() method.")
+      abort("The execution target needs a tw_write_target() method.")
     }
   }
   structure(
@@ -71,9 +71,9 @@ validate_execution_config <- function(execution) {
     !inherits(execution, "tw_execution_config") ||
       !identical(names(execution), c("quality", "relationships", "to", "layer"))
   ) {
-    abort("execution must be an execution_config() value.")
+    abort("execution must be an tw_execution_config() value.")
   }
-  do.call(execution_config, unclass(execution))
+  do.call(tw_execution_config, unclass(execution))
 }
 
 apply_execution_defaults <- function(product, execution) {
@@ -160,7 +160,7 @@ validate_stored_execution <- function(execution) {
   }
   if (has_connection(execution)) {
     abort(
-      "Stored execution defaults cannot contain an open connection. Use a lake_config(), folder, or connection factory."
+      "Stored execution defaults cannot contain an open connection. Use a tw_lake_config(), folder, or connection factory."
     )
   }
   execution

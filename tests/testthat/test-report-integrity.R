@@ -1,8 +1,8 @@
 test_that("reports preserve doubles and reject changes smaller than legacy rounding", {
   f <- fixture()
   on.exit(fixture_cleanup(f))
-  run(f$pipeline, f$lake)
-  definition <- metric(
+  tw_run(f$pipeline, f$lake)
+  definition <- tw_metric(
     "precision",
     "risk.validated",
     approved = TRUE,
@@ -18,24 +18,24 @@ test_that("reports preserve doubles and reject changes smaller than legacy round
     1.2345678901234567
   )
   for (i in seq_along(numbers)) {
-    value <- measure(f$lake, definition, params = list(value = numbers[i]))
-    report_release(f$lake, paste0("report", i), list(total = value), "v1")
-    actual <- report_read(f$lake, paste0("report", i), values_only = TRUE)
+    value <- tw_measure(f$lake, definition, params = list(value = numbers[i]))
+    tw_report_release(f$lake, paste0("report", i), list(total = value), "v1")
+    actual <- tw_report_read(f$lake, paste0("report", i), values_only = TRUE)
     expect_identical(as.double(actual$total$value), numbers[i])
   }
-  changed <- measure(f$lake, definition, params = list(value = numbers[1]))
+  changed <- tw_measure(f$lake, definition, params = list(value = numbers[1]))
   changed$value <- changed$value - 1
   expect_snapshot(
     error = TRUE,
-    report_release(f$lake, "changed", list(total = changed), "v1")
+    tw_report_release(f$lake, "changed", list(total = changed), "v1")
   )
 })
 
 test_that("nested report values are rejected before any report is written", {
   f <- fixture()
   on.exit(fixture_cleanup(f))
-  run(f$pipeline, f$lake)
-  definition <- metric(
+  tw_run(f$pipeline, f$lake)
+  definition <- tw_metric(
     "nested",
     "risk.validated",
     approved = TRUE,
@@ -44,12 +44,12 @@ test_that("nested report values are rejected before any report is written", {
       tibble::tibble(value = list(c(low = 100, high = 200)))
     }
   )
-  value <- measure(f$lake, definition)
+  value <- tw_measure(f$lake, definition)
   expect_snapshot(
     error = TRUE,
-    report_release(f$lake, "nested", list(total = value), "v1")
+    tw_report_release(f$lake, "nested", list(total = value), "v1")
   )
-  expect_equal(nrow(registry(f$lake, "reports")), 0L)
+  expect_equal(nrow(tw_registry(f$lake, "reports")), 0L)
 })
 
 test_that("legacy report JSON remains readable", {
@@ -73,7 +73,7 @@ test_that("legacy report JSON remains readable", {
     )
   )
   expect_equal(
-    report_read(f$lake, "legacy", values_only = TRUE)$total$value,
+    tw_report_read(f$lake, "legacy", values_only = TRUE)$total$value,
     300
   )
 })

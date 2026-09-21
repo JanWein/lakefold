@@ -13,12 +13,12 @@ not test results; see the [validation record](VALIDATION.md) for measured checks
 
 | Repetition in 0.10 | Result in 0.11 | Deliberate boundary |
 |---|---|---|
-| Engine arguments on each predicate and lookup | One explicit `execution_config()` passed to execution | A local engine overrides the default; no global context |
+| Engine arguments on each predicate and lookup | One explicit `tw_execution_config()` passed to execution | A local engine overrides the default; no global context |
 | Repeated target configuration | Optional execution destination/layer defaults | Defaults apply to the root only; untargeted dependencies stay in memory; receipt is always RAW |
-| Full enriched contract definitions | `contract_update()` reuses columns and expectations under an explicit identity | Changed grain, removed columns and type changes require reviewed promises |
-| One call per metric and month, then manual table assembly | Batch `measure()` and tidy `collect()` | Each-period and aggregate selection remain distinct; stocks still need one date |
+| Full enriched contract definitions | `tw_contract_update()` reuses columns and expectations under an explicit identity | Changed grain, removed columns and type changes require reviewed promises |
+| One call per metric and month, then manual table assembly | Batch `tw_measure()` and tidy `tw_collect()` | Each-period and aggregate selection remain distinct; stocks still need one date |
 | Manual report connection management | Configuration or existing folder accepted by report functions | Caller-owned connections remain caller-owned; issuance remains explicit |
-| Reconstructed correction products and dbt projects | `replace_sources()` updates named inputs and nested product references | Pinned results are never implicitly refreshed |
+| Reconstructed correction products and dbt projects | `tw_replace_sources()` updates named inputs and nested product references | Pinned results are never implicitly refreshed |
 | Different status and lineage access paths | Common outcome column and result lineage accessor | Native statuses and actual execution evidence are retained |
 | All exported topics presented together | Everyday, integration and extension reference groups | Advanced adapter interfaces remain available |
 

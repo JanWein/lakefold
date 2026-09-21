@@ -20,11 +20,11 @@ separate product type for derived data.
 
 ```{r definition}
 library(tidyweave)
-orders <- product("orders", data.frame(id = 1:2, amount = c(10, 20))) |>
+orders <- tw_product("orders", data.frame(id = 1:2, amount = c(10, 20))) |>
   dplyr::mutate(amount = amount * 2) |>
-  add_quality(~ amount >= 0)
+  tw_add_quality(~ amount >= 0)
 orders
-explain(orders)
+tw_explain(orders)
 ```
 
 Definition is separate from execution. Ordinary values are normalized at the
@@ -41,7 +41,7 @@ trivial operation.
 |---|---|---|
 | Acquire data | Table, function or path | DBI, Arrow/Parquet, httr2 API, pins, custom source |
 | Prepare a table | Deferred dplyr call or R function | Actual dplyr/dbplyr operations, SQL or dbt adapter |
-| Enrich a primary table | `add_lookup()` with explicit equality keys | Native or dm checks; same guaranteed many-to-one join |
+| Enrich a primary table | `tw_add_lookup()` with explicit equality keys | Native or dm checks; same guaranteed many-to-one join |
 | Define expectations | Type vector or contract | Native schema and key checks |
 | Check business rules | Formula or function | Native counts, pointblank or custom quality engine |
 | Write the result | Target | Lake, DBI table, Parquet file, pin or custom writer |
@@ -50,26 +50,26 @@ trivial operation.
 Backend-specific arguments live in adapter constructors. A different destination
 can keep the same source, transformation and rule composition. It can still have
 different limits: a Parquet file does not become a lake release merely because
-both implement `write_target()`.
+both implement `tw_write_target()`.
 
 ## Choose execution defaults once
 
 ```{r execution-defaults}
-execution <- execution_config(quality = "native", relationships = "native")
-result <- orders |> run(execution = execution)
-collect(result)
+execution <- tw_execution_config(quality = "native", relationships = "native")
+result <- orders |> tw_run(execution = execution)
+tw_collect(result)
 ```
 
 A definition describes the requested work; an explicit execution value supplies
 optional engine and destination defaults. A step's explicit engine wins over the
 default. Engine defaults travel through nested products and lookup dependencies.
 Destination and layer defaults apply only to the root product. Dependencies with
-no target remain in memory; their configured targets and layers remain unchanged. `ingest()` always accepts into RAW and rejects
+no target remain in memory; their configured targets and layers remain unchanged. `tw_ingest()` always accepts into RAW and rejects
 conflicting publication-layer defaults. There is no ambient global context.
 
 Specialist Pointblank agents and arbitrary quality functions keep their own
 behavior. Choosing an engine for simple rules does not translate unsupported
-specialist checks. `execution_config(quality = "pointblank", relationships = "dm")`
+specialist checks. `tw_execution_config(quality = "pointblank", relationships = "dm")`
 uses the optional engines with the same predicates and keys. Selecting an
 execution default leaves the declared contract and its immutable identity
 unchanged. Execution evidence separately records the resolved checking engine.
@@ -79,29 +79,29 @@ changing a business promise requires a new contract version.
 ## Reuse expectations without inventing meaning
 
 ```{r contract-composition}
-order_contract <- contract("orders.schema", columns = c(id = "integer", amount = "numeric"),
+order_contract <- tw_contract("orders.schema", columns = c(id = "integer", amount = "numeric"),
   key = "id", grain = "One order")
-enriched_contract <- contract_update(order_contract, id = "orders.enriched.schema",
+enriched_contract <- tw_contract_update(order_contract, id = "orders.enriched.schema",
   columns = c(channel = "character"), required = c(order_contract$required, "channel"))
 ```
 
-`contract_update()` retains the original definition and derives an explicitly
+`tw_contract_update()` retains the original definition and derives an explicitly
 identified successor. New columns are optional unless included in `required`.
 The key remains meaningful here because adding an attribute preserves one order
 per row. Changing grain requires an explicit key decision. Removing or changing
 columns with existing rules requires explicit rule review. Arbitrary dplyr
 transformations do not receive invented metadata or automatic key guarantees.
-Simple formulas in contracts and `add_quality()` use the same normalization.
+Simple formulas in contracts and `tw_add_quality()` use the same normalization.
 
 ## Correct an input without reconstructing the workflow
 
 ```{r corrections}
 corrected_orders <- orders |>
-  replace_sources(orders = data.frame(id = 1:2, amount = c(10, 25)))
-corrected_orders |> run() |> collect()
+  tw_replace_sources(orders = data.frame(id = 1:2, amount = c(10, 25)))
+corrected_orders |> tw_run() |> tw_collect()
 ```
 
-A primary source supplied to `product("orders", data)` defaults to the name
+A primary source supplied to `tw_product("orders", data)` defaults to the name
 `orders`; `source_name` can make that name more specific. For a root product,
 replacements use named source aliases; a nested product may
 be selected by its ID. Every matching graph reference is updated while shared
@@ -122,17 +122,17 @@ it, update an already published release or silently unpin a previous result.
 
 The lake adapter owns archival, full-candidate gates, release history and its
 publication transaction. Internal storage helpers support that job; they are
-not another public workflow language. `run()` is the common execution verb.
-`publish()` shares the approval intention across products and successful dbt
+not another public workflow language. `tw_run()` is the common execution verb.
+`tw_publish()` shares the approval intention across products and successful dbt
 builds. It supplies a local lake target for a product when absent. Receipt
-validation uses data-first `ingest()` before any RAW table is written.
+validation uses data-first `tw_ingest()` before any RAW table is written.
 
 ## Familiar syntax, deferred execution
 
 The supported dplyr verbs are methods on the same product, not replacement
 implementations of dplyr. Expressions and their environments are captured during
 definition and invoked against the runtime table in step order. Inspection never
-evaluates them. Unsupported verbs use `add_transform(function(data) ...)`.
+evaluates them. Unsupported verbs use `tw_add_transform(function(data) ...)`.
 
 Lookup references are auxiliary dependencies. They are validated, memoized and
 recorded as lineage while the primary transform input remains one table.
@@ -146,11 +146,11 @@ execution, while ordinary SQL models and dbt tests remain outside the R grammar.
 ## Lifecycle and results
 
 ```{r result}
-result <- run(orders)
-status(result)
-lineage(result)
-quality(result)
-collect(result)
+result <- tw_run(orders)
+tw_status(result)
+tw_lineage(result)
+tw_quality(result)
+tw_collect(result)
 ```
 
 The definition remains a definition. The separate run result records lifecycle
@@ -158,8 +158,8 @@ states, timestamps, inputs, outputs, quality, status and available schema/row
 metadata. A run can complete in memory, publish, reuse a cached release, be
 blocked by quality, or fail during execution. Printing and accessors show the
 useful summary; raw conditions remain available locally for debugging.
-`status()` retains the native `status` and adds the common `outcome` categories
-`succeeded`, `blocked`, `failed` and `skipped`. `lineage(result)` reads recorded
+`tw_status()` retains the native `status` and adds the common `outcome` categories
+`succeeded`, `blocked`, `failed` and `skipped`. `tw_lineage(result)` reads recorded
 execution inputs, including pinned release identities when present; it does not
 resolve the definition against today's current data.
 
@@ -168,7 +168,7 @@ business meaning: ownership, descriptions, declared keys and expectations.
 Input fingerprints mean different things on different sources: a lazy query
 fingerprint describes the query and is not proof that remote rows are unchanged.
 
-`run(product, evidence = "runs")` adds durable local JSON evidence and a catalog
+`tw_run(product, evidence = "runs")` adds durable local JSON evidence and a catalog
 outbox. It excludes input rows, executable definitions, connection/request
 objects and raw errors. Business descriptions and identifiers remain visible.
 The lake registry stores storage/release history; an external business catalog
@@ -180,30 +180,30 @@ consumes metadata. These are separate responsibilities.
 |---|---|---|
 | Caller-supplied DBI connection | Caller | Keep it open while using lazy results |
 | DBI source connection factory | tidyweave | Factory sources materialize before closing; lazy output is rejected |
-| Caller-supplied lake | Caller | Close with `close_lake()` when finished |
+| Caller-supplied lake | Caller | Close with `tw_close_lake()` when finished |
 | Folder/config opened by a lake target | tidyweave | The result keeps a durable release reference |
 | Configuration/folder passed to report issuance or reading | tidyweave | Issuance writes explicitly; reading is read-only |
 | dbt subprocess connections | dbt | Close conflicting local database connections before invocation |
 | HTTP authentication | httr2 or your request factory | Supply fresh runtime credentials; do not store them in definitions |
 
 Lazy execution keeps supported computation in DBI/Arrow. R-only algorithms and
-certain targets need collection; use `collect()` deliberately. The lake target
+certain targets need collection; use `tw_collect()` deliberately. The lake target
 archives materialized inputs. A multi-source join across different backends also
 needs an explicit movement strategy; the framework does not silently invent one.
 
 ## Measure in batches, issue explicitly
 
-`measure(approved, metrics = metrics, at = dates, period = "each")` computes the
+`tw_measure(approved, metrics = metrics, at = dates, period = "each")` computes the
 metric-by-date combinations and keeps their original manifests in one measurement
-set. `collect()` exposes a long tibble with dimensions, `.metric`, `.period`,
+set. `tw_collect()` exposes a long tibble with dimensions, `.metric`, `.period`,
 `.unit` and `value`. The list-valued `.period` preserves dates, including an
 explicit multi-date selection for `period = "aggregate"`. Aggregate mode still
 rejects a multi-date stock metric; convenience does not change time semantics.
 
-`measurements |> report_release(id, code_version = ...)` issues the original
+`measurements |> tw_report_release(id, code_version = ...)` issues the original
 measurement set. Its values and labels are integrity-checked, and its exact input
 releases remain evidence. An ordinary collected table does not carry enough
-information to issue that report. `report_read(config, id, values_only = TRUE)`
+information to issue that report. `tw_report_read(config, id, values_only = TRUE)`
 returns the saved batch as tidy values without recalculation. The destination
 can be inferred from published measurements; pass `to` when it cannot. See the
 [insurance example](relational-insurance.html) for correction and preservation
@@ -212,7 +212,7 @@ assertions across two monthly periods.
 ## Guarantees stay with their owner
 
 Quality gates precede writes. Target adapters declare their storage guarantees
-through `capabilities()` and implement their own atomicity and cleanup. DBI
+through `tw_capabilities()` and implement their own atomicity and cleanup. DBI
 transaction behavior depends on the driver. Local evidence requires one
 coordinated writer. No multi-system transaction connects a data target to a
 remote metadata service.

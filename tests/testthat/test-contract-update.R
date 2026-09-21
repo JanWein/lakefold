@@ -1,5 +1,5 @@
 test_that("contract composition preserves identity choices and optional columns", {
-  old <- contract(
+  old <- tw_contract(
     "orders",
     columns = c(id = "integer"),
     key = "id",
@@ -8,7 +8,7 @@ test_that("contract composition preserves identity choices and optional columns"
     column_metadata = list(id = list(description = "Order identifier"))
   )
   original <- old
-  new <- contract_update(
+  new <- tw_contract_update(
     old,
     id = "enriched",
     columns = list(channel = character())
@@ -20,7 +20,7 @@ test_that("contract composition preserves identity choices and optional columns"
   expect_identical(new$operator, "Platform")
   expect_identical(new$column_metadata, old$column_metadata)
   expect_identical(old, original)
-  revised <- contract_update(old, version = "2", description = "Revised")
+  revised <- tw_contract_update(old, version = "2", description = "Revised")
   expect_identical(revised$id, old$id)
   expect_identical(revised$version, "2")
   expect_identical(revised$description, "Revised")
@@ -30,21 +30,21 @@ test_that("contracts and product rules use the same normalization without evalua
   checks <- list(nonnegative = ~ amount >= 0, opaque = function(data) {
     stop("Do not execute while defining")
   })
-  definition <- contract(
+  definition <- tw_contract(
     "amounts",
     columns = c(amount = "numeric"),
     rules = checks
   )
-  p <- add_quality(product("amounts"), checks)
+  p <- tw_add_quality(tw_product("amounts"), checks)
   expect_identical(definition$rules, p$quality)
   expect_identical(
-    contract(columns = c(amount = "numeric"), rules = ~ amount > 0)$rules[[
+    tw_contract(columns = c(amount = "numeric"), rules = ~ amount > 0)$rules[[
       1
     ]]$name,
     "quality_1"
   )
-  reused <- quality_rule("old_name", ~ amount > 0, engine = "native")
-  normalized <- contract(
+  reused <- tw_quality_rule("old_name", ~ amount > 0, engine = "native")
+  normalized <- tw_contract(
     columns = c(amount = "numeric"),
     rules = list(positive = reused)
   )$rules[[1]]
@@ -52,13 +52,13 @@ test_that("contracts and product rules use the same normalization without evalua
   expect_identical(normalized$engine_explicit, TRUE)
   expect_identical(definition$rules[[1]]$engine_explicit, FALSE)
   expect_identical(
-    contract_update(definition, id = "copy")$rules,
+    tw_contract_update(definition, id = "copy")$rules,
     definition$rules
   )
 })
 
 test_that("reviewed removal and aggregation replace guarantees explicitly", {
-  old <- contract(
+  old <- tw_contract(
     "orders",
     grain = "One order",
     columns = c(id = "integer", amount = "numeric"),
@@ -66,7 +66,7 @@ test_that("reviewed removal and aggregation replace guarantees explicitly", {
     rules = list(positive = ~ amount > 0),
     column_metadata = list(id = list(description = "Identifier"))
   )
-  new <- contract_update(
+  new <- tw_contract_update(
     old,
     id = "totals",
     remove = "id",
@@ -82,7 +82,7 @@ test_that("reviewed removal and aggregation replace guarantees explicitly", {
   expect_identical(new$grain, "One total")
   expect_identical(names(new$columns), c("amount", "total"))
   expect_identical(all.vars(new$rules[[1]]$check), "total")
-  changed <- contract_update(
+  changed <- tw_contract_update(
     old,
     version = "2",
     columns = c(id = "character"),
@@ -93,7 +93,7 @@ test_that("reviewed removal and aggregation replace guarantees explicitly", {
 })
 
 test_that("unsafe inheritance and unchanged identity have actionable errors", {
-  old <- contract(
+  old <- tw_contract(
     "orders",
     grain = "One order",
     columns = c(id = "integer", amount = "numeric"),
@@ -102,43 +102,48 @@ test_that("unsafe inheritance and unchanged identity have actionable errors", {
   )
   expect_snapshot(
     error = TRUE,
-    contract_update(old, columns = c(extra = "numeric"))
+    tw_contract_update(old, columns = c(extra = "numeric"))
   )
   expect_snapshot(
     error = TRUE,
-    contract_update(old, version = "2", grain = "One month")
+    tw_contract_update(old, version = "2", grain = "One month")
   )
   expect_snapshot(
     error = TRUE,
-    contract_update(old, version = "2", grain = "One month", key = character())
+    tw_contract_update(
+      old,
+      version = "2",
+      grain = "One month",
+      key = character()
+    )
   )
   expect_snapshot(
     error = TRUE,
-    contract_update(old, version = "2", remove = "amount")
+    tw_contract_update(old, version = "2", remove = "amount")
   )
   expect_snapshot(
     error = TRUE,
-    contract_update(old, version = "2", remove = "amount", required = "id")
+    tw_contract_update(old, version = "2", remove = "amount", required = "id")
   )
   expect_snapshot(
     error = TRUE,
-    contract_update(old, version = "2", columns = c(id = "character"))
+    tw_contract_update(old, version = "2", columns = c(id = "character"))
   )
   expect_snapshot(
     error = TRUE,
-    contract_update(old, version = "2", columns = c(amount = "integer"))
+    tw_contract_update(old, version = "2", columns = c(amount = "integer"))
   )
   expect_snapshot(
     error = TRUE,
-    contract_update(old, version = "2", remove = "missing")
+    tw_contract_update(old, version = "2", remove = "missing")
   )
   expect_snapshot(
     error = TRUE,
-    contract_update(old, version = "2", typo = TRUE)
+    tw_contract_update(old, version = "2", typo = TRUE)
   )
   expect_snapshot(
     error = TRUE,
-    contract_update(
+    tw_contract_update(
       old,
       version = "2",
       remove = "amount",

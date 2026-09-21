@@ -16,8 +16,8 @@
 #'   `min` and `max`. Unsupported or empty extrema are `NA_character_`.
 #' @export
 #' @examples
-#' profile_data(data.frame(id = c(1L, 1L, NA), amount = c(5, 10, 20)))
-profile_data <- function(x, columns = NULL) {
+#' tw_profile_data(data.frame(id = c(1L, 1L, NA), amount = c(5, 10, 20)))
+tw_profile_data <- function(x, columns = NULL) {
   prototype <- table_prototype(x)
   columns <- columns %||% names(prototype)
   if (

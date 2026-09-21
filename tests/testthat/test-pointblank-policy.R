@@ -5,7 +5,7 @@ test_that("native thresholds are evaluated independently for each pointblank seg
     amount = rep(1, 200)
   )
   data$amount[1:3] <- -1
-  contract <- contract(
+  contract <- tw_contract(
     "amounts",
     "1",
     "Analytics",
@@ -13,7 +13,7 @@ test_that("native thresholds are evaluated independently for each pointblank seg
     "One amount",
     c(entity = "character", amount = "numeric"),
     rules = list(
-      pointblank_checks(
+      tw_pointblank_checks(
         "positive",
         function(data) {
           pointblank::create_agent(
@@ -30,7 +30,7 @@ test_that("native thresholds are evaluated independently for each pointblank seg
       )
     )
   )
-  quality <- validate(data, contract, keep_agents = TRUE)
+  quality <- tw_validate(data, contract, keep_agents = TRUE)
   checks <- quality[quality$engine == "pointblank", ]
   expect_equal(checks$status, c("warning", "passed"))
   expect_equal(checks$n_total, c(100, 100))
@@ -38,7 +38,7 @@ test_that("native thresholds are evaluated independently for each pointblank seg
   expect_equal(grepl('"A"', checks$segment[[1]], fixed = TRUE), TRUE)
   expect_equal(tidyweave:::quality_ok(quality), TRUE)
   data$amount[4:5] <- -1
-  checks <- validate(data, contract)
+  checks <- tw_validate(data, contract)
   expect_equal(
     checks$status[checks$engine == "pointblank"],
     c("failed", "passed")
@@ -69,16 +69,16 @@ test_that("native policy fails closed for inactive, errored and unconfigured che
     }
   )
   for (build in builders) {
-    contract <- contract(
+    contract <- tw_contract(
       "x",
       "1",
       "Analytics",
       "Values",
       "One value",
       c(x = "numeric"),
-      rules = list(pointblank_checks("check", build, policy = "agent"))
+      rules = list(tw_pointblank_checks("check", build, policy = "agent"))
     )
-    quality <- validate(data.frame(x = 1), contract)
+    quality <- tw_validate(data.frame(x = 1), contract)
     expect_equal(tidyweave:::quality_ok(quality), FALSE)
     expect_equal(any(quality$status %in% c("error", "not_checked")), TRUE)
   }
@@ -86,14 +86,14 @@ test_that("native policy fails closed for inactive, errored and unconfigured che
 
 test_that("legacy rule policy remains independent of native action levels", {
   skip_if_not_installed("pointblank")
-  contract <- contract(
+  contract <- tw_contract(
     "x",
     "1",
     "Analytics",
     "Values",
     "One value",
     c(x = "numeric"),
-    rules = list(pointblank_checks(
+    rules = list(tw_pointblank_checks(
       "check",
       function(data) {
         pointblank::create_agent(
@@ -105,7 +105,7 @@ test_that("legacy rule policy remains independent of native action levels", {
       severity = "warning"
     ))
   )
-  quality <- validate(data.frame(x = c(-1, 1)), contract)
+  quality <- tw_validate(data.frame(x = c(-1, 1)), contract)
   expect_equal(quality$status[quality$engine == "pointblank"], "warning")
   expect_equal(tidyweave:::quality_ok(quality), TRUE)
 })
@@ -125,14 +125,14 @@ test_that("every native blocking action takes precedence across report layouts",
     },
     .package = "pointblank"
   )
-  contract <- contract(
+  contract <- tw_contract(
     "amounts",
     "1",
     "Analytics",
     "Amounts",
     "One amount",
     c(amount = "numeric"),
-    rules = list(pointblank_checks(
+    rules = list(tw_pointblank_checks(
       "positive",
       function(data) {
         pointblank::create_agent(
@@ -158,7 +158,7 @@ test_that("every native blocking action takes precedence across report layouts",
     layouts,
     function(layout) {
       flags <<- layout
-      quality <- validate(data.frame(amount = -1), contract)
+      quality <- tw_validate(data.frame(amount = -1), contract)
       quality$status[quality$engine == "pointblank"]
     },
     character(1)

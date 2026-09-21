@@ -1,6 +1,6 @@
 #' Choose governed lake storage for a composed product
 #'
-#' A folder path opens local DuckDB storage. Pass [lake_config()] for DuckLake,
+#' A folder path opens local DuckDB storage. Pass [tw_lake_config()] for DuckLake,
 #' S3 or PostgreSQL catalog configuration, or reuse an open lake. Connections
 #' supplied by the caller remain caller-owned. The adapter compiles to the
 #' existing immutable landing, candidate and publication transaction.
@@ -8,13 +8,13 @@
 #' @param partition_by Optional columns identifying complete partitions to
 #'   replace. Retained partitions are included in the final quality gate.
 #' @param layer Publication layer in the lake configuration.
-#' @returns A target accepted by [set_target()] or [publish()].
+#' @returns A target accepted by [tw_set_target()] or [tw_publish()].
 #' @export
 #' @examples
-#' product("orders") |>
-#'   add_source(data.frame(id = 1:2)) |>
-#'   set_target(target_lake("reporting-lake"))
-target_lake <- function(
+#' tw_product("orders") |>
+#'   tw_add_source(data.frame(id = 1:2)) |>
+#'   tw_set_target(tw_target_lake("reporting-lake"))
+tw_target_lake <- function(
   destination = "tidyweave",
   partition_by = character(),
   layer = "validated"
@@ -26,7 +26,7 @@ target_lake <- function(
     !is.character(destination) &&
       !inherits(destination, c("tw_lake", "tw_config"))
   ) {
-    abort("destination must be a folder, lake_config() or an open lake.")
+    abort("destination must be a folder, tw_lake_config() or an open lake.")
   }
   invisible(lapply(partition_by, column_name))
   if (anyDuplicated(partition_by)) {
@@ -41,13 +41,13 @@ target_lake <- function(
 
 normalize_target <- function(target) {
   if (is.character(target) || inherits(target, c("tw_lake", "tw_config"))) {
-    return(target_lake(target))
+    return(tw_target_lake(target))
   }
   target
 }
 
 #' @export
-inspect.tw_lake_target <- function(x, ...) {
+tw_inspect.tw_lake_target <- function(x, ...) {
   config <- if (inherits(x$destination, "tw_lake")) {
     x$destination$config
   } else {
@@ -60,7 +60,7 @@ inspect.tw_lake_target <- function(x, ...) {
   )
 }
 #' @export
-check_component.tw_lake_target <- function(x, ...) {
+tw_check_component.tw_lake_target <- function(x, ...) {
   need("duckdb")
   if (utils::packageVersion("duckdb") < "1.5.5") {
     abort("Lake storage requires duckdb >= 1.5.5.")
@@ -101,7 +101,7 @@ tw_execute_target.tw_lake_target <- function(
   flag(cache, "cache")
   if (cache && is.null(product$code_version)) {
     abort(
-      "Supply code_version in product() before enabling cache; callbacks are re-evaluated by default."
+      "Supply code_version in tw_product() before enabling cache; callbacks are re-evaluated by default."
     )
   }
   rules <- c(product$contract$rules, product$quality)
@@ -121,16 +121,16 @@ tw_execute_target.tw_lake_target <- function(
   own <- !inherits(lake, "tw_lake")
   if (own) {
     lake <- if (inherits(lake, "tw_config")) {
-      connect_lake(lake)
+      tw_connect_lake(lake)
     } else {
-      open_lake(lake)
+      tw_open_lake(lake)
     }
-    on.exit(close_lake(lake), add = TRUE)
+    on.exit(tw_close_lake(lake), add = TRUE)
   }
   assert_writable(lake)
   check_previous_release(lake, product$id, previous)
   assert_table_asset(lake, product$id)
-  definition <- inspect(product)
+  definition <- tw_inspect(product)
   definition$status <- NULL
   definition$target <- NULL
   definition$publication <- list(
@@ -149,9 +149,9 @@ tw_execute_target.tw_lake_target <- function(
   code <- product$code_version %||% "unversioned-no-cache"
   record <- c(list(kind = "composed_product"), definition)
   record$version <- version
-  register(lake, record)
+  tw_register(lake, record)
   if (!is.null(product$contract)) {
-    register(lake, product$contract)
+    tw_register(lake, product$contract)
   }
   run_id <- new_run(
     lake,
@@ -212,7 +212,7 @@ tw_execute_target.tw_lake_target <- function(
           data <- table_result(data, "The final transformation")
           transforms <- list()
         }
-        data <- collect(table_result(data, "The source"))
+        data <- tw_collect(table_result(data, "The source"))
         parent <- file.path(lake$config$landing, ".tidyweave-staging")
         dir.create(parent, recursive = TRUE, showWarnings = FALSE)
         slot <- file.path(parent, product$id)
@@ -225,7 +225,7 @@ tw_execute_target.tw_lake_target <- function(
         writeLines(jencode(writer_identity()), file.path(slot, "writer.json"))
         path <- file.path(slot, "delivery.rds")
         saveRDS(as.data.frame(data), path, compress = FALSE, version = 3)
-        source <- source_file(
+        source <- tw_source_file(
           paste0(product$id, ".source"),
           path,
           readRDS,
@@ -267,7 +267,7 @@ tw_execute_target.tw_lake_target <- function(
           function(data) {
             out <- apply_product_transform(
               implementation,
-              collect(data),
+              tw_collect(data),
               label,
               sources = inputs
             )
@@ -279,7 +279,7 @@ tw_execute_target.tw_lake_target <- function(
             out
           }
         })
-        pipeline <- tw_step_transform(pipeline, step, name)
+        pipeline <- pipeline_step_transform(pipeline, step, name)
       }
       pipeline <- pipeline |>
         tw_step_validate(contract) |>
@@ -302,7 +302,7 @@ tw_execute_target.tw_lake_target <- function(
       attr(pipeline, "tw_resolve_contract") <- function(data) {
         resolve_product_contract(lake, product, data)
       }
-      run(
+      tw_run(
         pipeline,
         lake,
         business_date = business_date,
@@ -333,7 +333,7 @@ tw_execute_target.tw_lake_target <- function(
       result
     }
   )
-  run <- registry(lake, "runs")
+  run <- tw_registry(lake, "runs")
   run <- run[run$run_id == result$run_id, ]
   result$started_at <- run$started_at[[1]]
   result$finished_at <- run$finished_at[[1]]
@@ -349,9 +349,9 @@ tw_execute_target.tw_lake_target <- function(
   }
   if (result$status %in% c("published", "cached")) {
     if (is.null(result$quality)) {
-      result$quality <- quality(lake, run_id = result$run_id)
+      result$quality <- tw_quality(lake, run_id = result$run_id)
     }
-    table <- tbl(lake, product$id, result$release_id)
+    table <- tw_tbl(lake, product$id, result$release_id)
     result$outputs <- list(asset = product$id, release_id = result$release_id)
     result$metadata <- list(
       transformations = transform_metadata,
@@ -381,14 +381,14 @@ resolve_product_contract <- function(lake, product, data) {
     prior <- definition$steps$validate
     if (!isTRUE(prior$automatic_schema)) {
       abort(
-        "This asset uses an explicit contract. Add it with add_contract() to keep its checks active."
+        "This asset uses an explicit contract. Add it with tw_add_contract() to keep its checks active."
       )
     }
     old_rules <- vapply(prior$rules, `[[`, character(1), "name")
     current_rules <- vapply(product$quality, `[[`, character(1), "name")
     if (!all(old_rules %in% current_rules)) {
       abort(
-        "This asset has quality rules. Keep them in add_quality() or use an explicit, versioned contract change."
+        "This asset has quality rules. Keep them in tw_add_quality() or use an explicit, versioned contract change."
       )
     }
   }
@@ -419,7 +419,7 @@ resolve_product_contract <- function(lake, product, data) {
     }
     if (!isTRUE(saved$automatic_schema)) {
       abort(
-        "This asset uses an explicit contract. Add it with add_contract()."
+        "This asset uses an explicit contract. Add it with tw_add_contract()."
       )
     }
     columns <- automatic_types(unlist(saved$columns, use.names = TRUE))

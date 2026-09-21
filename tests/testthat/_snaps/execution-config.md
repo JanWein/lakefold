@@ -1,7 +1,7 @@
 # invalid defaults are rejected clearly
 
     Code
-      execution_config(quality = "unknown")
+      tw_execution_config(quality = "unknown")
     Condition
       Error in `match.arg()`:
       ! 'arg' should be one of "native", "pointblank"

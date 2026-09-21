@@ -14,25 +14,25 @@ test_that("the cancellation reference retains cohort grain and issued reports", 
   rate <- function(x) x$value[x$.metric == "cancellation_rate"]
   expect_equal(rate(example$original), 0.4)
   expect_equal(rate(example$corrected), 0.6)
-  data <- collect(trial(example$august))
+  data <- tw_collect(tw_trial(example$august))
   expect_equal(data$policy_id[data$opening], c("P1", "P2", "P3", "P4", "P7"))
   expect_equal(data$policy_id[data$cancelled], c("P2", "P3"))
 
   no_opening <- example$fixed_policies
   no_opening$started_on <- as.Date("2026-08-01")
   no_opening$cancelled_on <- as.Date(NA)
-  empty_cohort <- trial(example$reporting_product(trial(
+  empty_cohort <- tw_trial(example$reporting_product(tw_trial(
     example$portfolio,
     sources = list(policies = no_opening)
   )))
-  counts <- collect(measure(
+  counts <- tw_collect(tw_measure(
     empty_cohort,
     metrics = example$cancellation_metrics[c("opening", "cancellations")],
     by = "channel"
   ))
   expect_equal(counts$value, rep(0, 4))
   error <- tryCatch(
-    measure(
+    tw_measure(
       empty_cohort,
       metrics = example$cancellation_metrics,
       by = "channel"
@@ -43,10 +43,10 @@ test_that("the cancellation reference retains cohort grain and issued reports", 
   expect_match(conditionMessage(error), "missing or non-finite")
 
   duplicate <- rbind(example$customers_data, example$customers_data[1, ])
-  blocked <- trial(example$portfolio, sources = list(customers = duplicate))
+  blocked <- tw_trial(example$portfolio, sources = list(customers = duplicate))
   expect_equal(blocked$status %in% c("blocked", "error"), TRUE)
   orphan <- example$fixed_policies
   orphan$customer_id[1] <- "missing"
-  blocked <- trial(example$portfolio, sources = list(policies = orphan))
+  blocked <- tw_trial(example$portfolio, sources = list(policies = orphan))
   expect_equal(blocked$status %in% c("blocked", "error"), TRUE)
 })

@@ -5,32 +5,32 @@
 #' The original definition is unchanged. Source and transformation callbacks are
 #' ordinary user code: their own side effects cannot be prevented by the framework.
 #' Read-only access to existing published inputs is still allowed.
-#' @param x Product or modular [workflow()] definition.
-#' @param data,sources Replacement delivery or named sources, as in [run()].
+#' @param x Product or modular [tw_workflow()] definition.
+#' @param data,sources Replacement delivery or named sources, as in [tw_run()].
 #' @param stop_on_failure Defaults to `FALSE`: a failed trial returns a result
-#'   for [quality_report()] and [quality_rows()]. Use `TRUE` to raise an error.
-#'   [run()] and [publish()] still raise errors on failure by default.
-#' @returns An in-memory run result accepted by [collect()] and [measure()].
+#'   for [tw_quality_report()] and [tw_quality_rows()]. Use `TRUE` to raise an error.
+#'   [tw_run()] and [tw_publish()] still raise errors on failure by default.
+#' @returns An in-memory run result accepted by [tw_collect()] and [tw_measure()].
 #' @export
 #' @examples
-#' orders <- product("orders", data.frame(amount = c(10, 20))) |>
-#'   set_target("reporting-lake")
-#' trial(orders) |> collect()
-trial <- function(x, data = NULL, sources = NULL, stop_on_failure = FALSE) {
+#' orders <- tw_product("orders", data.frame(amount = c(10, 20))) |>
+#'   tw_set_target("reporting-lake")
+#' tw_trial(orders) |> tw_collect()
+tw_trial <- function(x, data = NULL, sources = NULL, stop_on_failure = FALSE) {
   if (inherits(x, "tw_product_workflow")) {
-    return(trial(
+    return(tw_trial(
       compile_product_workflow(x, data, sources),
       stop_on_failure = stop_on_failure
     ))
   }
   if (!inherits(x, "tw_product")) {
-    abort("trial() needs a product definition.")
+    abort("tw_trial() needs a product definition.")
   }
   if (inherits(x, "tw_model_product")) {
     x <- apply_execution_defaults(x, product_execution(x, NULL))
     x$target <- NULL
     attr(x, "tw_execution_config") <- NULL
-    return(run(
+    return(tw_run(
       x,
       data = data,
       sources = sources,
@@ -48,5 +48,5 @@ trial <- function(x, data = NULL, sources = NULL, stop_on_failure = FALSE) {
     })
     replace_product_sources(product, sources)
   }
-  run(clear(x), evidence = NULL, stop_on_failure = stop_on_failure)
+  tw_run(clear(x), evidence = NULL, stop_on_failure = stop_on_failure)
 }

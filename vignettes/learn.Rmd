@@ -1,54 +1,62 @@
 ---
-title: "Learn by task"
-description: "Choose a focused guide after completing the introductory lessons."
+title: "Articles"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Learn by task}
+  %\VignetteIndexEntry{Articles}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
 
-New to tidyweave? Follow [Get started](get-started.html) first. These guides
-extend that workflow. Choose the task you have now; you do not need to adopt
-every integration.
+```{r setup, include=FALSE, purl=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", message = FALSE)
+```
 
-## Prepare and check data
+The documentation follows the objects you compose and the tasks you execute.
+Start with one complete example, then read the component guide you need.
 
-| I want to... | Guide | Adds |
-|---|---|---|
-| Combine tables without multiplying rows | [Compose products](composing-products.html) | Checked lookups and reusable dependencies |
-| Express stricter checks or use pointblank | [Quality rules](quality-gates.html) | Tolerances, reference checks and optional pointblank |
-| Diagnose an attempt or inspect earlier data | [Quality and history](quality-history.html) | Saved evidence, release selection and monitoring |
-| Correct one of several named deliveries | [Three deliveries and a report](three-deliveries.html) | Payment and reference corrections with retained reports |
-| Repeat dependent steps after a correction | [Repeat a workflow](everyday-workflows.html) | A named workflow and selective reruns |
+## Core guides
 
-## Store data and report values
+| Guide | Question it answers |
+|---|---|
+| [Get started](get-started.html) | How do I build and reuse my first workflow? |
+| [Product specifications](first-product.html) | What does acceptable output mean? |
+| [Preparation recipes](preparation-recipes.html) | How do I compose and reuse preparation? |
+| [Workflows](modular-workflows.html) | How do I assemble, replace and execute components? |
+| [Operation engines](engines.html) | How do I choose another implementation? |
+| [API migration](api-migration.html) | How do I update existing tidyweave code? |
 
-| I want to... | Guide | Adds |
-|---|---|---|
-| Define a cancellation report from customers, policies and brokers | [Cancellation reference case](cancellation-report.html) | Contracts, dm relationships, opening portfolio and corrections |
-| Publish from several R sessions | [Shared DuckLake](shared-ducklake.html) | PostgreSQL writer coordination and stale-correction checks |
-| Create and reopen an actual local DuckLake | [Create a DuckLake](create-ducklake.html) | DuckLake extension and optional layers |
-| Replace a complete month and retain other months | [Monthly reporting case study](getting-started.html) | Partition replacement and dated stock metrics |
-| Group calculations or inspect table relationships | [Relationships and metrics](products-metrics.html) | Dimensions, time meaning and optional dm |
+## Checks and publication
 
-## Connect existing tools
+- [Check a delivery](check-delivery.html): diagnose a rejected attempt and correct it.
+- [Quality rules](quality-gates.html): severity, tolerances, references and pointblank.
+- [Quality and history](quality-history.html): inspect checks and earlier releases.
+- [Publish and correct data](publish-data.html): keep the first accepted delivery.
+- [Save a report](save-report.html): retain values and the evidence behind them.
 
-| I want to... | Guide | Adds |
-|---|---|---|
-| Use files, DBI, Parquet, pins, HTTP or targets | [Integrations](optional-integrations.html) | Sources, destinations and their boundaries |
-| Run SQL models from R | [Use dbt](dbt-workflows.html) | A separately installed dbt CLI |
-| Check received files before building SQL layers | [Build a layered workflow](layered-data-stack.html) | Receipt checks, RAW storage and dbt |
-| Work through a larger insurance example | [Insurance reporting](relational-insurance.html) | Three inputs, dm, pointblank, dbt and corrections |
+## Composition and case studies
 
-## Understand or extend the package
+- [Compose products](composing-products.html): checked lookups and shared dependencies.
+- [Three deliveries and a report](three-deliveries.html): replace named deliveries independently.
+- [Repeat a workflow](everyday-workflows.html): sequential dependencies and selective reruns.
+- [Monthly reporting](getting-started.html): complete-month replacement and stock metrics.
+- [Cancellation reporting](cancellation-report.html): customer, policy and broker inputs.
+- [Relationships and metrics](products-metrics.html): dm relationships and grouped calculations.
+- [Insurance reporting](relational-insurance.html): a larger runnable integration example.
 
-- [Why tidyweave?](why-tidyweave.html): when the package earns its place.
-- [Architecture](workflow-design.html): execution, ownership and adapter boundaries.
-- [Write an adapter](extending-tidyweave.html): a runnable extension example.
-- [Development record](design-review.html): historical decisions and validation scope.
-- [Operations](https://github.com/JanWein/tidyweave/blob/main/docs/OPERATIONS.md): writer coordination and recovery.
+## Backends and integrations
 
-Need a definition? Use [Terms](glossary.html). Need a fix? Use
-[Troubleshooting](troubleshooting.html). Need an argument? Use the
-[function reference](../reference/index.html).
+- [Integrations](optional-integrations.html): DBI, Parquet, pins, HTTP and targets.
+- [Create a DuckLake](create-ducklake.html): configure an explicit DuckLake backend.
+- [Shared DuckLake](shared-ducklake.html): PostgreSQL writer coordination.
+- [Use dbt](dbt-workflows.html): execute a separately installed dbt CLI.
+- [Layered workflows](layered-data-stack.html): receipt checks, raw storage and dbt.
+
+## Developers and help
+
+- [Write an adapter](extending-tidyweave.html): a runnable S3 extension.
+- [Architecture](workflow-design.html): execution, ownership and component boundaries.
+- [Development record](design-review.html): historical design decisions.
+- [Troubleshooting](troubleshooting.html), [Terms](glossary.html), and [Why tidyweave?](why-tidyweave.html).
+
+The [function reference](../reference/index.html) groups arguments and return
+values by the same component and execution lifecycle.

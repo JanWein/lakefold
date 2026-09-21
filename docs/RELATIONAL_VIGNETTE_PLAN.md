@@ -26,12 +26,12 @@ two independently contracted staging products: one row per policy and month,
 and one row per payment enriched with policy and broker attributes.
 
 A normal bundled dbt project consumes these exact immutable product relations.
-The current dbt_sources() helper is deliberately RAW-only, so the example writes
+The current tw_dbt_sources() helper is deliberately RAW-only, so the example writes
 ordinary source YAML from exact publication IDs resolved through the public
 release registry. Explain this
 handoff explicitly rather than guessing physical names or changing core APIs.
 dbt prepares and aggregates each grain independently in core, then joins the
-monthly aggregates in a mart. Export supported contracts with dbt_contract(), add
+monthly aggregates in a mart. Export supported contracts with tw_dbt_contract(), add
 relationship/reconciliation tests, and publish the successful mart separately.
 Governed R metrics and an issued report pin that approved mart release.
 

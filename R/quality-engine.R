@@ -3,16 +3,16 @@
 #' Extension packages implement an S3 method for their rule class, inheriting
 #' from `tw_rule`. Return the same columns as a native call. Unknown states,
 #' empty evidence and malformed results never authorize publication.
-#' Rule exceptions are retained locally only when requested by [validate()].
-#' @param rule A rule from [quality_rule()], [pointblank_checks()], or an extension.
+#' Rule exceptions are retained locally only when requested by [tw_validate()].
+#' @param rule A rule from [tw_quality_rule()], [tw_pointblank_checks()], or an extension.
 #' @param data Data frame or lazy table.
 #' @param ... Adapter-specific options. Native methods accept `keep_agent`.
 #' @returns A quality tibble, with one row per evaluated check.
 #' @export
 #' @examples
-#' run_quality(quality_rule("positive", ~ amount > 0),
+#' tw_run_quality(tw_quality_rule("positive", ~ amount > 0),
 #'   data.frame(amount = c(10, -1, NA)))
-run_quality <- function(rule, data, ...) UseMethod("run_quality")
+tw_run_quality <- function(rule, data, ...) UseMethod("tw_run_quality")
 
 normalize_quality_engine <- function(engine) {
   engine <- match.arg(engine, c("native", "pointblank"))
@@ -48,12 +48,12 @@ quality_formula_units <- function(data, predicate) {
 }
 
 #' @export
-run_quality.tw_rule <- function(rule, data, ...) {
+tw_run_quality.tw_rule <- function(rule, data, ...) {
   if (identical(rule$engine, "pointblank")) {
     return(pointblank_results(rule, data, ...))
   }
   if (!identical(rule$engine, "r")) {
-    abort("This quality engine needs a run_quality() method.")
+    abort("This quality engine needs a tw_run_quality() method.")
   }
   if (inherits(rule$check, "formula")) {
     units <- quality_formula_units(data, rule$check)
@@ -64,23 +64,23 @@ run_quality.tw_rule <- function(rule, data, ...) {
         failed = sum(as.integer(is.na(.tw_pass) | !.tw_pass), na.rm = TRUE),
         total = dplyr::n()
       ))
-      value <- quality_counts(
+      value <- tw_quality_counts(
         if (is.na(counts$failed)) 0 else counts$failed,
         counts$total
       )
     } else {
       value <- units$.tw_pass
-      value <- quality_counts(sum(is.na(value) | !value), length(value))
+      value <- tw_quality_counts(sum(is.na(value) | !value), length(value))
     }
   } else {
     value <- rule$check(data)
     if (is.logical(value) && is.null(dim(value))) {
       if (length(value) != 1L && length(value) != count_rows(data)) {
         abort(
-          "A quality function must return one logical value, one per row, or quality_counts()."
+          "A quality function must return one logical value, one per row, or tw_quality_counts()."
         )
       }
-      value <- quality_counts(sum(is.na(value) | !value), length(value))
+      value <- tw_quality_counts(sum(is.na(value) | !value), length(value))
     }
   }
   if (inherits(value, "tw_quality_counts")) {
@@ -93,7 +93,7 @@ run_quality.tw_rule <- function(rule, data, ...) {
     )
   } else {
     abort(
-      "A quality function must return logical values or quality_counts(); numeric scores are not pass/fail results."
+      "A quality function must return logical values or tw_quality_counts(); numeric scores are not pass/fail results."
     )
   }
   out$engine <- "r"
@@ -101,9 +101,9 @@ run_quality.tw_rule <- function(rule, data, ...) {
 }
 
 #' @export
-run_quality.default <- function(rule, data, ...) {
+tw_run_quality.default <- function(rule, data, ...) {
   abort(
-    "Use quality_rule(), pointblank_checks(), or a rule with a run_quality() method."
+    "Use tw_quality_rule(), tw_pointblank_checks(), or a rule with a tw_run_quality() method."
   )
 }
 
@@ -156,7 +156,7 @@ evaluate_rules <- function(
   rows <- lapply(rules, function(rule) {
     tryCatch(
       {
-        result <- run_quality(rule, data, keep_agent = keep_agents)
+        result <- tw_run_quality(rule, data, keep_agent = keep_agents)
         if (keep_agents) {
           agents[[rule$name]] <<- attr(result, "pointblank_agent")
         }

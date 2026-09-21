@@ -5,7 +5,7 @@ Documentation: [tidyweave](https://janwein.github.io/tidyweave/).
 
 The package is in active development. Public API compatibility starts with the
 first stable release candidate; development changes may break earlier code.
-Publishing a package version is distinct from `publish()`, which writes a checked
+Publishing a package version is distinct from `tw_publish()`, which writes a checked
 data product to its configured destination.
 
 ## Development and verification

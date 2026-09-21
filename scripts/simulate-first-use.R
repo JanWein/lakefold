@@ -11,37 +11,40 @@ source(
 # Transfer the learned operation to a different delivery.
 corrected_brokers <- broker_data
 corrected_brokers$channel[corrected_brokers$broker_id == "B2"] <- "Partner"
-preview <- trial(
+preview <- tw_trial(
   payments,
   sources = list(
     payments = corrected_payments,
     brokers = corrected_brokers
   )
 )
-stopifnot(identical(collect(preview)$channel, c("Broker", "Broker", "Partner")))
+stopifnot(identical(
+  tw_collect(preview)$channel,
+  c("Broker", "Broker", "Partner")
+))
 
 # A missing reference must be diagnosable through the same public operation.
-missing_contract <- trial(
+missing_contract <- tw_trial(
   payments,
   sources = list(
     payments = corrected_payments,
     contracts = contract_data[1:2, ]
   )
 )
-stopifnot(identical(quality_rows(missing_contract)$payment_id, "T3"))
+stopifnot(identical(tw_quality_rows(missing_contract)$payment_id, "T3"))
 
 # A duplicate payment is a different rule, but uses the same diagnosis.
-duplicate <- trial(
+duplicate <- tw_trial(
   payments,
   sources = list(
     payments = rbind(fixed_payments, fixed_payments[3, ])
   )
 )
-stopifnot(identical(quality_rows(duplicate)$payment_id, c("T3", "T3")))
+stopifnot(identical(tw_quality_rows(duplicate)$payment_id, c("T3", "T3")))
 
 # Deliberate wrong turns must explain the next public operation.
 unknown <- tryCatch(
-  trial(payments, sources = list(typo = contract_data)),
+  tw_trial(payments, sources = list(typo = contract_data)),
   error = identity
 )
 stopifnot(
@@ -54,12 +57,12 @@ stopifnot(
   !grepl("transform:", conditionMessage(unknown), fixed = TRUE)
 )
 missing_evidence <- tryCatch(
-  report_release(collect(preview_values), "bad", code_version = "v1"),
+  tw_report_release(tw_collect(preview_values), "bad", code_version = "v1"),
   error = identity
 )
 stopifnot(
   inherits(missing_evidence, "error"),
-  grepl("before collect()", conditionMessage(missing_evidence), fixed = TRUE)
+  grepl("before tw_collect()", conditionMessage(missing_evidence), fixed = TRUE)
 )
 
 cat(

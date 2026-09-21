@@ -3,23 +3,23 @@
 #' Exports persisted check metadata, counts and segment labels. No source rows
 #' are collected. The HTML is self-contained, escapes cell contents and displays
 #' status as text. An empty result is explicitly reported as not checked.
-#' @param x Quality tibble or a run/dbt result accepted by [quality()].
+#' @param x Quality tibble or a run/dbt result accepted by [tw_quality()].
 #' @param path Optional output file path. Omit it to inspect a compact table.
 #' @param format HTML or JSON.
 #' @param title Human-readable report title.
 #' @param overwrite Replace an existing file only when explicitly requested.
 #' @returns A diagnostic tibble when `path` is omitted; otherwise the normalized
 #'   output path, invisibly.
-#' @seealso [pointblank_report()], [expect_quality()]
+#' @seealso [tw_pointblank_report()], [tw_expect_quality()]
 #' @export
 #' @examples
-#' contract <- contract("orders", "1", "Analytics", "Orders", "One order",
+#' contract <- tw_contract("orders", "1", "Analytics", "Orders", "One order",
 #'   c(id = "integer"), key = "id")
-#' quality <- validate(data.frame(id = c(1L, 1L)), contract)
+#' quality <- tw_validate(data.frame(id = c(1L, 1L)), contract)
 #' path <- tempfile(fileext = ".html")
-#' quality_report(quality, path)
+#' tw_quality_report(quality, path)
 #' unlink(path)
-quality_report <- function(
+tw_quality_report <- function(
   x,
   path = NULL,
   format = c("html", "json"),
@@ -28,11 +28,11 @@ quality_report <- function(
 ) {
   format <- match.arg(format)
   scalar(title, "title")
-  quality <- quality(x)
+  quality <- tw_quality(x)
   attr(quality, "pointblank_agents") <- NULL
   if (is.null(path)) {
     if (!nrow(quality)) {
-      quality <- quality(quality_row(
+      quality <- tw_quality(quality_row(
         "execution",
         "not_checked",
         message = "No quality checks are available."
@@ -181,35 +181,35 @@ report_file <- function(path, overwrite, write) {
 
 #' Export the native pointblank report from a validation
 #'
-#' Requires [validate()] with `keep_agents = TRUE`. Agents are held only in
+#' Requires [tw_validate()] with `keep_agents = TRUE`. Agents are held only in
 #' memory and are never serialized into the registry. Failed-row extracts and
 #' checked-table samples are disabled during interrogation. The native report
 #' describes pointblank action levels; the authoritative tidyweave gate is shown
-#' by [quality_report()], especially when using `policy = "rule"`.
+#' by [tw_quality_report()], especially when using `policy = "rule"`.
 #' @param x A quality tibble containing retained pointblank agents.
-#' @param rule Name supplied to [pointblank_checks()].
+#' @param rule Name supplied to [tw_pointblank_checks()].
 #' @param path Output HTML path.
 #' @param overwrite Replace an existing output.
 #' @returns The normalized output path, invisibly.
 #' @export
 #' @examplesIf requireNamespace("pointblank", quietly = TRUE)
-#' contract <- contract("orders", "1", "Analytics", "Orders", "One order",
-#'   c(amount = "numeric"), rules = list(pointblank_checks("amounts", function(data) {
+#' contract <- tw_contract("orders", "1", "Analytics", "Orders", "One order",
+#'   c(amount = "numeric"), rules = list(tw_pointblank_checks("amounts", function(data) {
 #'     pointblank::create_agent(data) |>
 #'       pointblank::col_vals_gte("amount", 0)
 #'   })))
-#' quality <- validate(data.frame(amount = c(10, -1)), contract,
+#' quality <- tw_validate(data.frame(amount = c(10, -1)), contract,
 #'   keep_agents = TRUE)
 #' path <- tempfile(fileext = ".html")
-#' pointblank_report(quality, "amounts", path)
+#' tw_pointblank_report(quality, "amounts", path)
 #' unlink(path)
-pointblank_report <- function(x, rule, path, overwrite = FALSE) {
+tw_pointblank_report <- function(x, rule, path, overwrite = FALSE) {
   need("pointblank")
   scalar(rule, "rule")
   agents <- attr(x, "pointblank_agents")
   if (is.null(agents[[rule]])) {
     abort(
-      "No retained agent for this rule. Use validate(..., keep_agents = TRUE)."
+      "No retained agent for this rule. Use tw_validate(..., keep_agents = TRUE)."
     )
   }
   report_file(path, overwrite, function(temp) {
@@ -226,16 +226,16 @@ pointblank_report <- function(x, rule, path, overwrite = FALSE) {
 #'
 #' Uses the same gate as ingestion: warning states are allowed; empty results,
 #' failures, evaluation errors and skipped checks fail the expectation.
-#' @param x Quality tibble or result accepted by [quality()].
+#' @param x Quality tibble or result accepted by [tw_quality()].
 #' @returns `x`, invisibly, after recording a testthat expectation.
 #' @export
 #' @examplesIf requireNamespace("testthat", quietly = TRUE)
-#' contract <- contract("orders", "1", "Analytics", "Orders", "One order",
+#' contract <- tw_contract("orders", "1", "Analytics", "Orders", "One order",
 #'   c(id = "integer"), key = "id")
-#' expect_quality(validate(data.frame(id = 1:2), contract))
-expect_quality <- function(x) {
+#' tw_expect_quality(tw_validate(data.frame(id = 1:2), contract))
+tw_expect_quality <- function(x) {
   need("testthat")
-  quality <- quality(x)
+  quality <- tw_quality(x)
   blocked <- quality$rule[!quality$status %in% c("passed", "warning")]
   testthat::expect(
     quality_ok(quality),

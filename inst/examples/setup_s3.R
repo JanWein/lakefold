@@ -12,17 +12,17 @@ if (length(missing)) {
 # Optional AWS_SESSION_TOKEN
 
 # Start locally while a PostgreSQL service is not yet available.
-catalog <- registry_duckdb("metadata.ducklake")
+catalog <- tw_registry_duckdb("metadata.ducklake")
 
 # For the later PostgreSQL deployment, replace ONLY the configuration constructor:
 # Set DUCKLAKE_PG_CONNECTION in the runtime, not in Git.
 # Example format: host=... port=5432 dbname=... user=... password=... sslmode=require
-# catalog <- registry_postgres("DUCKLAKE_PG_CONNECTION")
+# catalog <- tw_registry_postgres("DUCKLAKE_PG_CONNECTION")
 # This connects to a NEW catalog. It does NOT migrate an existing local catalog.
 
-lake <- setup_lake(
+lake <- tw_setup_lake(
   catalog = catalog,
-  storage = storage_s3(
+  storage = tw_storage_s3(
     bucket = Sys.getenv("TIDYWEAVE_S3_BUCKET"),
     prefix = Sys.getenv("TIDYWEAVE_S3_PREFIX", "tidyweave/dev"),
     endpoint = Sys.getenv("TIDYWEAVE_S3_ENDPOINT"),
@@ -35,5 +35,5 @@ lake <- setup_lake(
 # S3 Parquet storage uses DuckDB httpfs.
 # S3 originals use paws.storage and conditional PutObject.
 # Configure one writer process/job at a time for the tidyweave registry.
-print(capabilities(lake))
-# disconnect_lake(lake)
+print(tw_capabilities(lake))
+# tw_disconnect_lake(lake)

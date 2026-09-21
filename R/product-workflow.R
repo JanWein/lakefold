@@ -1,6 +1,6 @@
 #' Assemble product specifications and reusable recipes
 #'
-#' An empty [workflow()] combines one product specification, one optional
+#' An empty [tw_workflow()] combines one product specification, one optional
 #' recipe, primary sources and an optional destination. Components remain
 #' independent R values. `add_*()` rejects occupied slots; `update_*()` replaces
 #' an existing slot and `remove_*()` clears it. Extraction returns the definition,
@@ -9,32 +9,32 @@
 #' A product specification may carry its own sources, checks and destination.
 #' Workflow sources and destinations must not conflict with those settings.
 #' Keep preparation in the recipe when using this interface: products with
-#' embedded transformations are rejected by `add_product()`. Existing direct
+#' embedded transformations are rejected by `tw_add_product()`. Existing direct
 #' product pipelines remain executable. Model products can be added directly;
 #' prepare their member tables with recipes before assembling the dm model.
 #'
-#' [trial()], [run()] and [publish()] compile the components into the existing
+#' [tw_trial()], [tw_run()] and [tw_publish()] compile the components into the existing
 #' product execution graph, retaining its quality gates, dependency sharing,
 #' lazy behavior and immutable release semantics. Use `data =` at execution to
 #' bind a first primary input or replace the existing single primary delivery.
-#' @param x A modular [workflow()]. `add_recipe()` also accepts a table product.
+#' @param x A modular [tw_workflow()]. `tw_add_recipe()` also accepts a table product.
 #' @param product A product specification carrying identity and output checks.
-#' @param recipe A preparation specification from [recipe()].
+#' @param recipe A preparation specification from [tw_recipe()].
 #' @returns An updated definition, or the extracted component.
 #' @name workflow-components
 #' @export
 #' @examples
-#' spec <- product("orders") |>
-#'   add_contract(c(id = "integer", amount = "numeric")) |>
-#'   add_quality(~ amount >= 0)
-#' preparation <- recipe() |> step_mutate(amount = round(amount, 2))
-#' flow <- workflow() |> add_product(spec) |> add_recipe(preparation)
-#' trial(flow, data = data.frame(id = 1:2, amount = c(10.123, 20))) |>
-#'   collect()
-add_product <- function(x, product) {
+#' spec <- tw_product("orders") |>
+#'   tw_add_contract(c(id = "integer", amount = "numeric")) |>
+#'   tw_add_quality(~ amount >= 0)
+#' preparation <- tw_recipe() |> tw_step_mutate(amount = round(amount, 2))
+#' flow <- tw_workflow() |> tw_add_product(spec) |> tw_add_recipe(preparation)
+#' tw_trial(flow, data = data.frame(id = 1:2, amount = c(10.123, 20))) |>
+#'   tw_collect()
+tw_add_product <- function(x, product) {
   assert_product_workflow(x)
   if (!is.null(x$product)) {
-    abort("This workflow already has a product. Use update_product().")
+    abort("This workflow already has a product. Use tw_update_product().")
   }
   check_workflow_product(product)
   x$product <- product
@@ -61,17 +61,19 @@ new_product_workflow <- function(code_version = NULL, execution = NULL) {
 
 assert_product_workflow <- function(x) {
   if (!inherits(x, "tw_product_workflow")) {
-    abort("Start with an empty workflow() to compose product and recipe slots.")
+    abort(
+      "Start with an empty tw_workflow() to compose product and recipe slots."
+    )
   }
   invisible(x)
 }
 
 check_workflow_product <- function(x) {
   if (!inherits(x, "tw_product")) {
-    abort("Supply a product() specification.")
+    abort("Supply a tw_product() specification.")
   }
   if (length(x$transforms)) {
-    abort("Keep preparation in a recipe when using add_product().")
+    abort("Keep preparation in a recipe when using tw_add_product().")
   }
   invisible(x)
 }
@@ -93,11 +95,11 @@ check_workflow_slots <- function(x) {
 
 #' @rdname workflow-components
 #' @export
-add_recipe <- function(x, recipe) {
+tw_add_recipe <- function(x, recipe) {
   assert_recipe(recipe)
   if (inherits(x, "tw_product_workflow")) {
     if (!is.null(x$recipe)) {
-      abort("This workflow already has a recipe. Use update_recipe().")
+      abort("This workflow already has a recipe. Use tw_update_recipe().")
     }
     x$recipe <- recipe
     check_workflow_slots(x)
@@ -108,30 +110,30 @@ add_recipe <- function(x, recipe) {
 
 append_recipe <- function(x, recipe) {
   for (name in names(recipe$steps)) {
-    x <- add_transform(x, recipe$steps[[name]], name = name)
+    x <- tw_add_transform(x, recipe$steps[[name]], name = name)
   }
   x
 }
 
 #' @rdname workflow-components
 #' @export
-update_product <- function(x, product) {
-  extract_product(x)
+tw_update_product <- function(x, product) {
+  tw_extract_product(x)
   x$product <- NULL
-  add_product(x, product)
+  tw_add_product(x, product)
 }
 
 #' @rdname workflow-components
 #' @export
-update_recipe <- function(x, recipe) {
-  extract_recipe(x)
+tw_update_recipe <- function(x, recipe) {
+  tw_extract_recipe(x)
   x$recipe <- NULL
-  add_recipe(x, recipe)
+  tw_add_recipe(x, recipe)
 }
 
 #' @rdname workflow-components
 #' @export
-remove_product <- function(x) {
+tw_remove_product <- function(x) {
   assert_product_workflow(x)
   x$product <- NULL
   x
@@ -139,7 +141,7 @@ remove_product <- function(x) {
 
 #' @rdname workflow-components
 #' @export
-remove_recipe <- function(x) {
+tw_remove_recipe <- function(x) {
   assert_product_workflow(x)
   x$recipe <- NULL
   x
@@ -147,27 +149,27 @@ remove_recipe <- function(x) {
 
 #' @rdname workflow-components
 #' @export
-extract_product <- function(x) {
+tw_extract_product <- function(x) {
   assert_product_workflow(x)
   if (is.null(x$product)) {
-    abort("This workflow has no product. Use add_product().")
+    abort("This workflow has no product. Use tw_add_product().")
   }
   x$product
 }
 
 #' @rdname workflow-components
 #' @export
-extract_recipe <- function(x) {
+tw_extract_recipe <- function(x) {
   assert_product_workflow(x)
   if (is.null(x$recipe)) {
-    abort("This workflow has no recipe. Use add_recipe().")
+    abort("This workflow has no recipe. Use tw_add_recipe().")
   }
   x$recipe
 }
 
 compile_product_workflow <- function(x, data = NULL, sources = NULL) {
   check_workflow_slots(x)
-  out <- extract_product(x)
+  out <- tw_extract_product(x)
   check_workflow_product(out)
   if (length(x$sources)) {
     out$sources <- x$sources
@@ -176,7 +178,7 @@ compile_product_workflow <- function(x, data = NULL, sources = NULL) {
     out <- append_recipe(out, x$recipe)
   }
   if (!is.null(x$target)) {
-    out <- set_target(out, x$target)
+    out <- tw_set_target(out, x$target)
   }
   if (!is.null(x$execution)) {
     attr(out, "tw_execution_config") <- x$execution
@@ -185,7 +187,7 @@ compile_product_workflow <- function(x, data = NULL, sources = NULL) {
     out$code_version <- x$code_version
   }
   if (!is.null(data) && !length(out$sources)) {
-    out <- add_source(out, data, name = out$id)
+    out <- tw_add_source(out, data, name = out$id)
     data <- NULL
   }
   delivery_aliases(out)
@@ -193,18 +195,18 @@ compile_product_workflow <- function(x, data = NULL, sources = NULL) {
 }
 
 #' @export
-run.tw_product_workflow <- function(
+tw_run.tw_product_workflow <- function(
   pipeline,
   lake = NULL,
   ...,
   data = NULL,
   sources = NULL
 ) {
-  run(compile_product_workflow(pipeline, data, sources), lake = lake, ...)
+  tw_run(compile_product_workflow(pipeline, data, sources), lake = lake, ...)
 }
 
 #' @export
-publish.tw_product_workflow <- function(
+tw_publish.tw_product_workflow <- function(
   x,
   name = NULL,
   to = NULL,
@@ -212,23 +214,28 @@ publish.tw_product_workflow <- function(
   data = NULL,
   sources = NULL
 ) {
-  publish(compile_product_workflow(x, data, sources), name = name, to = to, ...)
+  tw_publish(
+    compile_product_workflow(x, data, sources),
+    name = name,
+    to = to,
+    ...
+  )
 }
 
 #' @export
-validate.tw_product_workflow <- function(data, contract = NULL, ...) {
-  validate(compile_product_workflow(data), contract = contract, ...)
+tw_validate.tw_product_workflow <- function(data, contract = NULL, ...) {
+  tw_validate(compile_product_workflow(data), contract = contract, ...)
   data
 }
 
 #' @export
-inspect.tw_product_workflow <- function(x, ...) {
+tw_inspect.tw_product_workflow <- function(x, ...) {
   list(
     type = "product workflow",
-    product = if (!is.null(x$product)) inspect(x$product),
-    recipe = if (!is.null(x$recipe)) inspect(x$recipe),
-    sources = lapply(x$sources, inspect),
-    target = inspect(x$target),
+    product = if (!is.null(x$product)) tw_inspect(x$product),
+    recipe = if (!is.null(x$recipe)) tw_inspect(x$recipe),
+    sources = lapply(x$sources, tw_inspect),
+    target = tw_inspect(x$target),
     code_version = x$code_version,
     execution = workflow_execution_descriptor(x)
   )
@@ -242,7 +249,7 @@ print.tw_product_workflow <- function(x, ...) {
   cat("Sources:", length(x$sources) + length(x$product$sources), "\n")
   cat(
     "Destination:",
-    inspect(
+    tw_inspect(
       x$target %||% product_display_target(x$product) %||% x$execution$to
     )$type,
     "\n"
@@ -259,7 +266,7 @@ workflow_execution_descriptor <- function(x) {
   list(
     quality = config$quality,
     relationships = config$relationships,
-    target = inspect(config$to),
+    target = tw_inspect(config$to),
     layer = config$layer
   )
 }

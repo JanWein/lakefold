@@ -28,12 +28,12 @@ published data.
 You can inspect a failed quality gate without setting up storage:
 
 ```{r failed-attempt}
-definition <- product("orders") |>
-  add_source(data.frame(id = 1:2, amount = c(10, -1))) |>
-  add_quality(~ amount >= 0)
-out <- run(definition, stop_on_failure = FALSE)
-status(out)
-quality(out)
+definition <- tw_product("orders") |>
+  tw_add_source(data.frame(id = 1:2, amount = c(10, -1))) |>
+  tw_add_quality(~ amount >= 0)
+out <- tw_run(definition, stop_on_failure = FALSE)
+tw_status(out)
+tw_quality(out)
 ```
 
 Use the default `stop_on_failure = TRUE` for scheduled jobs so the scheduler
@@ -60,20 +60,20 @@ external targets. Data rows, connections and raw exception text are excluded.
 
 ```{r durable-evidence}
 evidence_dir <- tempfile("tidyweave-runs-")
-out <- run(definition, stop_on_failure = FALSE, evidence = evidence_dir)
-run_history(evidence_dir)
-incidents(evidence_dir)
+out <- tw_run(definition, stop_on_failure = FALSE, evidence = evidence_dir)
+tw_run_history(evidence_dir)
+tw_incidents(evidence_dir)
 ```
 
 The record includes status, timings, source and output metadata, lineage and
-quality results. `read_run(evidence_dir, out$run_id)` retrieves one record.
+quality results. `tw_read_run(evidence_dir, out$run_id)` retrieves one record.
 This local evidence store is optional. Saving an output and saving its evidence
 are separate operations; an evidence-write failure does not roll back an
 external target. Lake publication additionally records its own transactional
 release and quality history.
 
-For a rule's original error, use `validate(data, contract, keep_errors = TRUE)`
-and `quality_errors()` locally. The exception may contain private values.
+For a rule's original error, use `tw_validate(data, contract, keep_errors = TRUE)`
+and `tw_quality_errors()` locally. The exception may contain private values.
 
 ## Distinguish definition versions from data releases
 
@@ -99,13 +99,13 @@ files. Two ordinary writes are enough to create history:
 
 ```{r release-history, eval=requireNamespace("duckdb", quietly = TRUE)}
 root <- tempfile("tidyweave-history-")
-lake <- open_lake(root)
-definition <- product("orders", data.frame(id = 1L, amount = 10))
-first <- publish(definition, to = lake)
-second <- publish(definition, data = data.frame(id = 1L, amount = 12), to = lake)
-read_release(lake, "orders")
-read_release(lake, "orders", release = first$release_id)
-releases(lake, "orders") |>
+lake <- tw_open_lake(root)
+definition <- tw_product("orders", data.frame(id = 1L, amount = 10))
+first <- tw_publish(definition, to = lake)
+second <- tw_publish(definition, data = data.frame(id = 1L, amount = 12), to = lake)
+tw_read_release(lake, "orders")
+tw_read_release(lake, "orders", release = first$release_id)
+tw_releases(lake, "orders") |>
   dplyr::select(asset, release_id, quality)
 ```
 
@@ -113,25 +113,25 @@ The first read returns 12; the pinned read returns 10. To use the earlier data
 inside a new workflow, use the same product grammar:
 
 ```{r pinned-source, eval=requireNamespace("duckdb", quietly = TRUE)}
-historical_total <- product("historical_total", first) |>
+historical_total <- tw_product("historical_total", first) |>
   dplyr::summarise(total = sum(amount, na.rm = TRUE)) |>
-  trial()
-collect(historical_total)
+  tw_trial()
+tw_collect(historical_total)
 ```
 
-Omitting `release_id` from `source_release()` resolves the current release at
+Omitting `release_id` from `tw_source_release()` resolves the current release at
 execution and records the chosen immutable identity. Keep the source lake
 connection open while using its lazy tables.
 
 ## Reuse only when the intended inputs are unchanged
 
-`run()` evaluates a product again by default. For a lake target, opt into
-`run(cache = TRUE)` with an explicit product `code_version`; only a matching
+`tw_run()` evaluates a product again by default. For a lake target, opt into
+`tw_run(cache = TRUE)` with an explicit product `code_version`; only a matching
 current release can be reused. Callbacks can consult external state that their
 function body does not reveal, so update `code_version` when that state or its
 dependencies change. Dynamic reference checks deliberately reject reuse.
 
-`write_data()` can reuse an identical current delivery automatically. Supplying
+`tw_write_data()` can reuse an identical current delivery automatically. Supplying
 older data after a newer delivery publishes a new current release. A result
 with status `cached` refers to existing release evidence; it is not a fresh
 evaluation of every rule.
@@ -142,9 +142,9 @@ Contracts do not assume a freshness deadline. Set `max_age_hours`, or monitor
 an expected delivery's business date and due time explicitly:
 
 ```{r expected-delivery, eval=requireNamespace("duckdb", quietly = TRUE)}
-delivery_contract <- contract(columns = c(id = "integer", amount = "numeric"),
+delivery_contract <- tw_contract(columns = c(id = "integer", amount = "numeric"),
   max_age_hours = 48)
-check_delivery(lake, "orders", delivery_contract,
+tw_check_delivery(lake, "orders", delivery_contract,
   business_date = as.Date("2026-09-30"),
   due_at = as.POSIXct("2026-10-01 09:00:00", tz = "UTC"),
   at = as.POSIXct("2026-10-01 10:00:00", tz = "UTC"))
@@ -156,15 +156,15 @@ event ID for idempotency, because a crash after delivery and before local
 confirmation can cause a duplicate.
 
 For partition corrections, continue with [monthly reporting](getting-started.html).
-For comparing results and read-only access, see [lesson 3](publish-data.html). Published-history retention,
+For comparing results and read-only access, see [another guide](publish-data.html). Published-history retention,
 distributed locking and atomic multi-product publication remain separate
 operational concerns.
 
 ```{r cleanup, include=FALSE}
 unlink(evidence_dir, recursive = TRUE)
 if (has_duckdb) {
-  stopifnot(collect(historical_total)$total == 10)
-  close_lake(lake)
+  stopifnot(tw_collect(historical_total)$total == 10)
+  tw_close_lake(lake)
   unlink(root, recursive = TRUE)
 }
 ```

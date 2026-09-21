@@ -1,5 +1,3 @@
-library(tidyweave)
-
 insurance_inputs <- function() {
   brokers <- tibble::tibble(
     broker_id = c("B1", "B2", "B3"),
@@ -95,25 +93,25 @@ insurance_contracts <- function() {
     payment_count = "integer",
     cash_collected = "numeric"
   )
-  policy_contract <- contract(
+  policy_contract <- tw_contract(
     "insurance.policy_months.schema",
     columns = policy_columns,
     key = c("policy_id", "month"),
     grain = "One monthly snapshot row per policy, including inactive policies."
   )
-  payment_contract <- contract(
+  payment_contract <- tw_contract(
     "insurance.payments.schema",
     columns = payment_columns,
     key = "payment_id",
     grain = "One cash transaction, assigned to its receipt month."
   )
-  mart_structure <- contract(
+  mart_structure <- tw_contract(
     "insurance.monthly_performance.structure",
     columns = mart_columns,
     grain = "One company-channel-month; all monetary values are synthetic EUR."
   )
   list(
-    brokers = contract(
+    brokers = tw_contract(
       "insurance.brokers.schema",
       columns = c(
         broker_id = "character",
@@ -125,13 +123,13 @@ insurance_contracts <- function() {
     ),
     policy_months = policy_contract,
     payments = payment_contract,
-    enriched_policy_months = contract_update(
+    enriched_policy_months = tw_contract_update(
       policy_contract,
       id = "insurance.enriched_policy_months.schema",
       columns = c(broker_name = "character", channel = "character"),
       required = c(policy_contract$required, "broker_name", "channel")
     ),
-    enriched_payments = contract_update(
+    enriched_payments = tw_contract_update(
       payment_contract,
       id = "insurance.enriched_payments.schema",
       columns = c(
@@ -150,18 +148,18 @@ insurance_contracts <- function() {
         "policy_status"
       )
     ),
-    core_policy_monthly = contract(
+    core_policy_monthly = tw_contract(
       "insurance.core_policy_monthly.schema",
       columns = policy_summary,
       grain = "One company-channel-month policy aggregate."
     ),
-    core_cash_monthly = contract(
+    core_cash_monthly = tw_contract(
       "insurance.core_cash_monthly.schema",
       columns = payment_summary,
       grain = "One company-channel-month cash aggregate."
     ),
     mart_schema = mart_structure,
-    mart = contract_update(
+    mart = tw_contract_update(
       mart_structure,
       id = "insurance.monthly_performance.schema",
       key = c("company", "channel", "month"),
@@ -174,7 +172,7 @@ insurance_contracts <- function() {
 }
 
 insurance_metrics <- function() {
-  metric_set(
+  tw_metric_set(
     "insurance.monthly_performance",
     active_policies = sum(active_policies, na.rm = TRUE),
     premium_due = sum(premium_due, na.rm = TRUE),
@@ -228,12 +226,12 @@ run_relational_insurance <- function(
   inputs <- insurance_inputs()
   vapply(inputs, nrow, integer(1))
 
-  config <- lake_config(
+  config <- tw_lake_config(
     path = file.path(path, "lake"),
     backend = backend,
     layers = c("raw", "staging", "core", "marts")
   )
-  execution <- execution_config(
+  execution <- tw_execution_config(
     quality = "pointblank",
     relationships = "dm",
     to = config
@@ -242,65 +240,65 @@ run_relational_insurance <- function(
   contracts <- insurance_contracts()
 
   deliveries <- list(
-    brokers = product(
+    brokers = tw_product(
       "insurance.brokers",
       inputs$brokers,
       execution = execution
     ) |>
-      add_contract(contracts$brokers) |>
-      add_quality(~ channel %in% c("broker", "direct", "partner")),
-    policy_months = product(
+      tw_add_contract(contracts$brokers) |>
+      tw_add_quality(~ channel %in% c("broker", "direct", "partner")),
+    policy_months = tw_product(
       "insurance.policy_months",
       inputs$policy_months,
       execution = execution
     ) |>
-      add_contract(contracts$policy_months) |>
-      add_quality(
+      tw_add_contract(contracts$policy_months) |>
+      tw_add_quality(
         ~ status %in% c("active", "pending", "lapsed") & premium_due >= 0
       ),
-    payments = product(
+    payments = tw_product(
       "insurance.payments",
       inputs$payments,
       execution = execution
     ) |>
-      add_contract(contracts$payments) |>
-      add_quality(~ cash_amount > 0)
+      tw_add_contract(contracts$payments) |>
+      tw_add_quality(~ cash_amount > 0)
   )
-  raw <- lapply(deliveries, ingest)
-  quality(raw$payments)
+  raw <- lapply(deliveries, tw_ingest)
+  tw_quality(raw$payments)
 
-  policy_product <- product(
+  policy_product <- tw_product(
     "insurance.policy_months.enriched",
     raw$policy_months,
     source_name = "policy_months",
     execution = execution
   ) |>
-    add_lookup(raw$brokers, by = dplyr::join_by(broker_id)) |>
-    add_contract(contracts$enriched_policy_months)
+    tw_add_lookup(raw$brokers, by = dplyr::join_by(broker_id)) |>
+    tw_add_contract(contracts$enriched_policy_months)
 
-  policy_attributes <- product(
+  policy_attributes <- tw_product(
     "insurance.payment_policy_attributes",
     raw$policy_months
   ) |>
     dplyr::select(policy_id, month, company, broker_id, policy_status = status)
 
-  payment_product <- product(
+  payment_product <- tw_product(
     "insurance.payments.enriched",
     raw$payments,
     source_name = "payments",
     execution = execution
   ) |>
-    add_lookup(policy_attributes, by = dplyr::join_by(policy_id, month)) |>
-    add_lookup(raw$brokers, by = dplyr::join_by(broker_id)) |>
-    add_contract(contracts$enriched_payments)
+    tw_add_lookup(policy_attributes, by = dplyr::join_by(policy_id, month)) |>
+    tw_add_lookup(raw$brokers, by = dplyr::join_by(broker_id)) |>
+    tw_add_contract(contracts$enriched_payments)
 
   published <- list(
-    policies = policy_product |> publish(layer = "staging"),
-    payments = payment_product |> publish(layer = "staging")
+    policies = policy_product |> tw_publish(layer = "staging"),
+    payments = payment_product |> tw_publish(layer = "staging")
   )
   stopifnot(
-    nrow(collect(published$policies)) == 12L,
-    nrow(collect(published$payments)) == 10L
+    nrow(tw_collect(published$policies)) == 12L,
+    nrow(tw_collect(published$payments)) == 10L
   )
 
   template <- system.file(
@@ -320,9 +318,12 @@ run_relational_insurance <- function(
   properties <- list(
     version = 2L,
     models = c(
-      dbt_contract(contracts$core_policy_monthly, "core_policy_monthly")$models,
-      dbt_contract(contracts$core_cash_monthly, "core_cash_monthly")$models,
-      dbt_contract(contracts$mart_schema, "monthly_performance")$models
+      tw_dbt_contract(
+        contracts$core_policy_monthly,
+        "core_policy_monthly"
+      )$models,
+      tw_dbt_contract(contracts$core_cash_monthly, "core_cash_monthly")$models,
+      tw_dbt_contract(contracts$mart_schema, "monthly_performance")$models
     )
   )
   yaml::write_yaml(
@@ -330,15 +331,15 @@ run_relational_insurance <- function(
     file.path(project_path, "models", "contracts.yml")
   )
 
-  project <- dbt_project(
+  project <- tw_dbt_project(
     project_path,
     lake = config,
     sources = published,
     executable = executable
   )
-  built <- project |> run(echo = FALSE)
+  built <- project |> tw_run(echo = FALSE)
   approved <- built |>
-    publish(
+    tw_publish(
       "monthly_performance",
       contract = contracts$mart,
       asset = "insurance.monthly_performance",
@@ -349,28 +350,28 @@ run_relational_insurance <- function(
   january <- as.Date("2026-01-01")
   february <- as.Date("2026-02-01")
 
-  measures <- measure(
+  measures <- tw_measure(
     approved,
     metrics = metrics,
     at = c(january, february),
     period = "each"
   )
-  summary <- collect(measures)
-  totals <- measure(
+  summary <- tw_collect(measures)
+  totals <- tw_measure(
     approved,
     metrics = metrics[c("cash_collected", "cash_to_due")],
     at = c(january, february),
     period = "aggregate"
   )
-  by_channel <- measure(
+  by_channel <- tw_measure(
     approved,
     metrics = metrics["cash_collected"],
     at = january,
     by = c("company", "channel")
   )
-  collect(by_channel)
+  tw_collect(by_channel)
 
-  report <- report_release(
+  report <- tw_report_release(
     measures,
     "insurance.report.initial",
     to = config,
@@ -380,7 +381,7 @@ run_relational_insurance <- function(
   initial <- list(
     build = built,
     release = approved,
-    data = collect(approved),
+    data = tw_collect(approved),
     metrics = metrics,
     measures = measures,
     totals = totals,
@@ -391,31 +392,31 @@ run_relational_insurance <- function(
 
   bad_payments <- inputs$payments
   bad_payments$cash_amount[1] <- -60
-  rejected <- product("insurance.payments", bad_payments) |>
-    add_contract(contracts$payments) |>
-    add_quality(~ cash_amount > 0) |>
-    ingest(execution = execution, stop_on_failure = FALSE)
-  stopifnot(status(rejected)$outcome == "blocked")
+  rejected <- tw_product("insurance.payments", bad_payments) |>
+    tw_add_contract(contracts$payments) |>
+    tw_add_quality(~ cash_amount > 0) |>
+    tw_ingest(execution = execution, stop_on_failure = FALSE)
+  stopifnot(tw_status(rejected)$outcome == "blocked")
 
   orphan_policies <- inputs$policy_months
   orphan_policies$broker_id[1] <- "B404"
   orphan_run <- policy_product |>
-    publish(
+    tw_publish(
       sources = list(policy_months = orphan_policies),
       layer = "staging",
       stop_on_failure = FALSE
     )
-  stopifnot(status(orphan_run)$outcome == "failed")
-  lake <- connect_lake(config, read_only = TRUE)
-  current_policy_release <- releases(
+  stopifnot(tw_status(orphan_run)$outcome == "failed")
+  lake <- tw_connect_lake(config, read_only = TRUE)
+  current_policy_release <- tw_releases(
     lake,
     published$policies$asset
   )$release_id[[1]]
-  close_lake(lake)
+  tw_close_lake(lake)
   stopifnot(identical(current_policy_release, published$policies$release_id))
 
   two_month_stock <- tryCatch(
-    measure(
+    tw_measure(
       approved,
       metrics = metrics["active_policies"],
       at = c(january, february),
@@ -424,7 +425,7 @@ run_relational_insurance <- function(
     error = identity
   )
   undefined_ratio <- tryCatch(
-    measure(
+    tw_measure(
       approved,
       metrics$cash_to_due,
       at = february,
@@ -437,22 +438,22 @@ run_relational_insurance <- function(
     inherits(undefined_ratio, "error")
   )
 
-  monthly <- workflow(
+  monthly <- tw_workflow(
     received = function(payments) {
       deliveries$payments |>
-        replace_sources(insurance.payments = payments) |>
-        ingest()
+        tw_replace_sources(insurance.payments = payments) |>
+        tw_ingest()
     },
     enriched = function(received) {
       payment_product |>
-        publish(sources = list(payments = received), layer = "staging")
+        tw_publish(sources = list(payments = received), layer = "staging")
     },
     built = function(enriched) {
-      project |> run(sources = list(payments = enriched), echo = FALSE)
+      project |> tw_run(sources = list(payments = enriched), echo = FALSE)
     },
     released = function(built) {
       built |>
-        publish(
+        tw_publish(
           "monthly_performance",
           contract = contracts$mart,
           asset = "insurance.monthly_performance",
@@ -460,7 +461,7 @@ run_relational_insurance <- function(
         )
     },
     measures = function(released) {
-      measure(
+      tw_measure(
         released,
         metrics = metrics,
         at = c(january, february),
@@ -471,11 +472,11 @@ run_relational_insurance <- function(
     code_version = "insurance-workflow-v1"
   )
   corrected_inputs <- insurance_corrected_inputs(inputs)
-  correction <- run(
+  correction <- tw_run(
     monthly,
     inputs = list(payments = corrected_inputs$payments)
   )
-  status(correction)
+  tw_status(correction)
   corrected_raw <- raw
   corrected_raw$payments <- correction$results$received
   corrected_products <- published
@@ -484,14 +485,14 @@ run_relational_insurance <- function(
   corrected_release <- correction$results$released
 
   corrected_measures <- correction$results$measures
-  corrected_totals <- measure(
+  corrected_totals <- tw_measure(
     corrected_release,
     metrics = metrics[c("cash_collected", "cash_to_due")],
     at = c(january, february),
     period = "aggregate"
   )
 
-  corrected_report <- report_release(
+  corrected_report <- tw_report_release(
     corrected_measures,
     "insurance.report.corrected",
     to = config,
@@ -499,16 +500,16 @@ run_relational_insurance <- function(
     params = list(currency = "EUR", months = c("2026-01", "2026-02"))
   )
   preserved <- list(
-    report = report_read(config, report$id, values_only = TRUE),
-    data = collect(approved)
+    report = tw_report_read(config, report$id, values_only = TRUE),
+    data = tw_collect(approved)
   )
-  corrected_summary <- collect(corrected_measures)
+  corrected_summary <- tw_collect(corrected_measures)
   corrected <- list(
     raw = corrected_raw,
     products = corrected_products,
     build = rebuilt,
     release = corrected_release,
-    data = collect(corrected_release),
+    data = tw_collect(corrected_release),
     metrics = metrics,
     measures = corrected_measures,
     totals = corrected_totals,
@@ -525,7 +526,10 @@ run_relational_insurance <- function(
       dplyr::filter(corrected_summary, .metric == "cash_collected")$value,
       c(1230, 1300)
     ),
-    dplyr::filter(collect(corrected_totals), .metric == "cash_to_due")$value ==
+    dplyr::filter(
+      tw_collect(corrected_totals),
+      .metric == "cash_to_due"
+    )$value ==
       2530 / 2850,
     sum(preserved$data$cash_collected[preserved$data$month == january]) == 980
   )

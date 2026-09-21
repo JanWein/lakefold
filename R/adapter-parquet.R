@@ -2,19 +2,19 @@
 #'
 #' Arrow handles local files, directories and supported object-storage URIs.
 #' Configure remote credentials through Arrow. A lazy source returns an Arrow
-#' Dataset; use dplyr verbs and [collect()] to materialize it. Remote availability
+#' Dataset; use dplyr verbs and [tw_collect()] to materialize it. Remote availability
 #' is checked when reading, not during structural validation.
 #' @param path File, dataset directory or Arrow-supported URI.
 #' @param lazy Return a lazy Dataset instead of an ordinary tibble.
 #' @param ... Named arguments to [arrow::open_dataset()].
-#' @returns A source specification for [add_source()].
+#' @returns A source specification for [tw_add_source()].
 #' @export
 #' @examplesIf requireNamespace("arrow", quietly = TRUE)
 #' path <- tempfile(fileext = ".parquet")
 #' arrow::write_parquet(data.frame(id = 1:2), path)
-#' read_source(source_parquet(path)) |> collect()
+#' tw_read_source(tw_source_parquet(path)) |> tw_collect()
 #' unlink(path)
-source_parquet <- function(path, lazy = TRUE, ...) {
+tw_source_parquet <- function(path, lazy = TRUE, ...) {
   scalar(path, "path")
   flag(lazy, "lazy")
   options <- list(...)
@@ -26,7 +26,7 @@ source_parquet <- function(path, lazy = TRUE, ...) {
 }
 
 #' @export
-check_component.tw_parquet_source <- function(x, ...) {
+tw_check_component.tw_parquet_source <- function(x, ...) {
   need("arrow")
   if (!adapter_remote_path(x$path) && !file.exists(x$path)) {
     abort("The Parquet source is missing. Check its path.")
@@ -35,8 +35,8 @@ check_component.tw_parquet_source <- function(x, ...) {
 }
 
 #' @export
-read_source.tw_parquet_source <- function(source, ...) {
-  check_component(source)
+tw_read_source.tw_parquet_source <- function(source, ...) {
+  tw_check_component(source)
   data <- do.call(
     arrow::open_dataset,
     c(list(sources = source$path, format = "parquet"), source$options)
@@ -45,13 +45,13 @@ read_source.tw_parquet_source <- function(source, ...) {
 }
 
 #' @export
-inspect.tw_parquet_source <- function(x, ...) {
+tw_inspect.tw_parquet_source <- function(x, ...) {
   list(type = "Parquet", path = adapter_path_descriptor(x$path), lazy = x$lazy)
 }
 
 #' @export
-capabilities.tw_parquet_source <- function(x, ...) {
-  component_capabilities(
+tw_capabilities.tw_parquet_source <- function(x, ...) {
+  tw_component_capabilities(
     read = TRUE,
     write = FALSE,
     lazy = x$lazy,
@@ -71,20 +71,20 @@ capabilities.tw_parquet_source <- function(x, ...) {
 #' @param path Local destination file. Its parent directory must already exist.
 #' @param overwrite Allow replacing an existing file; defaults to `FALSE`.
 #' @param ... Named arguments to [arrow::write_parquet()].
-#' @returns A target specification for [set_target()].
+#' @returns A target specification for [tw_set_target()].
 #' @export
 #' @examplesIf requireNamespace("arrow", quietly = TRUE)
 #' path <- tempfile(fileext = ".parquet")
-#' product("orders") |>
-#'   add_source(data.frame(id = 1:2)) |>
-#'   set_target(target_parquet(path)) |>
-#'   run()
+#' tw_product("orders") |>
+#'   tw_add_source(data.frame(id = 1:2)) |>
+#'   tw_set_target(tw_target_parquet(path)) |>
+#'   tw_run()
 #' unlink(path)
-target_parquet <- function(path, overwrite = FALSE, ...) {
+tw_target_parquet <- function(path, overwrite = FALSE, ...) {
   scalar(path, "path")
   flag(overwrite, "overwrite")
   if (adapter_remote_path(path)) {
-    abort("Use a local path for target_parquet().")
+    abort("Use a local path for tw_target_parquet().")
   }
   options <- list(...)
   adapter_named_options(options, c("x", "sink"))
@@ -95,7 +95,7 @@ target_parquet <- function(path, overwrite = FALSE, ...) {
 }
 
 #' @export
-check_component.tw_parquet_target <- function(x, ...) {
+tw_check_component.tw_parquet_target <- function(x, ...) {
   need("arrow")
   if (!dir.exists(dirname(x$path))) {
     abort("The Parquet target directory is missing. Create it first.")
@@ -112,8 +112,8 @@ check_component.tw_parquet_target <- function(x, ...) {
 }
 
 #' @export
-write_target.tw_parquet_target <- function(target, data, context, ...) {
-  check_component(target)
+tw_write_target.tw_parquet_target <- function(target, data, context, ...) {
+  tw_check_component(target)
   data <- adapter_frame(data)
   candidate <- tempfile(
     ".tidyweave-",
@@ -137,13 +137,13 @@ write_target.tw_parquet_target <- function(target, data, context, ...) {
 }
 
 #' @export
-inspect.tw_parquet_target <- function(x, ...) {
+tw_inspect.tw_parquet_target <- function(x, ...) {
   list(type = "Parquet target", path = x$path, overwrite = x$overwrite)
 }
 
 #' @export
-capabilities.tw_parquet_target <- function(x, ...) {
-  component_capabilities(
+tw_capabilities.tw_parquet_target <- function(x, ...) {
+  tw_component_capabilities(
     read = FALSE,
     write = TRUE,
     lazy = FALSE,
@@ -154,15 +154,15 @@ capabilities.tw_parquet_target <- function(x, ...) {
 }
 
 #' @export
-read_source.Dataset <- function(source, ...) source
+tw_read_source.Dataset <- function(source, ...) source
 #' @export
-read_source.Table <- function(source, ...) source
+tw_read_source.Table <- function(source, ...) source
 #' @export
-read_source.RecordBatch <- function(source, ...) source
+tw_read_source.RecordBatch <- function(source, ...) source
 #' @export
-read_source.arrow_dplyr_query <- function(source, ...) source
+tw_read_source.arrow_dplyr_query <- function(source, ...) source
 #' @export
-check_component.Dataset <- function(x, ...) {
+tw_check_component.Dataset <- function(x, ...) {
   need("arrow")
   columns <- names(x)
   if (anyNA(columns) || any(!nzchar(columns)) || anyDuplicated(columns)) {
@@ -171,22 +171,22 @@ check_component.Dataset <- function(x, ...) {
   invisible(x)
 }
 #' @export
-check_component.Table <- check_component.Dataset
+tw_check_component.Table <- tw_check_component.Dataset
 #' @export
-check_component.RecordBatch <- check_component.Dataset
+tw_check_component.RecordBatch <- tw_check_component.Dataset
 #' @export
-check_component.arrow_dplyr_query <- check_component.Dataset
+tw_check_component.arrow_dplyr_query <- tw_check_component.Dataset
 #' @export
-inspect.Dataset <- function(x, ...) list(type = "Arrow", columns = names(x))
+tw_inspect.Dataset <- function(x, ...) list(type = "Arrow", columns = names(x))
 #' @export
-inspect.Table <- inspect.Dataset
+tw_inspect.Table <- tw_inspect.Dataset
 #' @export
-inspect.RecordBatch <- inspect.Dataset
+tw_inspect.RecordBatch <- tw_inspect.Dataset
 #' @export
-inspect.arrow_dplyr_query <- inspect.Dataset
+tw_inspect.arrow_dplyr_query <- tw_inspect.Dataset
 #' @export
-capabilities.Dataset <- function(x, ...) {
-  component_capabilities(
+tw_capabilities.Dataset <- function(x, ...) {
+  tw_component_capabilities(
     read = TRUE,
     write = FALSE,
     lazy = TRUE,
@@ -195,11 +195,11 @@ capabilities.Dataset <- function(x, ...) {
   )
 }
 #' @export
-capabilities.Table <- capabilities.Dataset
+tw_capabilities.Table <- tw_capabilities.Dataset
 #' @export
-capabilities.RecordBatch <- capabilities.Dataset
+tw_capabilities.RecordBatch <- tw_capabilities.Dataset
 #' @export
-capabilities.arrow_dplyr_query <- capabilities.Dataset
+tw_capabilities.arrow_dplyr_query <- tw_capabilities.Dataset
 
 adapter_remote_path <- function(path) {
   grepl("^[[:alpha:]][[:alnum:]+.-]*://", path)

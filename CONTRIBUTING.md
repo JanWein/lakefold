@@ -29,12 +29,14 @@ without optional infrastructure. Keep external services out of normal examples.
 
 ## Documentation structure
 
-Keep one recommended path: Get started (five ordered lessons), Learn (tasks),
-Reference (arguments), Help (symptoms and terms). Each tutorial states its goal,
-prerequisites, expected results and next step. Beginner lessons must run in a
-fresh R session without objects from an earlier page. Prefer `trial()` for
-exploration and `publish(..., data = ...)` for a new delivery. Explain optional
-integrations only when their task needs them. Historical plans are not user guides.
+Organize the documentation around product specifications, preparation recipes,
+workflow assembly and execution. The README and Get started share a compact,
+complete modular example. Component guides explain one responsibility; task
+articles cover checks, publication, reports and integrations. The reference uses
+the same object and lifecycle groups. Every guide states prerequisites and runs
+independently. All public tidyweave functions use the `tw_` prefix. Preserve
+ordinary dplyr dispatch and document intentional development-API changes in the
+migration guide. Prefer `tw_trial()` for exploration and `tw_publish()` for saving.
 
 Build the site with `TIDYWEAVE_TEST_DUCKLAKE=true`, then run
 `python scripts/check-site-links.py site`. PR builds produce a preview artifact;
@@ -73,9 +75,11 @@ its generated script; assertions in examples should test meaningful outcomes.
 
 ## Design discipline
 
-A new user should need only `product(name, data)`, ordinary dplyr verbs,
-`run()` and `collect()`. Use `add_lookup()` for checked enrichment and optional
-quality engines through the same predicate grammar.
+The recommended path is `tw_product()` for requirements, `tw_recipe()` and
+`tw_step_*()` for preparation, and `tw_workflow()` for assembly. Bind a delivery
+with `tw_trial(data = )`, then use `tw_publish()` and `tw_collect()` as needed.
+Keep those responsibilities independently reusable. Use `tw_set_engine()` to
+select an operation implementation and a target to select storage.
 Expose optional detail when it solves a real need. Use one product representation
 and ordinary R values. Add S3 interfaces when another implementation can use them;
 do not add classes merely for symmetry. Declare adapter limits and verify that a
@@ -93,10 +97,10 @@ Definitions are connection-free. Supported dplyr methods capture genuine dplyr
 expressions and evaluate them only during execution. Do not implement a second
 expression language or silently collect a lazy table to make an unsupported
 operation pass. Document the supported verbs and use ordinary functions as the
-escape hatch. `ingest(x, to)` accepts receipt data before transformations;
-`publish(x, to, layer)` writes checked prepared data. Successful lake results
+escape hatch. `tw_ingest(x, to)` accepts receipt data before transformations;
+`tw_publish(x, to, layer)` writes checked prepared data. Successful lake results
 are pinned release sources; other results reuse submitted data or a lazy query
-with its backend's mutability. `measure(lake_result, metric)` retains the lake
+with its backend's mutability. `tw_measure(lake_result, metric)` retains the lake
 release identity.
 Managed dbt projects own generated profiles and bindings, while normal SQL,
 contracts and tests stay in the project. See [the design plan](https://github.com/JanWein/tidyweave/blob/main/docs/UNIFIED_GRAMMAR_PLAN.md).

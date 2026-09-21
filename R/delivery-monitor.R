@@ -23,17 +23,17 @@
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("tidyweave-")
-#' lake <- connect_lake(lake_config(registry_duckdb(file.path(root, "lake.db")),
-#'   storage_local(file.path(root, "data")),
+#' lake <- tw_connect_lake(tw_lake_config(tw_registry_duckdb(file.path(root, "lake.db")),
+#'   tw_storage_local(file.path(root, "data")),
 #'   landing = file.path(root, "landing"), backend = "duckdb"))
-#' contract <- contract("orders", "1", "Analytics", "Orders", "One order",
+#' contract <- tw_contract("orders", "1", "Analytics", "Orders", "One order",
 #'   c(id = "integer"), key = "id")
-#' check_delivery(lake, "orders", contract, as.Date("2026-08-31"),
+#' tw_check_delivery(lake, "orders", contract, as.Date("2026-08-31"),
 #'   due_at = as.POSIXct("2026-09-01 09:00:00", tz = "UTC"),
 #'   at = as.POSIXct("2026-09-01 10:00:00", tz = "UTC"))
-#' disconnect_lake(lake)
+#' tw_disconnect_lake(lake)
 #' unlink(root, recursive = TRUE)
-check_delivery <- function(
+tw_check_delivery <- function(
   lake,
   asset,
   contract,
@@ -78,13 +78,13 @@ check_delivery <- function(
   if (!valid_time(at) || !valid_time(due_at)) {
     abort("at and due_at must be POSIXct scalars.")
   }
-  releases <- releases(lake, asset)
+  releases <- tw_releases(lake, asset)
   received <- FALSE
   if (nrow(releases)) {
     ref <- releases[1, ]
     column <- date_column %||% delivery_partition_column(lake, ref)
     if (!is.null(column)) {
-      data <- tbl(lake, asset, ref$release_id[[1]])
+      data <- tw_tbl(lake, asset, ref$release_id[[1]])
       if (!column %in% colnames(data)) {
         abort("Delivery date column is missing from the current release.")
       }
@@ -113,7 +113,7 @@ check_delivery <- function(
   }
   event_id <- NA_character_
   if (status != "pending" && record) {
-    register(lake, contract)
+    tw_register(lake, contract)
     incident <- fingerprint(list(
       asset = asset,
       date = date,

@@ -10,7 +10,7 @@
 #' schema. Subsequent deliveries must match it. Required values, keys, owners
 #' and freshness deadlines are optional and are never guessed. Additional
 #' `quality` checks accept the same functions, formulas, named lists and
-#' pointblank adapters as [add_quality()]. Business checks run at the input
+#' pointblank adapters as [tw_add_quality()]. Business checks run at the input
 #' gate; the stored candidate also undergoes structural validation.
 #'
 #' Ordinary tables, dataset directories and non-file adapters are archived as
@@ -19,20 +19,20 @@
 #' Ingestion collects lazy adapters into memory for this gate and snapshot.
 #' For data exceeding available memory, use a lazy product and database target.
 #' Connections opened from a configuration are closed before returning;
-#' [collect()] can reopen the exact accepted release when needed.
+#' [tw_collect()] can reopen the exact accepted release when needed.
 #' @param x Data frame, lazy table, local file path, zero-argument function,
 #'   source adapter or product. A product must have one ordinary source and no
 #'   transformations, lookups, target or catalogs. Its contract, quality rules,
-#'   name and code version are retained. Use [publish()] for transformed products.
-#' @param to Local lake folder, connected lake or [lake_config()] with a `raw`
+#'   name and code version are retained. Use [tw_publish()] for transformed products.
+#' @param to Local lake folder, connected lake or [tw_lake_config()] with a `raw`
 #'   layer. Defaults to a local `"tidyweave"` folder, using the same configuration
-#'   and backend marker as [open_lake()].
+#'   and backend marker as [tw_open_lake()].
 #' @param name Optional asset name. Defaults to a file basename, source asset
 #'   or ID, or the data variable name; expressions use `"data"`.
 #' @param contract Optional contract, named type vector or prototype list.
-#' @param quality Optional input checks accepted by [add_quality()].
+#' @param quality Optional input checks accepted by [tw_add_quality()].
 #' @param reader Optional file reader. CSV, TSV, RDS and Excel have defaults.
-#' @param execution Optional [execution_config()] defaults, overriding defaults
+#' @param execution Optional [tw_execution_config()] defaults, overriding defaults
 #'   stored on a product. Its layer must be
 #'   `NULL` or `"raw"`; an explicit `to` overrides its destination.
 #' @param ... Named execution options: `stop_on_failure` (default `TRUE`),
@@ -43,17 +43,17 @@
 #'   `output_config`, and an `outputs` list with exact `database`, `schema`
 #'   and `table` identifiers. Failures can be returned with
 #'   `stop_on_failure = FALSE`; otherwise the error contains `condition$result`.
-#' @seealso [source_database()], [pointblank_checks()], [quality()], [collect()]
+#' @seealso [tw_source_database()], [tw_pointblank_checks()], [tw_quality()], [tw_collect()]
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("raw-ingestion-")
-#' config <- lake_config(path = root)
+#' config <- tw_lake_config(path = root)
 #' orders <- data.frame(id = 1:2, amount = c(25, 75))
-#' accepted <- orders |> ingest(to = config, quality = ~ amount >= 0)
-#' collect(accepted)
+#' accepted <- orders |> tw_ingest(to = config, quality = ~ amount >= 0)
+#' tw_collect(accepted)
 #' accepted$outputs
 #' unlink(root, recursive = TRUE)
-ingest <- function(
+tw_ingest <- function(
   x,
   to = NULL,
   name = NULL,
@@ -85,7 +85,7 @@ ingest <- function(
         length(x$transforms)
     ) {
       abort(
-        "Ingestion accepts one ordinary product source without transformations or lookups. Use publish() for a transformed product."
+        "Ingestion accepts one ordinary product source without transformations or lookups. Use tw_publish() for a transformed product."
       )
     }
     if (!is.null(x$target) || length(x$catalogs)) {
@@ -95,7 +95,7 @@ ingest <- function(
     }
     if (!is.null(reader) || !is.null(contract)) {
       abort(
-        "Configure a product's reader and contract with add_source() and add_contract() before ingestion."
+        "Configure a product's reader and contract with tw_add_source() and tw_add_contract() before ingestion."
       )
     }
     if (!is.null(name) && !identical(name, x$id)) {
@@ -110,26 +110,26 @@ ingest <- function(
   } else {
     name <- name %||% ingestion_name(x, expression)
     asset_id(name)
-    definition <- product(name, code_version = options$code_version) |>
-      add_source(x, reader = reader)
+    definition <- tw_product(name, code_version = options$code_version) |>
+      tw_add_source(x, reader = reader)
     if (!is.null(contract)) {
-      definition <- add_contract(definition, contract)
+      definition <- tw_add_contract(definition, contract)
     }
   }
   if (!is.null(quality)) {
-    definition <- add_quality(definition, quality)
+    definition <- tw_add_quality(definition, quality)
   }
   quality_defaults <- execution
   if (!is.null(quality_defaults)) {
     quality_defaults[c("to", "layer")] <- list(NULL, NULL)
     definition <- apply_execution_defaults(definition, quality_defaults)
   }
-  validate(definition)
+  tw_validate(definition)
   if (is.character(to)) {
-    to <- lake_config(path = to)
+    to <- tw_lake_config(path = to)
   }
   if (!inherits(to, c("tw_lake", "tw_config"))) {
-    abort("to must be a local folder, connected lake or lake_config().")
+    abort("to must be a local folder, connected lake or tw_lake_config().")
   }
   config <- if (inherits(to, "tw_config")) to else to$config
   if (isTRUE(config$read_only)) {
@@ -172,9 +172,9 @@ ingest <- function(
       )
     }
     if (!is.null(definition$contract)) {
-      register(con, definition$contract)
+      tw_register(con, definition$contract)
     }
-    description <- inspect(definition)
+    description <- tw_inspect(definition)
     description$status <- NULL
     description$plan <- NULL
     description$sources <- lapply(description$sources, function(source) {
@@ -206,12 +206,12 @@ ingest <- function(
             !dir.exists(source$path)
         ) {
           parquet <- source
-          source <- source_file(
+          source <- tw_source_file(
             paste0(name, ".delivery"),
             parquet$path,
             reader = function(path) {
               parquet$path <- path
-              collect(read_source(parquet))
+              tw_collect(tw_read_source(parquet))
             }
           )
         }
@@ -220,12 +220,12 @@ ingest <- function(
             if (identical(class(source), "tw_release_source")) {
               read_release_source(source, con)
             } else {
-              read_source(source)
+              tw_read_source(source)
             },
             "The ingestion source"
           )
           state$reference <- attr(received, "tw_input_reference")
-          received <- collect(received)
+          received <- tw_collect(received)
           parent <- file.path(con$config$landing, ".tidyweave-staging")
           dir.create(parent, recursive = TRUE, showWarnings = FALSE)
           slot <- file.path(parent, name)
@@ -238,7 +238,7 @@ ingest <- function(
           writeLines(jencode(writer_identity()), file.path(slot, "writer.json"))
           path <- file.path(slot, "delivery.rds")
           saveRDS(as.data.frame(received), path, compress = FALSE, version = 3)
-          source <- source_file(paste0(name, ".delivery"), path, readRDS)
+          source <- tw_source_file(paste0(name, ".delivery"), path, readRDS)
         }
         source$version <- version
         placeholder <- definition$contract %||%
@@ -293,7 +293,7 @@ ingest <- function(
           state$contract
         }
         attr(pipeline, "tw_resolve_contract") <- function(data) state$contract
-        run(
+        tw_run(
           pipeline,
           con,
           business_date = options$business_date,
@@ -359,14 +359,14 @@ ingest <- function(
         result$metadata$contract <- jdecode(stored$definition[[1]])
       }
       if (is.null(result$quality)) {
-        result$quality <- tidyweave::quality(con, run_id = result$run_id)
+        result$quality <- tidyweave::tw_quality(con, run_id = result$run_id)
       }
-      result$metadata$schema <- infer_column_types(tbl(
+      result$metadata$schema <- infer_column_types(tw_tbl(
         con,
         name,
         result$release_id
       ))
-      result$metadata$rows <- count_rows(tbl(con, name, result$release_id))
+      result$metadata$rows <- count_rows(tw_tbl(con, name, result$release_id))
     }
     result$lifecycle <- tibble::tibble(
       state = c("defined", "validated", "running", result$status),

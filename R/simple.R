@@ -6,7 +6,7 @@
 #' are remembered in `tidyweave.json`; reopening never silently switches them.
 #' A new lake needs an empty or nonexistent folder. Existing lakes made with
 #' custom remote or split-location configuration still open through
-#' [connect_lake()]. Use [lake_config()] for a connection-free definition.
+#' [tw_connect_lake()]. Use [tw_lake_config()] for a connection-free definition.
 #'
 #' Older folders stored only their backend. Default-layer folders are upgraded
 #' on writable open. If extra schemas exist, supply your original `layers` once,
@@ -23,21 +23,21 @@
 #' @param install_extensions Allow installation of required DuckDB extensions.
 #'   Use `FALSE` when the required extensions are already installed.
 #' @param lake Connected lake to close.
-#' @returns `open_lake()` returns a connected `tw_lake`. `close_lake()` invisibly
-#'   returns `TRUE`; it is an alias for [disconnect_lake()].
-#' @seealso [write_data()], [read_release()]
+#' @returns `tw_open_lake()` returns a connected `tw_lake`. `tw_close_lake()` invisibly
+#'   returns `TRUE`; it is an alias for [tw_disconnect_lake()].
+#' @seealso [tw_write_data()], [tw_read_release()]
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("tidyweave-")
-#' lake <- open_lake(root)
-#' write_data(lake, data.frame(id = 1:2), "orders")
-#' read_release(lake, "orders")
-#' close_lake(lake)
-#' lake <- open_lake(root) # reopens the same data
-#' read_release(lake, "orders")
-#' close_lake(lake)
+#' lake <- tw_open_lake(root)
+#' tw_write_data(lake, data.frame(id = 1:2), "orders")
+#' tw_read_release(lake, "orders")
+#' tw_close_lake(lake)
+#' lake <- tw_open_lake(root) # reopens the same data
+#' tw_read_release(lake, "orders")
+#' tw_close_lake(lake)
 #' unlink(root, recursive = TRUE)
-open_lake <- function(
+tw_open_lake <- function(
   path = "tidyweave",
   backend = NULL,
   read_only = FALSE,
@@ -60,12 +60,12 @@ open_lake <- function(
   if (!is.null(layers)) {
     args$layers <- layers
   }
-  connect_lake(do.call(lake_config, args))
+  tw_connect_lake(do.call(tw_lake_config, args))
 }
 
-#' @rdname open_lake
+#' @rdname tw_open_lake
 #' @export
-close_lake <- function(lake) disconnect_lake(lake)
+tw_close_lake <- function(lake) tw_disconnect_lake(lake)
 
 #' Write data with optional configuration
 #'
@@ -79,7 +79,7 @@ close_lake <- function(lake) disconnect_lake(lake)
 #' change. Once an execution attempt uses an explicit contract, subsequent writes
 #' must supply one too, even if that attempt was blocked. This prevents
 #' accidentally dropping its rules. Draft contracts
-#' still require [contract_confirm()].
+#' still require [tw_contract_confirm()].
 #'
 #' Data frames are archived as RDS snapshots. File inputs preserve their original
 #' bytes before parsing. CSV, TSV and RDS have native readers; Excel uses
@@ -88,13 +88,13 @@ close_lake <- function(lake) disconnect_lake(lake)
 #' first file may be parsed twice to establish and validate its schema. Readers
 #' must be deterministic and must not modify their input.
 #'
-#' Definition versions are derived automatically. Use [product()] and [run()]
+#' Definition versions are derived automatically. Use [tw_product()] and [tw_run()]
 #' when composing transformations or controlling definition versions. Built-in
 #' readers and structural checks can reuse the current release. Custom readers
 #' or rules run again by default because captured values and external state
 #' cannot be fingerprinted reliably. Supply `code_version` to enable reuse and
 #' update it whenever code, dependencies or captured values change.
-#' @param lake Connected lake or [lake_config()].
+#' @param lake Connected lake or [tw_lake_config()].
 #' @param data Data frame, path to a local file, or a zero-argument function
 #'   returning a data frame. A source function is called once per write before
 #'   cache lookup; its returned data is archived as RDS. Use it to connect
@@ -117,23 +117,23 @@ close_lake <- function(lake) disconnect_lake(lake)
 #'   `notify`, `layer` and `stop_on_failure`.
 #' @returns A `tw_run_result` with status, release ID and quality results.
 #'   Successful results retain their exact release and connection configuration
-#'   for [collect()], [product()], [add_lookup()] and [measure()], including
+#'   for [tw_collect()], [tw_product()], [tw_add_lookup()] and [tw_measure()], including
 #'   after the original connection closes. Caller-owned connections remain open.
-#'   [quality()] explains a failure.
-#' @seealso [open_lake()], [read_release()], [product()], [run()]
+#'   [tw_quality()] explains a failure.
+#' @seealso [tw_open_lake()], [tw_read_release()], [tw_product()], [tw_run()]
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("tidyweave-")
-#' lake <- open_lake(root)
+#' lake <- tw_open_lake(root)
 #' orders <- data.frame(id = 1:3, amount = c(25, 75, 50))
-#' write_data(lake, orders)
-#' read_release(lake, "orders")
-#' contract <- contract("orders.checked",
+#' tw_write_data(lake, orders)
+#' tw_read_release(lake, "orders")
+#' contract <- tw_contract("orders.checked",
 #'   columns = c(id = "integer", amount = "numeric"), key = "id")
-#' write_data(lake, orders, contract = contract)
-#' close_lake(lake)
+#' tw_write_data(lake, orders, contract = contract)
+#' tw_close_lake(lake)
 #' unlink(root, recursive = TRUE)
-write_data <- function(
+tw_write_data <- function(
   lake,
   data,
   name = NULL,
@@ -159,7 +159,7 @@ write_data <- function(
       if (!is.data.frame(received)) {
         abort("A source function must return a data frame.")
       }
-      result <- write_data(
+      result <- tw_write_data(
         con,
         received,
         name,
@@ -211,7 +211,7 @@ write_data <- function(
   for (value in list(contract, input_contract)) {
     if (!is.null(value)) {
       if (!inherits(value, "tw_contract")) {
-        abort("Use contract() for contracts.")
+        abort("Use tw_contract() for contracts.")
       }
       assert_contract_ready(value)
     }
@@ -227,7 +227,7 @@ write_data <- function(
     }
     source <- NULL
     if (file_input) {
-      source <- source_file(paste0(name, ".file"), data, reader)
+      source <- tw_source_file(paste0(name, ".file"), data, reader)
       landed <- land_source(con, source)
       source$original_path <- source$path
       source$path <- landed$path
@@ -284,7 +284,7 @@ write_data <- function(
     )
     result <- if (file_input) {
       source$version <- version
-      tw_ingest(
+      pipeline_ingest(
         con,
         source,
         contract,
@@ -350,7 +350,7 @@ automatic_types <- function(columns) {
 }
 
 automatic_schema <- function(name, columns) {
-  contract <- contract(
+  contract <- tw_contract(
     paste0(name, ".schema"),
     version = paste0("auto-", fingerprint(columns)),
     columns = columns,
@@ -434,19 +434,19 @@ published_schema <- function(lake, name) {
 #' @param lazy Return a lazy database table instead of collecting all rows.
 #' @returns A tibble, a lazy `tbl_sql` when `lazy = TRUE`, or a dm for a
 #'   model product. Models restore all member tables from the same manifest.
-#' @seealso [write_data()], [tbl()], [releases()]
+#' @seealso [tw_write_data()], [tw_tbl()], [tw_releases()]
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("tidyweave-")
-#' lake <- open_lake(root)
-#' write_data(lake, data.frame(id = 1:3), "orders")
-#' read_release(lake, "orders")
-#' read_release(lake, "orders", lazy = TRUE) |>
+#' lake <- tw_open_lake(root)
+#' tw_write_data(lake, data.frame(id = 1:3), "orders")
+#' tw_read_release(lake, "orders")
+#' tw_read_release(lake, "orders", lazy = TRUE) |>
 #'   dplyr::filter(id > 1) |>
 #'   dplyr::collect()
-#' close_lake(lake)
+#' tw_close_lake(lake)
 #' unlink(root, recursive = TRUE)
-read_release <- function(lake, name, release = NULL, lazy = FALSE) {
+tw_read_release <- function(lake, name, release = NULL, lazy = FALSE) {
   flag(lazy, "lazy")
   ref <- resolve_release(lake, name, release)
   if (startsWith(ref$table_name[[1]], "model_")) {
@@ -457,7 +457,7 @@ read_release <- function(lake, name, release = NULL, lazy = FALSE) {
     }
     return(read_model_release(lake, name, ref$release_id[[1]]))
   }
-  data <- tbl(lake, name, release)
+  data <- tw_tbl(lake, name, release)
   if (lazy) data else dplyr::collect(data)
 }
 

@@ -1,18 +1,18 @@
 #' Define a modular product workflow or a delivery dependency graph
 #'
-#' Call `workflow()` without step functions to start a modular assembly with
-#' [add_product()], [add_recipe()] and [add_source()]. Bind data at definition
-#' time or with `trial(flow, data = delivery)`. Use [execution_config()] for
+#' Call `tw_workflow()` without step functions to start a modular assembly with
+#' [tw_add_product()], [tw_add_recipe()] and [tw_add_source()]. Bind data at definition
+#' time or with `tw_trial(flow, data = delivery)`. Use [tw_execution_config()] for
 #' optional engine defaults. Each component can be extracted or replaced.
 #'
 #' Named functions describe the receipt, preparation and dbt steps once.
 #' Each function argument names an input or another step. Steps execute in
 #' dependency order; a failed step blocks its consumers. Results remain ordinary
-#' R values, so existing [ingest()], [publish()] and dbt calls keep their meaning.
+#' R values, so existing [tw_ingest()], [tw_publish()] and dbt calls keep their meaning.
 #' Keep report issuance outside the workflow as an explicit final decision.
 #'
 #' On correction, pass replacement `inputs` and the `previous` workflow result
-#' to [run()]. Unchanged successful branches are reused; changed inputs and their
+#' to [tw_run()]. Unchanged successful branches are reused; changed inputs and their
 #' consumers rerun. Failed branches retry on the next explicit call. Change
 #' `code_version` whenever code, captured values or dependencies change. Use
 #' `refresh` for named steps whose external sources changed without a new input.
@@ -23,26 +23,20 @@
 #' @param inputs Named list of initial input values.
 #' @param code_version Explicit version of workflow code and dependencies.
 #'   Required for function dependency graphs; optional for modular workflows.
-#' @param execution Optional connection-free [execution_config()] for a modular
+#' @param execution Optional connection-free [tw_execution_config()] for a modular
 #'   workflow. Function graphs configure execution inside their steps.
 #' @returns A workflow specification. Modular workflows return ordinary product
-#'   run results from [trial()], [run()] or [publish()]. Function dependency
+#'   run results from [tw_trial()], [tw_run()] or [tw_publish()]. Function dependency
 #'   graphs return named `results`, effective `inputs`, and a step `status` table.
 #' @export
 #' @examples
-#' flow <- workflow(
-#'   checked = function(delivery) {
-#'     product("orders", delivery) |> add_quality(~ amount >= 0) |> trial()
-#'   },
-#'   total = function(checked) sum(collect(checked)$amount),
-#'   inputs = list(delivery = data.frame(amount = c(10, 20))),
-#'   code_version = "v1"
-#' )
-#' first <- run(flow)
-#' corrected <- run(flow, inputs = list(delivery = data.frame(amount = 40)),
-#'   previous = first)
-#' status(corrected)
-workflow <- function(
+#' spec <- tw_product("orders") |> tw_add_quality(~ amount >= 0)
+#' preparation <- tw_recipe() |> tw_step_mutate(amount = round(amount, 2))
+#' flow <- tw_workflow() |> tw_add_product(spec) |> tw_add_recipe(preparation)
+#' result <- tw_trial(flow, data = data.frame(amount = c(10.123, 20)))
+#' tw_collect(result)
+#' tw_extract_recipe(flow)
+tw_workflow <- function(
   ...,
   inputs = list(),
   code_version = NULL,
@@ -128,7 +122,7 @@ workflow <- function(
   )
 }
 
-#' @rdname workflow
+#' @rdname tw_workflow
 #' @param pipeline A workflow specification.
 #' @param lake Unused; supply storage inside the relevant step definition.
 #' @param previous Previous result from the same workflow input names.
@@ -136,7 +130,7 @@ workflow <- function(
 #' @param stop_on_failure Signal an error after collecting step status. Set
 #'   `FALSE` to inspect failures directly; errors also retain `condition$result`.
 #' @export
-run.tw_workflow <- function(
+tw_run.tw_workflow <- function(
   pipeline,
   lake = NULL,
   inputs = list(),
@@ -147,7 +141,7 @@ run.tw_workflow <- function(
 ) {
   rlang::check_dots_empty()
   pipeline <- do.call(
-    workflow,
+    tw_workflow,
     c(
       pipeline$steps,
       list(inputs = pipeline$inputs, code_version = pipeline$code_version)
@@ -273,7 +267,7 @@ run.tw_workflow <- function(
   )
   if (length(failed) && stop_on_failure) {
     abort(
-      "Workflow incomplete. Inspect status(condition$result) and condition$result$errors; successful steps remain available for an explicit retry.",
+      "Workflow incomplete. Inspect tw_status(condition$result) and condition$result$errors; successful steps remain available for an explicit retry.",
       "tw_workflow_failed",
       result = out
     )

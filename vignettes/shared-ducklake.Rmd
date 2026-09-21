@@ -29,9 +29,9 @@ Do not put credentials in product definitions, scripts or Git.
 
 ```{r config, eval=FALSE, purl=FALSE}
 library(tidyweave)
-team <- lake_config(
-  catalog = registry_postgres("TIDYWEAVE_PG_CONNECTION", lock_timeout = 30),
-  storage = storage_s3(
+team <- tw_lake_config(
+  catalog = tw_registry_postgres("TIDYWEAVE_PG_CONNECTION", lock_timeout = 30),
+  storage = tw_storage_s3(
     bucket = "your-team-bucket", prefix = "insurance",
     endpoint = "https://your-s3-endpoint", region = "eu-central-1"
   ),
@@ -52,12 +52,12 @@ Use the `portfolio` model product and `reporting_product()` definition from the
 cancellation guide. No business definition needs a PostgreSQL-specific rewrite.
 
 ```{r publish, eval=FALSE, purl=FALSE}
-first_model <- publish(portfolio, to = team)
-first_report_data <- publish(reporting_product(first_model), to = team)
+first_model <- tw_publish(portfolio, to = team)
+first_report_data <- tw_publish(reporting_product(first_model), to = team)
 
-second_model <- publish(portfolio, to = team, previous = first_model,
+second_model <- tw_publish(portfolio, to = team, previous = first_model,
   sources = list(policies = corrected_policies))
-second_report_data <- publish(reporting_product(second_model), to = team,
+second_report_data <- tw_publish(reporting_product(second_model), to = team,
   previous = first_report_data)
 ```
 
@@ -70,7 +70,7 @@ normal ordered-writer policy. Always use `previous` for user-authored correction
 A model's tables commit together, including their relationship evidence and
 model manifest. The derived report is a separate publication. Its source is the
 exact model you passed, even if another model is published meanwhile.
-Saving report values remains a separate reviewed step with `report_release()`.
+Saving report values remains a separate reviewed step with `tw_report_release()`.
 
 ## What simultaneous writing means
 
@@ -87,7 +87,7 @@ publication rechecks an explicit `previous` while holding it. A model result
 contains all tables in memory during validation, so size the session accordingly.
 
 Direct SQL, dbt materialization and unrelated clients do not participate in this
-protocol. Use dbt-owned schemas for intermediate work and `dbt_publish()` for
+protocol. Use dbt-owned schemas for intermediate work and `tw_dbt_publish()` for
 package-managed publication. Do not mutate package-managed release tables.
 Concurrent external changes are outside these guarantees. Catalog migrations and
 old clients must be coordinated operationally; metadata schema 4 rejects older
@@ -105,6 +105,6 @@ behavior in the deployment environment.
 [Back to Learn](learn.html) · [Local DuckLake](create-ducklake.html)
 
 For scheduling with targets, put the whole model publication in an ordinary
-`targets::tar_target()` call. `as_targets()` currently expands table-product
+`targets::tar_target()` call. `tw_as_targets()` currently expands table-product
 dependencies only; it refuses model expansion rather than splitting an atomic
 model into independently published tables.

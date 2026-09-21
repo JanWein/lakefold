@@ -12,25 +12,25 @@
 #' controls its publication target, not a rollback of dbt's database changes.
 #' The returned table is materialized so every factory-owned connection closes.
 #' Invocation ID and selected model are attached as `tw_transform_metadata`.
-#' @param project A [dbt_project()] specification.
+#' @param project A [tw_dbt_project()] specification.
 #' @param model Exact materialized dbt model unique ID, for example
 #'   `"model.shop.customer_revenue"`.
 #' @param connection Zero-argument function opening a DBI connection to the
 #'   database used by dbt. Return a new connection on every call.
 #' @param input Dedicated staging table, as a string or [DBI::Id()]. Existing
 #'   table contents are replaced. Its schema must already exist.
-#' @param full_refresh,vars,echo,timeout Passed to [dbt_build()].
-#' @returns A deferred transformation adapter for [add_transform()].
-#' @seealso [dbt_init()], [dbt_build()], [source_database()]
+#' @param full_refresh,vars,echo,timeout Passed to [tw_dbt_build()].
+#' @returns A deferred transformation adapter for [tw_add_transform()].
+#' @seealso [tw_dbt_init()], [tw_dbt_build()], [tw_source_database()]
 #' @export
 #' @examples
 #' # dbt's selected model must read the dedicated staged_orders relation.
-#' project <- dbt_project("analytics", profiles_dir = "analytics")
-#' step <- transform_dbt(project, "model.shop.customer_revenue",
+#' project <- tw_dbt_project("analytics", profiles_dir = "analytics")
+#' step <- tw_transform_dbt(project, "model.shop.customer_revenue",
 #'   connection = function() DBI::dbConnect(duckdb::duckdb(), "analytics.duckdb"),
 #'   input = "staged_orders")
-#' inspect(step)
-transform_dbt <- function(
+#' tw_inspect(step)
+tw_transform_dbt <- function(
   project,
   model,
   connection,
@@ -41,7 +41,7 @@ transform_dbt <- function(
   timeout = Inf
 ) {
   if (!inherits(project, "tw_dbt_project")) {
-    abort("project must come from dbt_project().")
+    abort("project must come from tw_dbt_project().")
   }
   scalar(model, "model")
   if (
@@ -75,24 +75,24 @@ transform_dbt <- function(
 }
 
 #' @export
-check_component.tw_dbt_transform <- function(x, ...) {
+tw_check_component.tw_dbt_transform <- function(x, ...) {
   need("processx")
   if (!file.exists(file.path(x$project$path, "dbt_project.yml"))) {
     abort(
-      "The dbt project is missing dbt_project.yml. Check transform_dbt(project = ...)."
+      "The dbt project is missing dbt_project.yml. Check tw_transform_dbt(project = ...)."
     )
   }
   executable <- x$project$executable
   if (!nzchar(Sys.which(executable)) && !file.exists(executable)) {
     abort(
-      "Install dbt and set dbt_project(executable = ...) before running this transform."
+      "Install dbt and set tw_dbt_project(executable = ...) before running this transform."
     )
   }
   invisible(x)
 }
 
 #' @export
-inspect.tw_dbt_transform <- function(x, ...) {
+tw_inspect.tw_dbt_transform <- function(x, ...) {
   list(
     type = "dbt transformation",
     model = x$model,
@@ -103,9 +103,9 @@ inspect.tw_dbt_transform <- function(x, ...) {
 }
 
 #' @export
-execute_transform.tw_dbt_transform <- function(transform, data, ...) {
-  check_component(transform)
-  data <- collect(data)
+tw_execute_transform.tw_dbt_transform <- function(transform, data, ...) {
+  tw_check_component(transform)
+  data <- tw_collect(data)
   with_dbt_connection(transform$connection, function(con) {
     DBI::dbWithTransaction(con, {
       DBI::dbWriteTable(con, transform$input, data, overwrite = TRUE)
@@ -119,7 +119,7 @@ execute_transform.tw_dbt_transform <- function(transform, data, ...) {
     ",resource_type:model,fqn:",
     parts[[3]]
   )
-  result <- dbt_build(
+  result <- tw_dbt_build(
     transform$project,
     select = selector,
     full_refresh = transform$full_refresh,
@@ -168,8 +168,8 @@ with_dbt_connection <- function(factory, fn) {
 }
 
 #' @export
-capabilities.tw_dbt_transform <- function(x, ...) {
-  component_capabilities(
+tw_capabilities.tw_dbt_transform <- function(x, ...) {
+  tw_component_capabilities(
     read = FALSE,
     write = TRUE,
     lazy = FALSE,

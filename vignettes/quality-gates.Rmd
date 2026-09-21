@@ -23,33 +23,33 @@ database, an external quality engine or governance metadata.
 
 ```{r first-check}
 orders <- data.frame(id = 1:3, amount = c(10, 20, 30))
-result <- product("orders", orders) |>
-  add_quality(~ amount >= 0) |>
-  trial()
-collect(result)
-quality(result)
+result <- tw_product("orders", orders) |>
+  tw_add_quality(~ amount >= 0) |>
+  tw_trial()
+tw_collect(result)
+tw_quality(result)
 ```
 
 ## Choose the smallest useful tool
 
 | Tool | Question | Does it decide whether publication is allowed? |
 |---|---|---|
-| `profile_data(data)` | What types, missing counts and ranges occur? | No |
-| `contract(columns = ...)` | Which structure, required fields and keys do I promise? | Yes |
-| `add_quality(~ amount >= 0)` | Does this business rule hold? | Yes |
-| `pointblank_checks()` | Can an existing pointblank plan evaluate these rules? | Yes |
+| `tw_profile_data(data)` | What types, missing counts and ranges occur? | No |
+| `tw_contract(columns = ...)` | Which structure, required fields and keys do I promise? | Yes |
+| `tw_add_quality(~ amount >= 0)` | Does this business rule hold? | Yes |
+| `tw_pointblank_checks()` | Can an existing pointblank plan evaluate these rules? | Yes |
 
 A profile describes data. It does not turn observations into requirements.
 Database and Arrow profiles collect aggregate results, not samples; exact
 counts can still require scanning the data on the backend.
 
 ```{r profile-and-contract}
-profile_data(orders)
-schema <- contract(
+tw_profile_data(orders)
+schema <- tw_contract(
   columns = list(id = integer(), amount = double()),
   key = "id"
 )
-validate(orders, schema)
+tw_validate(orders, schema)
 ```
 
 By default declared fields cannot be missing, and additional fields are
@@ -70,14 +70,14 @@ nested data.
 Formulas evaluate one test per row. An ordinary function can do the same:
 
 ```{r row-check}
-rule <- quality_rule("nonnegative", function(data) data$amount >= 0)
-run_quality(rule, data.frame(amount = c(10, -1, NA)))
+rule <- tw_quality_rule("nonnegative", function(data) data$amount >= 0)
+tw_run_quality(rule, data.frame(amount = c(10, -1, NA)))
 ```
 
 Both `FALSE` and `NA` fail. A scalar function result, such as
 `function(data) nrow(data) >= 10`, is one aggregate test. A scalar formula is
 repeated over the rows. Longer function results must have exactly one logical
-value per row. For custom units, return `quality_counts(failed, total)`.
+value per row. For custom units, return `tw_quality_counts(failed, total)`.
 
 `max_failure = 0.02` permits two failures out of 100. If a rule breaches its
 tolerance, `severity = "error"` blocks publication; `severity = "warning"`
@@ -95,11 +95,11 @@ deliveries <- data.frame(
   customer_id = c("a", "b", "missing"),
   region = c("EU", "US", "EU")
 )
-known_customer <- quality_reference(
+known_customer <- tw_quality_reference(
   customers,
   by = c(customer_id = "id", region = "region")
 )
-run_quality(known_customer, deliveries)
+tw_run_quality(known_customer, deliveries)
 ```
 
 This finds one unmatched row. Duplicate reference keys do not multiply the
@@ -118,7 +118,7 @@ The next example runs only when the optional `pointblank` package is installed.
 Segments avoid letting a large healthy group hide failures in a small group.
 
 ```{r pointblank-check, eval=requireNamespace("pointblank", quietly = TRUE)}
-checks <- pointblank_checks("amounts", function(data) {
+checks <- tw_pointblank_checks("amounts", function(data) {
   pointblank::create_agent(
     data,
     actions = pointblank::action_levels(warn_at = 0.005, stop_at = 0.05)
@@ -131,13 +131,13 @@ amounts <- data.frame(
   entity = rep(c("Alpha", "Beta"), each = 100), amount = 10
 )
 amounts$amount[1:3] <- -1
-evidence <- validate(
+evidence <- tw_validate(
   amounts,
-  contract(columns = c(entity = "character", amount = "numeric"),
+  tw_contract(columns = c(entity = "character", amount = "numeric"),
     rules = list(checks)),
   keep_agents = TRUE
 )
-quality(evidence) |>
+tw_quality(evidence) |>
   dplyr::filter(engine == "pointblank") |>
   dplyr::select(rule, segment, status, n_failed, n_total)
 ```
@@ -156,20 +156,20 @@ releases. This example requires DuckDB and uses only a temporary local folder.
 
 ```{r lake-gates, eval=requireNamespace("duckdb", quietly = TRUE)}
 root <- tempfile("tidyweave-quality-")
-lake <- open_lake(root)
-definition <- product("orders") |>
-  add_contract(schema) |>
-  add_quality(~ amount >= 0) |>
-  add_quality(quality_rule("unusually_large", ~ amount < 100,
+lake <- tw_open_lake(root)
+definition <- tw_product("orders") |>
+  tw_add_contract(schema) |>
+  tw_add_quality(~ amount >= 0) |>
+  tw_add_quality(tw_quality_rule("unusually_large", ~ amount < 100,
     severity = "warning")) |>
-  set_target(lake)
-first <- definition |> add_source(orders) |> run()
+  tw_set_target(lake)
+first <- definition |> tw_add_source(orders) |> tw_run()
 unusual <- data.frame(id = 1:3, amount = c(10, 200, 30))
-warning_release <- definition |> add_source(unusual) |> run()
+warning_release <- definition |> tw_add_source(unusual) |> tw_run()
 bad <- data.frame(id = 1:3, amount = c(10, -1, 30))
-blocked <- definition |> add_source(bad) |> run(stop_on_failure = FALSE)
-status(blocked)
-read_release(lake, "orders")
+blocked <- definition |> tw_add_source(bad) |> tw_run(stop_on_failure = FALSE)
+tw_status(blocked)
+tw_read_release(lake, "orders")
 ```
 
 The amount of 200 is still current: its warning permitted publication. The
@@ -177,24 +177,24 @@ negative amount blocked the next delivery and did not replace that release.
 The original release is also available by `first$release_id`.
 
 ```{r reports, eval=requireNamespace("duckdb", quietly = TRUE)}
-quality_report(quality(blocked), file.path(root, "blocked.html"))
-quality(lake, asset = "orders", release = warning_release$release_id) |>
+tw_quality_report(tw_quality(blocked), file.path(root, "blocked.html"))
+tw_quality(lake, asset = "orders", release = warning_release$release_id) |>
   dplyr::select(rule, status, n_failed)
 ```
 
 HTML and JSON reports contain check metadata, without source rows. For a native
-pointblank report, call `pointblank_report(evidence, "amounts", path)` while
+pointblank report, call `tw_pointblank_report(evidence, "amounts", path)` while
 the result with `keep_agents = TRUE` is still in memory. Agents are not stored
 in the registry.
 
 ## Put business decisions into tests
 
-`expect_quality()` belongs in your package's testthat tests. It applies the
+`tw_expect_quality()` belongs in your package's testthat tests. It applies the
 same fail-closed gate used for publication:
 
 ```{r quality-test, eval=FALSE}
 testthat::test_that("the example delivery meets its contract", {
-  expect_quality(validate(example_delivery, schema))
+  tw_expect_quality(tw_validate(example_delivery, schema))
 })
 ```
 
@@ -204,8 +204,8 @@ project; see [dbt workflows](dbt-workflows.html).
 
 ```{r close-quality-lake, include=FALSE, eval=requireNamespace("duckdb", quietly = TRUE)}
 stopifnot(blocked$status == "blocked",
-  identical(read_release(lake, "orders")$amount, unusual$amount))
-close_lake(lake)
+  identical(tw_read_release(lake, "orders")$amount, unusual$amount))
+tw_close_lake(lake)
 unlink(root, recursive = TRUE)
 ```
 

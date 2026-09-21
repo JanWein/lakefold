@@ -1,54 +1,51 @@
-#' tidyweave: reusable data products with optional infrastructure
+#' tidyweave: modular checked data products
 #'
-#' Name the table you want, add its inputs and run it. Preparation uses ordinary
-#' R functions; contracts, quality rules and destinations are optional additions.
-#' A product is a definition. A run result describes one execution. [collect()]
-#' returns an ordinary table for further analysis.
+#' Compose reusable product specifications, preparation recipes and execution
+#' workflows. Definitions are connection-free R values. Executions return
+#' results with data references, quality outcomes and lineage.
 #'
-#' @section Start here:
-#' [product()], [trial()] and [collect()] form the first in-memory workflow.
-#' Add [add_contract()] or [add_quality()] to state what acceptable data means.
-#' [trial()] disables configured framework writers; [run()] executes them.
-#' Use [publish()] to save checked data. It does not make data public online.
+#' @section Product specifications:
+#' [tw_product()] defines output identity. Add a [tw_contract()] for schema and
+#' keys and [tw_quality_rule()] specifications for value requirements using
+#' [tw_add_contract()] and [tw_add_quality()]. Requirements apply to prepared
+#' output. See `vignette("first-product")`.
 #'
-#' @section Learn in five steps:
-#' Begin with `vignette("get-started")`. Each lesson runs independently:
-#' * `vignette("first-product")`: prepare and try a table.
-#' * `vignette("check-delivery")`: find a bad row and correct it.
-#' * `vignette("publish-data")`: save a delivery and retain its earlier version.
-#' * `vignette("save-report")`: save values and read them without recalculating.
-#' * `vignette("getting-started")`: complete-month deliveries and corrections.
+#' @section Preparation recipes:
+#' [tw_recipe()] stores ordered, deferred [tw_step_mutate()] and other preparation
+#' steps. Reuse a recipe across products. [tw_step_transform()] accepts an
+#' ordinary function or adapter; [tw_step_lookup()] adds a checked relationship.
+#' [tw_set_engine()] chooses a supported quality or relationship implementation.
+#' Recipes have no fitted training state. See `vignette("preparation-recipes")`
+#' and `vignette("engines")`.
 #'
-#' @section Find a task or solve a problem:
-#' `vignette("learn")` groups advanced guides by task.
-#' `vignette("troubleshooting")` starts from symptoms.
-#' `vignette("glossary")` explains terms as you encounter them.
-#' Saved reports contain values and evidence, not rendered PDF or slide files.
+#' @section Workflow assembly:
+#' Start with [tw_workflow()], then [tw_add_product()] and [tw_add_recipe()].
+#' Update, remove or extract each component independently. Add a source or bind
+#' `data =` at execution. Use [tw_inspect()] and [tw_plan()] without reading data.
+#' See `vignette("modular-workflows")`.
 #'
-#' @section Optional capabilities:
-#' DBI and Arrow sources support lazy work where their backends permit it.
-#' pointblank and dbt keep their specialist execution semantics. Targets choose
-#' persistence: a lake keeps immutable releases; a database table, Parquet file
-#' or pin has its adapter's documented guarantees. [run_history()] reads optional
-#' durable execution evidence. Catalog adapters deliver descriptive metadata
-#' separately from data publication. [as_targets()] and [init_project()] connect
-#' definitions to established project and orchestration tools.
+#' @section Execution and results:
+#' [tw_trial()] prepares and checks a delivery with framework writers disabled.
+#' [tw_run()] executes configured writers; [tw_publish()] saves checked output.
+#' [tw_collect()] returns usable data. [tw_status()], [tw_quality_report()] and
+#' [tw_lineage()] explain the attempt. Lake results identify immutable releases;
+#' other targets retain their own persistence guarantees.
 #'
-#' @section Why this architecture:
-#' Readable verbs and familiar R objects keep the user interface small. Internal
-#' normalization, specifications, preflight and S3 adapters make implementations
-#' interchangeable. The structure draws on tidymodels without exposing modeling
-#' APIs. There is no required platform object or catalog service.
+#' @section Learn more:
+#' Begin with `vignette("get-started")`. `vignette("learn")` groups task guides,
+#' integrations and case studies. `vignette("api-migration")` explains the
+#' prefixed API and extension methods. All public tidyweave functions start
+#' with `tw_`; ordinary dplyr methods remain available through dplyr.
 #'
-#' @section Boundaries:
-#' Caller-supplied connections stay caller-owned; keep them open for lazy results.
-#' Factory-backed DBI sources materialize before closing their owned connections.
-#' Local file lakes and evidence directories need one coordinated writer.
-#' PostgreSQL catalogs coordinate package writes through advisory locks. External catalog
-#' delivery is not part of a data transaction. No scheduler, streaming engine,
-#' distributed transaction system or enterprise authentication system is provided.
-#' Public interfaces remain experimental until the first stable release candidate.
+#' @section Extend and operate:
+#' Public S3 protocols support sources, transformations, quality engines,
+#' targets and catalogs. See `vignette("extending-tidyweave")`. Caller-supplied
+#' connections remain caller-owned. Local lake writes need one coordinated
+#' writer; PostgreSQL catalogs coordinate package writes through advisory locks.
+#' Catalog delivery is outside the data transaction. Scheduling, report rendering
+#' and access management remain with existing tools. Interfaces are experimental
+#' until the first stable release candidate.
 #'
-#' @seealso [inspect()], [capabilities()], [source_database()], [target_lake()]
+#' @seealso [tw_product()], [tw_recipe()], [tw_workflow()]
 #' @keywords internal
 "_PACKAGE"

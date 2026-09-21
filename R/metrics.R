@@ -20,13 +20,13 @@
 #' @return Metric specification. Reports execute it directly without an LLM.
 #' @export
 #' @examples
-#' metric <- metric(
+#' metric <- tw_metric(
 #'   "orders.total", "orders", expr = sum(amount), time_behavior = "flow",
 #'   unit = "EUR", owner = "Analytics", description = "Total order value",
 #'   approved = TRUE, code_version = "v1"
 #' )
 #' metric
-metric <- function(
+tw_metric <- function(
   id,
   product,
   expr = NULL,
@@ -111,10 +111,10 @@ metric <- function(
 #' A successful publication result supplies its exact asset and release. Later
 #' publications do not change that input. Result-based measurement does not
 #' register definitions or write lineage; its manifest still contains all
-#' metric and input evidence needed by [report_release()]. A live caller-owned
+#' metric and input evidence needed by [tw_report_release()]. A live caller-owned
 #' lake is borrowed when available. Otherwise the saved configuration opens an
 #' owned read-only connection that closes before returning, including on errors.
-#' @param x Connected lake or successful `tw_run_result`. In-memory [trial()]
+#' @param x Connected lake or successful `tw_run_result`. In-memory [tw_trial()]
 #'   results support exploratory measurements with the same definitions. They
 #'   cannot be recorded or saved in issued reports, even for approved metrics.
 #' @param metric Single metric definition.
@@ -139,38 +139,38 @@ metric <- function(
 #'   metrics always default to `record = FALSE` and cannot be saved in reports.
 #' @return For `metric`, a tibble with a tw_manifest attribute. For `metrics`,
 #'   a `tw_measurement_set` retaining each original result and manifest.
-#'   `collect()` returns an ordinary long tibble with grouping columns,
+#'   `tw_collect()` returns an ordinary long tibble with grouping columns,
 #'   `.metric`, `.period` (a list column of selected dates), `.unit` and `value`.
 #'   Grouped results are ordered by the requested dimensions using C collation
 #'   so database row order does not change report identity.
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("tidyweave-example-")
-#' config <- lake_config(
-#'   registry_duckdb(file.path(root, "lake.db")),
-#'   storage_local(file.path(root, "data")),
+#' config <- tw_lake_config(
+#'   tw_registry_duckdb(file.path(root, "lake.db")),
+#'   tw_storage_local(file.path(root, "data")),
 #'   landing = file.path(root, "landing"), backend = "duckdb"
 #' )
-#' lake <- connect_lake(config)
+#' lake <- tw_connect_lake(config)
 #' path <- file.path(root, "orders.csv")
 #' utils::write.csv(data.frame(order_id = 1:2, amount = c(25, 75)), path,
 #'   row.names = FALSE)
-#' source <- source_file("orders.file", path, reader = utils::read.csv)
-#' contract <- contract(
+#' source <- tw_source_file("orders.file", path, reader = utils::read.csv)
+#' contract <- tw_contract(
 #'   "orders", "1.0.0", "Analytics", "Order amounts", "One order",
 #'   c(order_id = "integer", amount = "numeric"), key = "order_id"
 #' )
-#' release <- product("orders", contract = contract, code_version = "v1") |>
-#'   add_source(source) |> publish(to = lake)
-#' metric <- metric(
+#' release <- tw_product("orders", contract = contract, code_version = "v1") |>
+#'   tw_add_source(source) |> tw_publish(to = lake)
+#' metric <- tw_metric(
 #'   "orders.total", "orders", expr = sum(amount), time_behavior = "flow",
 #'   unit = "EUR", owner = "Analytics", description = "Total order value",
 #'   approved = TRUE, code_version = "v1"
 #' )
-#' release |> measure(metric)
-#' disconnect_lake(lake)
+#' release |> tw_measure(metric)
+#' tw_disconnect_lake(lake)
 #' unlink(root, recursive = TRUE)
-measure <- function(
+tw_measure <- function(
   x,
   metric = NULL,
   by = character(),
@@ -184,7 +184,7 @@ measure <- function(
 ) {
   if (inherits(x, "tw_model_result")) {
     abort(
-      "Choose a reporting table with product('report', model_result, table = 'table_name'), then trial() or publish() that product before measure()."
+      "Choose a reporting table with tw_product('report', model_result, table = 'table_name'), then tw_trial() or tw_publish() that product before tw_measure()."
     )
   }
   if (!is.null(metrics)) {
@@ -256,7 +256,7 @@ measure <- function(
         !nzchar(x$release_id)
     ) {
       abort(
-        "measure() needs a successful published result with an exact release."
+        "tw_measure() needs a successful published result with an exact release."
       )
     }
     if (!identical(metric$product, x$asset)) {
@@ -294,8 +294,8 @@ measure <- function(
         )
       }
     } else if (inherits(source$lake, "tw_config")) {
-      lake <- connect_lake(source$lake, read_only = TRUE)
-      on.exit(disconnect_lake(lake), add = TRUE)
+      lake <- tw_connect_lake(source$lake, read_only = TRUE)
+      on.exit(tw_disconnect_lake(lake), add = TRUE)
     } else {
       lake <- source$lake
       assert_lake(lake)
@@ -318,7 +318,7 @@ measure <- function(
     abort("Filters must be named permitted dimensions.")
   }
   if (record) {
-    register(lake, metric)
+    tw_register(lake, metric)
   } else if (!exploring && isTRUE(metric$approved)) {
     old <- query(
       lake,
@@ -337,7 +337,7 @@ measure <- function(
   }
   if (!exploring) {
     ref <- resolve_release(lake, metric$product, release)
-    data <- tbl(lake, metric$product, ref$release_id[[1]])
+    data <- tw_tbl(lake, metric$product, ref$release_id[[1]])
   }
   if (!all(c(by, names(filters), metric$time_column) %in% colnames(data))) {
     abort("Metric columns missing from input product.")
@@ -447,7 +447,7 @@ measure <- function(
   )
   attr(result, "tw_manifest") <- manifest
   attr(result, "tw_quality_reference") <- if (exploring) {
-    list(trial_quality = quality(x), asset = x$asset, run_id = x$run_id)
+    list(trial_quality = tw_quality(x), asset = x$asset, run_id = x$run_id)
   } else {
     list(
       config = if (
@@ -529,32 +529,32 @@ inform_measure_grouping <- function(metrics) {
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("tidyweave-example-")
-#' config <- lake_config(
-#'   registry_duckdb(file.path(root, "lake.db")),
-#'   storage_local(file.path(root, "data")),
+#' config <- tw_lake_config(
+#'   tw_registry_duckdb(file.path(root, "lake.db")),
+#'   tw_storage_local(file.path(root, "data")),
 #'   landing = file.path(root, "landing"), backend = "duckdb"
 #' )
-#' lake <- connect_lake(config)
+#' lake <- tw_connect_lake(config)
 #' path <- file.path(root, "orders.csv")
 #' utils::write.csv(data.frame(order_id = 1:2, amount = c(25, 75)), path,
 #'   row.names = FALSE)
-#' source <- source_file("orders.file", path, reader = utils::read.csv)
-#' contract <- contract(
+#' source <- tw_source_file("orders.file", path, reader = utils::read.csv)
+#' contract <- tw_contract(
 #'   "orders", "1.0.0", "Analytics", "Order amounts", "One order",
 #'   c(order_id = "integer", amount = "numeric"), key = "order_id"
 #' )
-#' release <- product("orders", contract = contract, code_version = "v1") |>
-#'   add_source(source) |> publish(to = lake)
-#' metric <- metric(
+#' release <- tw_product("orders", contract = contract, code_version = "v1") |>
+#'   tw_add_source(source) |> tw_publish(to = lake)
+#' metric <- tw_metric(
 #'   "orders.total", "orders", expr = sum(amount), time_behavior = "flow",
 #'   unit = "EUR", owner = "Analytics", description = "Total order value",
 #'   approved = TRUE, code_version = "v1"
 #' )
-#' values <- measure(lake, metric)
-#' report_release(lake, "report.v1", list(total = values), code_version = "v1")
-#' disconnect_lake(lake)
+#' values <- tw_measure(lake, metric)
+#' tw_report_release(lake, "report.v1", list(total = values), code_version = "v1")
+#' tw_disconnect_lake(lake)
 #' unlink(root, recursive = TRUE)
-report_release <- function(
+tw_report_release <- function(
   lake = NULL,
   id,
   results = NULL,
@@ -605,7 +605,7 @@ report_release <- function(
     m <- attr(x, "tw_manifest")
     if (is.null(m)) {
       abort(
-        "Use the original measure() result to save a report, before collect() or table edits. The original result retains the calculation and input history."
+        "Use the original tw_measure() result to save a report, before tw_collect() or table edits. The original result retains the calculation and input history."
       )
     }
     if (identical(m$input_published, FALSE)) {
@@ -615,7 +615,7 @@ report_release <- function(
     }
     if (!isTRUE(m$metric_definition$approved)) {
       abort(
-        "Exploratory metrics cannot be saved in reports. After business review, define the metrics with approved = TRUE and code_version = \"your-version\", then measure() again. Approval is your explicit declaration, not an automatic check."
+        "Exploratory metrics cannot be saved in reports. After business review, define the metrics with approved = TRUE and code_version = \"your-version\", then tw_measure() again. Approval is your explicit declaration, not an automatic check."
       )
     }
     if (
@@ -684,7 +684,7 @@ report_release <- function(
   }
   if (!inherits(lake, "tw_lake")) {
     lake <- report_connection(lake, read_only = FALSE)
-    on.exit(disconnect_lake(lake), add = TRUE)
+    on.exit(tw_disconnect_lake(lake), add = TRUE)
   }
   assert_writable(lake)
   manifest <- list(
@@ -812,12 +812,12 @@ report_identity <- function(json) {
 #'   ordinary reports or a long tibble for batch reports.
 #' @export
 #' @examples
-#' # After saving report.v1 with report_release():
-#' # report_read(lake, "report.v1", values_only = TRUE)
-report_read <- function(lake, id, values_only = FALSE) {
+#' # After saving report.v1 with tw_report_release():
+#' # tw_report_read(lake, "report.v1", values_only = TRUE)
+tw_report_read <- function(lake, id, values_only = FALSE) {
   if (!inherits(lake, "tw_lake")) {
     lake <- report_connection(lake, read_only = TRUE)
-    on.exit(disconnect_lake(lake), add = TRUE)
+    on.exit(tw_disconnect_lake(lake), add = TRUE)
   }
   assert_lake(lake)
   scalar(id, "id")
