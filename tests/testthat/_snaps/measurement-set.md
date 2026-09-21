@@ -102,7 +102,7 @@
     Code
       tw_collect(measured, unused = TRUE)
     Condition
-      Error in `tw_collect()`:
+      Error in `dplyr::collect()`:
       ! `...` must be empty.
       x Problematic argument:
       * unused = TRUE
