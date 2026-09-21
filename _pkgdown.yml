@@ -62,7 +62,7 @@ articles:
     desc: Follow these five lessons in order. Each includes its own setup.
     contents: [get-started, first-product, check-delivery, publish-data, save-report, getting-started]
   - title: Prepare, check and repeat
-    contents: [learn, composing-products, quality-gates, quality-history, everyday-workflows]
+    contents: [learn, composing-products, three-deliveries, quality-gates, quality-history, everyday-workflows]
   - title: Store and calculate
     contents: [create-ducklake, products-metrics]
   - title: Connect tools and work through larger examples
