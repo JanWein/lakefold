@@ -5,7 +5,7 @@
 #' The original definition is unchanged. Source and transformation callbacks are
 #' ordinary user code: their own side effects cannot be prevented by the framework.
 #' Read-only access to existing published inputs is still allowed.
-#' @param x Product definition.
+#' @param x Product or modular [workflow()] definition.
 #' @param data,sources Replacement delivery or named sources, as in [run()].
 #' @param stop_on_failure Defaults to `FALSE`: a failed trial returns a result
 #'   for [quality_report()] and [quality_rows()]. Use `TRUE` to raise an error.
@@ -17,6 +17,12 @@
 #'   set_target("reporting-lake")
 #' trial(orders) |> collect()
 trial <- function(x, data = NULL, sources = NULL, stop_on_failure = FALSE) {
+  if (inherits(x, "tw_product_workflow")) {
+    return(trial(
+      compile_product_workflow(x, data, sources),
+      stop_on_failure = stop_on_failure
+    ))
+  }
   if (!inherits(x, "tw_product")) {
     abort("trial() needs a product definition.")
   }

@@ -1,5 +1,14 @@
 # tidyweave 0.12.0.9000
 
+* `add_product()` and `add_recipe()` assemble independent specifications in an
+  empty `workflow()`. Update, remove and extract helpers make components reusable;
+  trial, run and publish retain the existing product execution gates.
+* `recipe()` records reusable `step_*()` preparations without reading data.
+  Recipes preserve tidy evaluation, lazy tables and checked lookup dependencies.
+* `set_engine()` switches quality rules between native and pointblank, and
+  reusable `lookup_spec()` relationships between native and dm.
+
+
 * `product()` accepts dm models with named table contracts. `trial()` checks
   the complete model; `publish()` commits all member tables and their manifest
   together. `collect()` and `read_release()` restore the pinned model.

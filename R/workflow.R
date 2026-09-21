@@ -65,6 +65,9 @@ tw_step_transform <- function(pipeline, transform, id) {
 #'   add_transform(function(data) dplyr::filter(data, id > 1)) |>
 #'   plan()
 plan <- function(pipeline) {
+  if (inherits(pipeline, "tw_product_workflow")) {
+    return(product_plan(compile_product_workflow(pipeline)))
+  }
   if (inherits(pipeline, "tw_product")) {
     return(product_plan(pipeline))
   }
