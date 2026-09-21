@@ -1,0 +1,33 @@
+---
+title: "Integrations and extension boundaries"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Integrations and extension boundaries}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+
+Load only the packages needed by the application. The core runs in memory;
+storage and integration engines live in separate packages.
+
+| Task | Package | Entry points |
+|---|---|---|
+| Persistent checked releases | dataraft.lake | `dr_open_lake()`, `dr_target_lake()`, `dr_close_lake()` |
+| External sources and targets | dataraft.adapters | `dr_source_database()`, `dr_target_parquet()`, `dr_as_targets()` |
+| SQL model execution | dataraft.dbt | `dr_dbt_project()`, `dr_dbt_build()` |
+| Metadata publication | dataraft.catalog | `dr_catalog_openlineage()`, `dr_catalog_openmetadata()` |
+| Metrics and reports | dataraft.metrics | `dr_metric()`, `dr_measure()`, `dr_report_release()` |
+
+For help on an extension, use `help(package = "dataraft.lake")`, substituting the
+package name. Sources, transformations, quality engines, targets and metadata
+publishers use the core S3 protocols `dr_read_source()`, `dr_execute_transform()`,
+`dr_run_quality()`, `dr_write_target()` and `dr_publish_metadata()`. A custom
+adapter implements its protocol and `dr_check_component()`; definition checks
+must not perform I/O. Execution receives a context and must respect ownership
+of supplied connections. A borrowed connection remains the caller's resource.
+
+Conditions inherit from `dataraft_error` and a subsystem class, such as
+`dataraft_error_contract` or `dataraft_error_lake`. More specific conditions can
+carry a parent condition or execution result. Inspect those fields before
+retrying; a failed contract is not a transient connection failure.

@@ -1,9 +1,9 @@
 # lookup key errors explain the equality-only boundary
 
     Code
-      tw_add_lookup(tw_product("orders"), data.frame(id = 1L), by = dplyr::join_by(
+      dr_add_lookup(dr_product("orders"), data.frame(id = 1L), by = dplyr::join_by(
         id > id))
     Condition
-      Error in `abort()`:
+      Error in `dr_add_lookup()`:
       ! A checked lookup needs equality keys. Use an ordinary dplyr join for other relationships.
 

@@ -1,7 +1,7 @@
 # trial disables writers and catalogs throughout dependencies
 
     Code
-      tw_report_release(measured, "trial", code_version = "v1")
+      dr_report_release(measured, "trial", code_version = "v1")
     Condition
       Error in `abort()`:
       ! Trial measurements cannot be saved in reports. Publish the product and recalculate first.

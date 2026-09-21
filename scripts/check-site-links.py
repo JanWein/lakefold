@@ -4,7 +4,7 @@ from pathlib import Path
 import sys
 from urllib.parse import unquote, urlsplit
 
-SITE_PREFIX = "/tidyweave/"
+SITE_PREFIX = "/dataraft/"
 
 
 class Page(HTMLParser):

@@ -1,80 +1,80 @@
 # unsafe inheritance and unchanged identity have actionable errors
 
     Code
-      tw_contract_update(old, columns = c(extra = "numeric"))
+      dr_contract_update(old, columns = c(extra = "numeric"))
     Condition
-      Error in `abort()`:
+      Error in `dr_contract_update()`:
       ! Change id for a derived contract or version for a revised definition.
 
 ---
 
     Code
-      tw_contract_update(old, version = "2", grain = "One month")
+      dr_contract_update(old, version = "2", grain = "One month")
     Condition
-      Error in `abort()`:
+      Error in `dr_contract_update()`:
       ! Supply key explicitly after changing grain or a key column; use character() for no key.
 
 ---
 
     Code
-      tw_contract_update(old, version = "2", grain = "One month", key = character())
+      dr_contract_update(old, version = "2", grain = "One month", key = character())
     Condition
-      Error in `abort()`:
+      Error in `dr_contract_update()`:
       ! Review and supply rules explicitly after removing columns, changing types or changing grain.
 
 ---
 
     Code
-      tw_contract_update(old, version = "2", remove = "amount")
+      dr_contract_update(old, version = "2", remove = "amount")
     Condition
-      Error in `abort()`:
+      Error in `dr_contract_update()`:
       ! Supply required explicitly after removing a required column.
 
 ---
 
     Code
-      tw_contract_update(old, version = "2", remove = "amount", required = "id")
+      dr_contract_update(old, version = "2", remove = "amount", required = "id")
     Condition
-      Error in `abort()`:
+      Error in `dr_contract_update()`:
       ! Review and supply rules explicitly after removing columns, changing types or changing grain.
 
 ---
 
     Code
-      tw_contract_update(old, version = "2", columns = c(id = "character"))
+      dr_contract_update(old, version = "2", columns = c(id = "character"))
     Condition
-      Error in `abort()`:
+      Error in `dr_contract_update()`:
       ! Supply key explicitly after changing grain or a key column; use character() for no key.
 
 ---
 
     Code
-      tw_contract_update(old, version = "2", columns = c(amount = "integer"))
+      dr_contract_update(old, version = "2", columns = c(amount = "integer"))
     Condition
-      Error in `abort()`:
+      Error in `dr_contract_update()`:
       ! Review and supply rules explicitly after removing columns, changing types or changing grain.
 
 ---
 
     Code
-      tw_contract_update(old, version = "2", remove = "missing")
+      dr_contract_update(old, version = "2", remove = "missing")
     Condition
-      Error in `abort()`:
+      Error in `dr_contract_update()`:
       ! remove must name declared contract columns.
 
 ---
 
     Code
-      tw_contract_update(old, version = "2", typo = TRUE)
+      dr_contract_update(old, version = "2", typo = TRUE)
     Condition
-      Error in `abort()`:
+      Error in `dr_contract_update()`:
       ! ... must contain unique named contract arguments.
 
 ---
 
     Code
-      tw_contract_update(old, version = "2", remove = "amount", columns = c(amount = "numeric"))
+      dr_contract_update(old, version = "2", remove = "amount", columns = c(amount = "numeric"))
     Condition
-      Error in `abort()`:
+      Error in `dr_contract_update()`:
       ! A column cannot be both added and removed.
 

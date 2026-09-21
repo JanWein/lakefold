@@ -1,8 +1,8 @@
 # formula-engine configuration errors explain the custom-agent escape hatch
 
     Code
-      tw_quality_rule("bad", function(data) TRUE, engine = "pointblank")
+      dr_quality_rule("bad", function(data) TRUE, engine = "pointblank")
     Condition
-      Error in `abort()`:
-      ! Pointblank formula rules need a one-sided formula. Use tw_pointblank_checks() for an agent builder.
+      Error in `dr_quality_rule()`:
+      ! Pointblank formula rules need a one-sided formula. Use dr_pointblank_checks() for an agent builder.
 

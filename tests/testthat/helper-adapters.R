@@ -1,8 +1,8 @@
 local_adapter_method <- function(generic, class, method, env = parent.frame()) {
-  table <- get(".__S3MethodsTable__.", envir = asNamespace("tidyweave"))
+  table <- get(".__S3MethodsTable__.", envir = asNamespace("dataraft.core"))
   name <- paste(generic, class, sep = ".")
   old <- get0(name, envir = table, inherits = FALSE)
-  registerS3method(generic, class, method, envir = asNamespace("tidyweave"))
+  registerS3method(generic, class, method, envir = asNamespace("dataraft.core"))
   withr::defer(
     {
       if (is.null(old)) {

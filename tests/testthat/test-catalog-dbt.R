@@ -3,11 +3,11 @@ local_dbt_catalog_project <- function(failed = FALSE, .env = parent.frame()) {
   writeLines("name: fixture", file.path(root, "dbt_project.yml"))
   calls <- new.env(parent = emptyenv())
   calls$dbt <- 0L
-  testthat::local_mocked_bindings(
+  local_family_bindings(
     dbt_process = function(command, args, ...) {
       calls$dbt <- calls$dbt + 1L
       target <- args[match("--target-path", args) + 1L]
-      fixture <- system.file("extdata", "dbt-artifacts", package = "tidyweave")
+      fixture <- system.file("extdata", "dbt-artifacts", package = "dataraft.dbt")
       file.copy(list.files(fixture, full.names = TRUE), target)
       if (failed) {
         path <- file.path(target, "run_results.json")
@@ -20,41 +20,41 @@ local_dbt_catalog_project <- function(failed = FALSE, .env = parent.frame()) {
     .env = .env
   )
   list(
-    project = tw_dbt_project(root, executable = file.path(R.home("bin"), "R")),
+    project = dr_dbt_project(root, executable = file.path(R.home("bin"), "R")),
     calls = calls
   )
 }
 
 local_dbt_catalog <- function(.env = parent.frame(), ...) {
   withr::local_envvar(
-    c(TIDYWEAVE_TEST_OM_TOKEN = "fixture.jwt.token"),
+    c(DATARAFT_TEST_OM_TOKEN = "fixture.jwt.token"),
     .local_envir = .env
   )
-  tw_catalog_openmetadata_dbt(
+  dr_catalog_openmetadata_dbt(
     "https://metadata.example",
     "warehouse",
-    token_env = "TIDYWEAVE_TEST_OM_TOKEN",
+    token_env = "DATARAFT_TEST_OM_TOKEN",
     executable = file.path(R.home("bin"), "R"),
     ...
   )
 }
 
 test_that("the dbt catalog is optional and has an inspectable safe specification", {
-  x <- tw_catalog_openmetadata_dbt("https://metadata.example/", "warehouse")
+  x <- dr_catalog_openmetadata_dbt("https://metadata.example/", "warehouse")
   expect_identical(x$endpoint, "https://metadata.example")
-  expect_identical(tw_inspect(x)$token_env, "OPENMETADATA_JWT_TOKEN")
-  expect_true(tw_capabilities(x)$metadata)
-  expect_false(tw_capabilities(x)$write)
+  expect_identical(dr_inspect(x)$token_env, "OPENMETADATA_JWT_TOKEN")
+  expect_true(dr_capabilities(x)$metadata)
+  expect_false(dr_capabilities(x)$write)
   expect_error(
-    tw_catalog_openmetadata_dbt("https://metadata.example/api", "x"),
+    dr_catalog_openmetadata_dbt("https://metadata.example/api", "x"),
     "without /api"
   )
   expect_error(
-    tw_catalog_openmetadata_dbt("https://token@example.com", "x"),
+    dr_catalog_openmetadata_dbt("https://token@example.com", "x"),
     "without credentials"
   )
   expect_error(
-    tw_catalog_openmetadata_dbt(
+    dr_catalog_openmetadata_dbt(
       "https://example.com",
       "x",
       token_env = "some.token"
@@ -62,20 +62,20 @@ test_that("the dbt catalog is optional and has an inspectable safe specification
     "variable name"
   )
   expect_error(
-    tw_catalog_openmetadata_dbt(
+    dr_catalog_openmetadata_dbt(
       "https://example.com",
       "x",
       options = list(jwtToken = "not allowed")
     ),
     "documented"
   )
-  expect_error(tw_catalog_openmetadata_dbt(
+  expect_error(dr_catalog_openmetadata_dbt(
     "https://example.com",
     "x",
     options = list(includeTags = "yes")
   ))
   expect_error(
-    tw_catalog_openmetadata_dbt(
+    dr_catalog_openmetadata_dbt(
       "https://example.com",
       "x",
       options = list(parsingTimeoutLimit = 0.5)
@@ -83,13 +83,13 @@ test_that("the dbt catalog is optional and has an inspectable safe specification
     "positive integer"
   )
   fixture <- local_dbt_catalog_project()
-  result <- tw_dbt_build(fixture$project, echo = FALSE)
+  result <- dr_dbt_build(fixture$project, echo = FALSE)
   expect_null(result$catalog_delivery)
   expect_length(result$artifact_hashes, 2L)
   expect_identical(result$invocation_id, result$manifest$metadata$invocation_id)
-  expect_error(tw_publish_metadata(x, list(status = "published")), "dbt_result")
+  expect_error(dr_publish_metadata(x, list(status = "published")), "dbt_result")
   expect_error(
-    tw_dbt_build(
+    dr_dbt_build(
       fixture$project,
       catalog = structure(list(), class = "unsupported_catalog")
     ),
@@ -104,12 +104,12 @@ test_that("callbacks and external S3 catalogs use the same dbt workflow", {
     seen <<- result$invocation_id
     list(secret = "must not be retained")
   }
-  first <- tw_dbt_build(fixture$project, echo = FALSE, catalog = callback)
+  first <- dr_dbt_build(fixture$project, echo = FALSE, catalog = callback)
   expect_identical(seen, first$invocation_id)
   expect_identical(first$catalog_delivery$status, "delivered")
   expect_null(first$catalog_delivery$secret)
   local_adapter_method(
-    "tw_publish_metadata",
+    "dr_publish_metadata",
     "fixture_dbt_catalog",
     function(catalog, metadata, ...) {
       seen <<- metadata$invocation_id
@@ -117,19 +117,19 @@ test_that("callbacks and external S3 catalogs use the same dbt workflow", {
     }
   )
   local_adapter_method(
-    "tw_capabilities",
+    "dr_capabilities",
     "fixture_dbt_catalog",
     function(x, ...) {
-      c(tw_component_capabilities(), list(metadata_inputs = "tw_dbt_result"))
+      c(dr_component_capabilities(), list(metadata_inputs = "dr_dbt_result"))
     }
   )
   adapter <- structure(list(), class = "fixture_dbt_catalog")
-  second <- tw_dbt_build(fixture$project, echo = FALSE, catalog = adapter)
+  second <- dr_dbt_build(fixture$project, echo = FALSE, catalog = adapter)
   expect_identical(seen, second$invocation_id)
   expect_identical(second$catalog_delivery$status, "delivered")
   expect_true(second$success)
   expect_warning(
-    failed <- tw_dbt_build(
+    failed <- dr_dbt_build(
       fixture$project,
       echo = FALSE,
       catalog = function(result) stop("secret-bearing external error")
@@ -146,7 +146,7 @@ test_that("delivery retries use the same verified invocation without rebuilding 
   adapter <- local_dbt_catalog(options = list(includeTags = FALSE))
   attempts <- 0L
   captured <- NULL
-  testthat::local_mocked_bindings(dbt_catalog_process = function(
+  local_family_bindings(dbt_catalog_process = function(
     command,
     args,
     wd,
@@ -170,9 +170,9 @@ test_that("delivery retries use the same verified invocation without rebuilding 
     if (attempts == 1L) 2L else 0L
   })
   expect_warning(
-    result <- tw_dbt_build(fixture$project, echo = FALSE, catalog = adapter),
+    result <- dr_dbt_build(fixture$project, echo = FALSE, catalog = adapter),
     "nonzero exit status",
-    class = "tw_dbt_catalog_delivery"
+    class = "dr_dbt_catalog_delivery"
   )
   expect_true(result$success)
   expect_equal(result$catalog_delivery$status, "pending")
@@ -189,15 +189,15 @@ test_that("delivery retries use the same verified invocation without rebuilding 
   saved <- tempfile(fileext = ".rds")
   saveRDS(result, saved)
   result <- readRDS(saved)
-  delivery <- tw_publish_metadata(adapter, result)
+  delivery <- dr_publish_metadata(adapter, result)
   expect_identical(delivery$status, "delivered")
   expect_equal(delivery$attempt, 2L)
   expect_true(delivery$recorded)
   expect_equal(fixture$calls$dbt, 1L)
-  again <- tw_publish_metadata(adapter, result)
+  again <- dr_publish_metadata(adapter, result)
   expect_identical(again$status, "delivered")
   expect_equal(attempts, 2L)
-  redelivered <- tw_publish_metadata(adapter, result, force = TRUE)
+  redelivered <- dr_publish_metadata(adapter, result, force = TRUE)
   expect_equal(redelivered$attempt, 3L)
   expect_identical(redelivered$status, "delivered")
   expect_equal(fixture$calls$dbt, 1L)
@@ -214,8 +214,8 @@ test_that("delivery retries use the same verified invocation without rebuilding 
 test_that("failed dbt tests can deliver metadata while retaining their failure", {
   fixture <- local_dbt_catalog_project(failed = TRUE)
   adapter <- local_dbt_catalog()
-  testthat::local_mocked_bindings(dbt_catalog_process = function(...) 0L)
-  result <- tw_dbt_test(
+  local_family_bindings(dbt_catalog_process = function(...) 0L)
+  result <- dr_dbt_test(
     fixture$project,
     echo = FALSE,
     stop_on_failure = FALSE,
@@ -225,10 +225,10 @@ test_that("failed dbt tests can deliver metadata while retaining their failure",
   expect_identical(result$status, 1L)
   expect_identical(result$catalog_delivery$status, "delivered")
   error <- tryCatch(
-    tw_dbt_build(fixture$project, echo = FALSE, catalog = adapter),
+    dr_dbt_build(fixture$project, echo = FALSE, catalog = adapter),
     error = identity
   )
-  expect_s3_class(error, "tw_dbt_failed")
+  expect_s3_class(error, "dr_dbt_failed")
   expect_false(error$result$success)
   expect_identical(error$result$catalog_delivery$status, "delivered")
 })
@@ -236,33 +236,33 @@ test_that("failed dbt tests can deliver metadata while retaining their failure",
 test_that("missing and changed artifacts cannot invoke the metadata engine", {
   fixture <- local_dbt_catalog_project()
   adapter <- local_dbt_catalog()
-  testthat::local_mocked_bindings(dbt_catalog_process = function(...) {
+  local_family_bindings(dbt_catalog_process = function(...) {
     stop("must not run")
   })
-  result <- tw_dbt_build(fixture$project, echo = FALSE)
+  result <- dr_dbt_build(fixture$project, echo = FALSE)
   path <- file.path(result$artifacts_dir, "manifest.json")
   manifest <- jsonlite::read_json(path)
   manifest$metadata$invocation_id <- "different-invocation"
   jsonlite::write_json(manifest, path, auto_unbox = TRUE)
-  expect_warning(delivery <- tw_publish_metadata(adapter, result), "blocked")
+  expect_warning(delivery <- dr_publish_metadata(adapter, result), "blocked")
   expect_identical(delivery$status, "blocked")
-  result <- tw_dbt_build(fixture$project, echo = FALSE)
+  result <- dr_dbt_build(fixture$project, echo = FALSE)
   cat(
     "\n",
     file = file.path(result$artifacts_dir, "manifest.json"),
     append = TRUE
   )
-  expect_warning(delivery <- tw_publish_metadata(adapter, result), "changed")
+  expect_warning(delivery <- dr_publish_metadata(adapter, result), "changed")
   expect_identical(delivery$status, "blocked")
-  result <- tw_dbt_build(fixture$project, echo = FALSE)
+  result <- dr_dbt_build(fixture$project, echo = FALSE)
   unlink(file.path(result$artifacts_dir, "run_results.json"))
-  expect_warning(delivery <- tw_publish_metadata(adapter, result), "missing")
+  expect_warning(delivery <- dr_publish_metadata(adapter, result), "missing")
   expect_identical(delivery$status, "blocked")
-  testthat::local_mocked_bindings(dbt_process = function(...) {
+  local_family_bindings(dbt_process = function(...) {
     list(status = 2L, stdout = "", stderr = "")
   })
   expect_warning(
-    result <- tw_dbt_build(
+    result <- dr_dbt_build(
       fixture$project,
       echo = FALSE,
       stop_on_failure = FALSE,
@@ -277,7 +277,7 @@ test_that("missing and changed artifacts cannot invoke the metadata engine", {
 test_that("optional catalog files must have matching invocation identity", {
   fixture <- local_dbt_catalog_project()
   adapter <- local_dbt_catalog()
-  result <- tw_dbt_build(fixture$project, echo = FALSE)
+  result <- dr_dbt_build(fixture$project, echo = FALSE)
   catalog <- list(
     metadata = list(invocation_id = "another-run"),
     nodes = list()
@@ -288,7 +288,7 @@ test_that("optional catalog files must have matching invocation identity", {
     auto_unbox = TRUE
   )
   result$artifact_hashes <- dbt_artifact_hashes(result$artifacts_dir)
-  expect_warning(delivery <- tw_publish_metadata(adapter, result), "blocked")
+  expect_warning(delivery <- dr_publish_metadata(adapter, result), "blocked")
   expect_identical(delivery$status, "blocked")
   catalog$metadata$invocation_id <- result$invocation_id
   jsonlite::write_json(
@@ -297,7 +297,7 @@ test_that("optional catalog files must have matching invocation identity", {
     auto_unbox = TRUE
   )
   result$artifact_hashes <- dbt_artifact_hashes(result$artifacts_dir)
-  testthat::local_mocked_bindings(dbt_catalog_process = function(
+  local_family_bindings(dbt_catalog_process = function(
     command,
     args,
     ...
@@ -308,7 +308,7 @@ test_that("optional catalog files must have matching invocation identity", {
     ))
     0L
   })
-  expect_identical(tw_publish_metadata(adapter, result)$status, "delivered")
+  expect_identical(dr_publish_metadata(adapter, result)$status, "delivered")
 })
 
 test_that("metadata availability and process errors preserve dbt outcomes and hide secrets", {
@@ -316,30 +316,30 @@ test_that("metadata availability and process errors preserve dbt outcomes and hi
   adapter <- local_dbt_catalog()
   adapter$executable <- tempfile("missing-metadata-")
   expect_warning(
-    result <- tw_dbt_build(fixture$project, echo = FALSE, catalog = adapter),
+    result <- dr_dbt_build(fixture$project, echo = FALSE, catalog = adapter),
     "CLI is unavailable"
   )
   expect_true(result$success)
   expect_identical(
     result$catalog_delivery$error_class,
-    "tw_dbt_catalog_unavailable"
+    "dr_dbt_catalog_unavailable"
   )
   adapter$executable <- file.path(R.home("bin"), "R")
-  withr::local_envvar(c(TIDYWEAVE_TEST_OM_TOKEN = ""))
+  withr::local_envvar(c(DATARAFT_TEST_OM_TOKEN = ""))
   expect_warning(
-    delivery <- tw_publish_metadata(adapter, result),
+    delivery <- dr_publish_metadata(adapter, result),
     "authentication"
   )
-  expect_identical(delivery$error_class, "tw_dbt_catalog_credentials")
-  withr::local_envvar(c(TIDYWEAVE_TEST_OM_TOKEN = "sensitive-fixture-token"))
-  testthat::local_mocked_bindings(dbt_catalog_process = function(...) {
+  expect_identical(delivery$error_class, "dr_dbt_catalog_credentials")
+  withr::local_envvar(c(DATARAFT_TEST_OM_TOKEN = "sensitive-fixture-token"))
+  local_family_bindings(dbt_catalog_process = function(...) {
     stop("raw subprocess failure contains sensitive-fixture-token")
   })
   expect_warning(
-    delivery <- tw_publish_metadata(adapter, result),
+    delivery <- dr_publish_metadata(adapter, result),
     "could not finish"
   )
-  expect_identical(delivery$error_class, "tw_dbt_catalog_process")
+  expect_identical(delivery$error_class, "dr_dbt_catalog_process")
   expect_false(grepl(
     "sensitive-fixture-token",
     jsonlite::toJSON(delivery),
@@ -356,14 +356,14 @@ test_that("metadata availability and process errors preserve dbt outcomes and hi
 test_that("a failed receipt write cannot hide successful remote ingestion", {
   fixture <- local_dbt_catalog_project()
   adapter <- local_dbt_catalog()
-  testthat::local_mocked_bindings(
+  local_family_bindings(
     dbt_catalog_process = function(...) 0L,
     dbt_catalog_write_receipt = function(...) FALSE
   )
   expect_warning(
-    result <- tw_dbt_build(fixture$project, echo = FALSE, catalog = adapter),
+    result <- dr_dbt_build(fixture$project, echo = FALSE, catalog = adapter),
     "Could not save",
-    class = "tw_dbt_catalog_receipt"
+    class = "dr_dbt_catalog_receipt"
   )
   expect_true(result$success)
   expect_identical(result$catalog_delivery$status, "delivered")
@@ -385,34 +385,34 @@ test_that("a real subprocess receives literal config and environment-only creden
       "assert sys.argv[1:3] == ['ingest', '-c']",
       "raw = pathlib.Path(sys.argv[3]).read_text()",
       "config = json.loads(os.path.expandvars(raw))",
-      "secret = os.environ['TIDYWEAVE_TEST_OM_TOKEN']",
+      "secret = os.environ['DATARAFT_TEST_OM_TOKEN']",
       "assert secret not in raw",
       "server = config['workflowConfig']['openMetadataServerConfig']",
       "assert server['securityConfig']['jwtToken'] == secret",
       "server['securityConfig']['jwtToken'] = '<redacted>'",
-      "pathlib.Path(os.environ['TIDYWEAVE_TEST_OM_CAPTURE']).write_text(json.dumps(config))",
+      "pathlib.Path(os.environ['DATARAFT_TEST_OM_CAPTURE']).write_text(json.dumps(config))",
       "print(secret)",
       "print(secret, file=sys.stderr)",
-      "sys.exit(int(os.environ.get('TIDYWEAVE_TEST_OM_EXIT', '0')))"
+      "sys.exit(int(os.environ.get('DATARAFT_TEST_OM_EXIT', '0')))"
     ),
     executable
   )
   Sys.chmod(executable, "0700")
   secret <- 'fixture.token.with"quotes\\and${literal}'
   withr::local_envvar(c(
-    TIDYWEAVE_TEST_OM_TOKEN = secret,
-    TIDYWEAVE_TEST_OM_CAPTURE = capture,
-    TIDYWEAVE_TEST_OM_EXIT = "7",
-    TIDYWEAVE_TEST_UNEXPANDED = "must-not-appear"
+    DATARAFT_TEST_OM_TOKEN = secret,
+    DATARAFT_TEST_OM_CAPTURE = capture,
+    DATARAFT_TEST_OM_EXIT = "7",
+    DATARAFT_TEST_UNEXPANDED = "must-not-appear"
   ))
-  adapter <- tw_catalog_openmetadata_dbt(
+  adapter <- dr_catalog_openmetadata_dbt(
     "https://metadata.example",
-    service = "warehouse_${TIDYWEAVE_TEST_UNEXPANDED}",
-    token_env = "TIDYWEAVE_TEST_OM_TOKEN",
+    service = "warehouse_${DATARAFT_TEST_UNEXPANDED}",
+    token_env = "DATARAFT_TEST_OM_TOKEN",
     executable = executable
   )
   expect_warning(
-    result <- tw_dbt_build(fixture$project, echo = FALSE, catalog = adapter),
+    result <- dr_dbt_build(fixture$project, echo = FALSE, catalog = adapter),
     "nonzero"
   )
   expect_identical(result$catalog_delivery$exit_status, 7L)
@@ -424,21 +424,21 @@ test_that("a real subprocess receives literal config and environment-only creden
   config <- jsonlite::read_json(capture)
   expect_identical(
     config$source$serviceName,
-    "warehouse_${TIDYWEAVE_TEST_UNEXPANDED}"
+    "warehouse_${DATARAFT_TEST_UNEXPANDED}"
   )
   expect_false(dir.exists(dirname(
     config$source$sourceConfig$config$dbtConfigSource$dbtManifestFilePath
   )))
-  withr::local_envvar(c(TIDYWEAVE_TEST_OM_EXIT = "0"))
-  expect_identical(tw_publish_metadata(adapter, result)$status, "delivered")
+  withr::local_envvar(c(DATARAFT_TEST_OM_EXIT = "0"))
+  expect_identical(dr_publish_metadata(adapter, result)$status, "delivered")
   expect_equal(fixture$calls$dbt, 1L)
 })
 
 test_that("the generated config validates against the installed official SDK", {
-  python <- Sys.getenv("TIDYWEAVE_OPENMETADATA_PYTHON")
+  python <- Sys.getenv("DATARAFT_OPENMETADATA_PYTHON")
   skip_if(
     !nzchar(python),
-    "Set TIDYWEAVE_OPENMETADATA_PYTHON for optional official SDK validation"
+    "Set DATARAFT_OPENMETADATA_PYTHON for optional official SDK validation"
   )
   fixture <- local_dbt_catalog_project()
   adapter <- local_dbt_catalog(
@@ -448,7 +448,7 @@ test_that("the generated config validates against the installed official SDK", {
       parsingTimeoutLimit = 30L
     )
   )
-  result <- tw_dbt_build(fixture$project, echo = FALSE)
+  result <- dr_dbt_build(fixture$project, echo = FALSE)
   config <- dbt_catalog_config(
     adapter,
     result$artifacts_dir,
@@ -485,10 +485,10 @@ test_that("the generated config validates against the installed official SDK", {
 })
 
 test_that("the installed OpenMetadata CLI reaches a local server and reports rejection safely", {
-  executable <- Sys.getenv("TIDYWEAVE_OPENMETADATA_CLI")
+  executable <- Sys.getenv("DATARAFT_OPENMETADATA_CLI")
   skip_if(
     !nzchar(executable),
-    "Set TIDYWEAVE_OPENMETADATA_CLI for optional real CLI smoke testing"
+    "Set DATARAFT_OPENMETADATA_CLI for optional real CLI smoke testing"
   )
   skip_if_not_installed("webfakes")
   fixture <- local_dbt_catalog_project()
@@ -508,17 +508,17 @@ test_that("the installed OpenMetadata CLI reaches a local server and reports rej
   app$use(handler)
   server <- webfakes::new_app_process(app)
   withr::defer(server$stop())
-  withr::local_envvar(c(TIDYWEAVE_TEST_OM_TOKEN = "fixture.jwt.token"))
-  adapter <- tw_catalog_openmetadata_dbt(
+  withr::local_envvar(c(DATARAFT_TEST_OM_TOKEN = "fixture.jwt.token"))
+  adapter <- dr_catalog_openmetadata_dbt(
     sub("/$", "", server$url()),
     "warehouse",
-    token_env = "TIDYWEAVE_TEST_OM_TOKEN",
+    token_env = "DATARAFT_TEST_OM_TOKEN",
     executable = executable,
     timeout = 30
   )
   expect_warning(
-    result <- tw_dbt_build(fixture$project, echo = FALSE, catalog = adapter),
-    class = "tw_dbt_catalog_delivery"
+    result <- dr_dbt_build(fixture$project, echo = FALSE, catalog = adapter),
+    class = "dr_dbt_catalog_delivery"
   )
   expect_true(result$success)
   expect_identical(result$catalog_delivery$status, "pending")

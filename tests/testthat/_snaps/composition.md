@@ -5,13 +5,13 @@
     Output
       <Data product: orders >
       Deliveries: source_1
-      Transformations: 1 
-      Contract: automatic structure 
+      Transformations: 1
+      Contract: automatic structure
       Quality: 0 rules
-      Target: memory 
-      Status: defined 
+      Target: memory
+      Status: defined
     Code
-      tw_explain(product)
+      dr_explain(product)
     Output
       Product: orders
       Read: 1 named source(s).
@@ -20,46 +20,46 @@
       Transforms receive one table, which may stay lazy.
       Transform: 1 ordered step(s).
       Check: inferred structure and 0 additional rule(s).
-      Return: checked data and run evidence. tw_collect() materializes lazy output.
+      Return: checked data and run evidence. dr_collect() materializes lazy output.
       Materialization: lazy tables remain lazy unless a component collects.
-      tw_validate() checks configuration and dependency cycles; tw_run() executes. 
+      dr_validate() checks configuration and dependency cycles; dr_run() executes.
 
 # invalid specifications fail before acquisition
 
     Code
-      tw_validate(tw_product("orders"))
+      dr_validate(dr_product("orders"))
     Condition
-      Error in `abort()`:
-      ! This product has no source. Add one with tw_add_source().
+      Error in `dr_validate()`:
+      ! This product has no source. Add one with dr_add_source().
 
 # bad transformations preserve an actionable condition and run evidence
 
     Code
-      tw_collect(result)
+      dr_collect(result)
     Condition
-      Error in `abort()`:
-      ! orders failed during execution; no successful output is available. Inspect tw_quality_report(result) for checks and tw_quality_rows(result) for affected rows.
+      Error in `dplyr::collect()`:
+      ! orders failed during execution; no successful output is available. Inspect dr_quality_report(result) for checks and dr_quality_rows(result) for affected rows.
 
 # contract prototypes, anonymous contracts and rule names normalize consistently
 
     Code
-      tw_contract(columns = c(id = "integer", id = "numeric"))
+      dr_contract(columns = c(id = "integer", id = "numeric"))
     Condition
-      Error in `abort()`:
+      Error in `dr_contract()`:
       ! columns must be a named type vector.
 
 # duplicate rule names across a contract and added checks fail preflight
 
     Code
-      tw_validate(product)
+      dr_validate(product)
     Condition
-      Error in `abort()`:
+      Error in `dr_validate()`:
       ! Contract and added quality rules must have unique names.
 
 # catalog delivery gets metadata without data rows or connections
 
     Code
-      result <- tw_run(product)
+      result <- dr_run(product)
     Condition
       Warning:
       Catalog `callback-1` delivery failed; execution status is unchanged. Inspect result$catalog_delivery and retry with fresh metadata.
@@ -75,7 +75,7 @@
 # execution warnings remain inspectable without entering metadata text
 
     Code
-      result <- tw_run(product)
+      result <- dr_run(product)
     Condition
       Warning:
       Execution produced 1 warning(s); inspect result$warning_conditions locally.

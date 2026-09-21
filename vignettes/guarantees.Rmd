@@ -1,0 +1,37 @@
+---
+title: "Guarantees and limits"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Guarantees and limits}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+
+A successful in-memory trial proves that its retained input passed the configured
+checks. It does not reserve a future source version or promise that a later run
+will see the same external data. Definition construction does not read or write
+sources. Execution can do both.
+
+Lake releases preserve published versions during ordinary publication. Publication
+coordinates registry state and storage, but a process crash can leave intermediate
+objects. Inspect interrupted runs and use the lake recovery and cleanup functions
+before retrying. Do not assume an external target adapter provides the same
+transaction or recovery guarantees as a managed lake.
+
+Local lake writes require one coordinated writer. Do not run independent local
+writers against the same catalog. Shared writers require the supported PostgreSQL
+coordination configuration; using an object store alone does not provide locking.
+The PostgreSQL integration job exercises separate writer processes. Backend and
+crash behavior still require testing against the deployment configuration.
+
+Writer bookkeeping is process-local and keyed to the connection configuration.
+A future or targets worker must open its own resources and close those it owns.
+Do not serialize live database connections into workers. Definitions are ordinary
+R values; closures supplied by users can themselves capture mutable state.
+
+“Immutable” describes normal release publication, not a legal retention policy or
+undeletable storage. Operators must define retention for data, registry metadata,
+quality evidence, frozen reports, backups and downstream catalogs. Deleting one
+release does not erase its copies. Resolve deletion requests across those stores;
+DataRaft does not provide a universal subject-erasure operation.

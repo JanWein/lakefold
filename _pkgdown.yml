@@ -1,55 +1,16 @@
-url: https://janwein.github.io/tidyweave/
 destination: site
 home:
-  title: Modular checked data products
-  description: Compose reusable product specifications, preparation recipes and execution workflows.
+  title: DataRaft
+  description: Modular workflows for checked data products.
 template:
   bootstrap: 5
-  bslib:
-    primary: "#17645b"
-    link-color: "#125e75"
-    border-radius: 0.35rem
 navbar:
   structure:
-    left: [getstarted, articles, reference, news]
+    left: [intro, articles, reference, news]
     right: [search, github]
-  components:
-    getstarted:
-      text: Get started
-      href: articles/get-started.html
 reference:
-  - title: Product specifications
-    desc: Define output identity and requirements independently of preparation.
-    contents: [tidyweave-package, tw_product, tw_add_contract, tw_contract, tw_contract_update, tw_model]
-  - title: Preparation recipes
-    desc: Compose ordered steps and choose implementations for reusable operations.
-    contents: [tw_recipe, tw_step_transform, tw_step_lookup, tw_lookup_spec, tw_set_engine, tw_add_transform, product-dplyr]
-  - title: Workflow assembly
-    desc: Add, update, remove and extract independent components without executing them.
-    contents: [tw_workflow, workflow-components, tw_add_source, tw_add_lookup, tw_set_target, tw_replace_sources, tw_execution_config, tw_inspect, tw_plan, tw_validate]
-  - title: Execution and results
-    desc: Try a delivery, run configured destinations, publish checked output and collect results.
-    contents: [tw_trial, tw_run, tw_publish, tw_collect, tw_status, tw_lineage]
-  - title: Quality rules and diagnostics
-    contents: [tw_quality_rule, tw_quality_reference, tw_quality, tw_quality_report, tw_quality_rows, tw_quality_errors, tw_expect_quality, tw_profile_data, tw_pointblank_report, tw_contract_from, tw_contract_confirm, tw_contract_diff, tw_contract_yaml]
-  - title: Metrics and report evidence
-    contents: [tw_metric_set, tw_metric, tw_measure, tw_compare, tw_report_release, tw_report_read, tw_commons_yaml]
-  - title: Source and target adapters
-    desc: Integrations retain their own resource ownership and persistence guarantees.
-    contents: [tw_source_file, tw_source_database, tw_source_release, tw_source_parquet, tw_source_api, tw_source_pins, tw_sql_transform, tw_transform_dbt, tw_target_lake, tw_target_database, tw_target_parquet, tw_target_pins]
-  - title: Lake configuration and operations
-    contents: [tw_open_lake, tw_ingest, tw_lake_config, tw_registry_duckdb, tw_setup_lake, tw_disconnect_lake, tw_write_data, tw_read_release, tw_tbl, tw_releases, tw_register, tw_registry, tw_freshness, tw_check_delivery, tw_interrupted, tw_recover, tw_cleanup]
-  - title: dbt integration
-    contents: [tw_dbt_init, tw_dbt_project, tw_dbt_sources, tw_dbt_contract, tw_dbt_build, tw_dbt_status, tw_dbt_lineage, tw_dbt_model, tw_dbt_publish]
-  - title: Run evidence, catalogs and orchestration
-    contents: [tw_add_catalog, tw_run_history, tw_retry_catalogs, tw_catalog_openlineage, tw_catalog_openmetadata, tw_catalog_openmetadata_dbt, tw_catalog_export, tw_catalog_app, tw_init_project, tw_as_targets]
-  - title: Developer interfaces
-    desc: Public S3 protocols for source, transformation, quality, target and catalog extensions.
-    contents: [tw_capabilities, tw_check_component, tw_read_source, tw_execute_transform, tw_run_quality, tw_write_target, tw_publish_metadata]
+  - title: Family API
+    contents: [starts_with("dr_")]
 articles:
-  - title: Define and execute
-    contents: [get-started, preparation-recipes, modular-workflows]
-  - title: Check and report
-    contents: [quality-gates, save-report]
-  - title: Integrate and extend
-    contents: [optional-integrations, dbt-workflows, relational-insurance, extending-tidyweave]
+  - title: DataRaft
+    contents: [get-started, integrations, guarantees]

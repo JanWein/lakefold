@@ -1,26 +1,24 @@
-Package: tidyweave
-Title: Composable R Workflows for Governed Data Products
-Version: 0.12.0.9000
+Package: dataraft
+Title: Modular Workflows for Checked Data Products
+Version: 0.1.0.9000
 Authors@R: person("Jan-Hendrik", "Weinert", role = c("aut", "cre"), email = "65009403+JanWein@users.noreply.github.com")
-Description: Composes checked data products from reusable product specifications,
-    preparation recipes and execution workflows. Separates requirements from
-    transformation instructions and operation engines through prefixed R verbs
-    and interchangeable S3 adapters. Runs in memory and optionally publishes
-    immutable releases through DuckDB or DuckLake. Supports lazy DBI sources,
-    pointblank checks, dm relationships, dbt, metrics and retained report evidence.
+Description: Installs a family of independently usable packages for checked data
+    products. Product specifications define requirements, recipes define ordered
+    preparation steps and workflows bind them to sources and destinations.
+    Optional components provide lake storage, adapters, dbt, catalogs and metrics.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Depends: R (>= 4.2.0)
-Imports: DBI, dplyr (>= 1.1.0), dbplyr, tibble, rlang, digest, jsonlite, methods, withr
-Suggests: duckdb (>= 1.5.5), testthat (>= 3.0.0), pointblank, dm, shiny, bslib, yaml,
-    readr, readxl, paws.storage, knitr, rmarkdown, processx, RPostgres,
-    arrow, pins (>= 1.2.0), httr2, targets, renv, RSQLite, webfakes, bit64
+Imports: dataraft.core, dataraft.lake, dataraft.adapters, dataraft.dbt,
+    dataraft.catalog, dataraft.metrics
+Suggests: testthat (>= 3.2.0), knitr, rmarkdown, DBI, dplyr, dbplyr, tibble,
+    rlang, digest, jsonlite, withr, duckdb (>= 1.5.5), pointblank, dm, shiny,
+    bslib, yaml, readr, readxl, paws.storage, processx, RPostgres, arrow,
+    pins (>= 1.2.0), httr2, targets, renv, RSQLite, webfakes, bit64, covr
 Config/testthat/edition: 3
-Config/Needs/website: pkgdown, DiagrammeR, DiagrammeRsvg
+Config/Needs/website: pkgdown
 Roxygen: list(markdown = TRUE)
-URL: https://janwein.github.io/tidyweave/,
-    https://github.com/JanWein/tidyweave
+RoxygenNote: 7.3.1
+URL: https://github.com/JanWein/tidyweave
 BugReports: https://github.com/JanWein/tidyweave/issues
 VignetteBuilder: knitr
-Config/roxygen2/version: 8.1.0
-RoxygenNote: 8.1.0

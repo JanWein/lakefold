@@ -13,7 +13,7 @@ jobs:
   documentation:
     runs-on: ubuntu-24.04
     env:
-      TIDYWEAVE_TEST_DUCKLAKE: "true"
+      DATARAFT_TEST_DUCKLAKE: "true"
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v6
@@ -24,10 +24,20 @@ jobs:
           use-public-rspm: true
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
-          extra-packages: any::pkgdown, local::.
+          extra-packages: |
+            any::pkgdown
+            any::devtools
+            local::packages/dataraft.core
+            local::packages/dataraft.lake
+            local::packages/dataraft.adapters
+            local::packages/dataraft.metrics
+            local::packages/dataraft.dbt
+            local::packages/dataraft.catalog
+            local::.
           needs: website
       - name: Check and build documentation
         run: |
+          devtools::build_readme()
           pkgdown::check_pkgdown()
           options(download.file.method = "curl",
                   download.file.extra = "--retry 3 --retry-all-errors")

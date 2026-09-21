@@ -11,3 +11,8 @@
 ^check$
 ^.*\.Rproj$
 ^\.git$
+^packages$
+^tools$
+^maintenance$
+^README\.Rmd$
+^\.lintr$
