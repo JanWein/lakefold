@@ -35,7 +35,8 @@ and migration. A lake created by a newer package may require an upgrade.}
 \item{path}{Optional local lake folder. Derives \code{metadata.duckdb}, \code{data}
 and \code{landing} within that folder. Supply either \code{path} or explicit
 \code{catalog}, \code{storage} and \code{landing}, not both. An explicit backend must
-agree with a folder's saved backend. Default layers are unchanged;
+agree with a folder's saved backend. Explicit layers must match its saved
+layers; omit them when reopening. Default layers are unchanged;
 select \code{layers = c("raw", "staging", "core", "marts")} when needed.}
 }
 \value{
@@ -45,7 +46,8 @@ A connection-free \code{lake_config} specification.
 This constructor validates configuration and resolves paths, but does not
 create directories, install extensions, connect to databases or read secrets.
 With \code{path}, it may read an existing \code{tidyweave.json} to preserve the saved
-backend. It never creates or writes files. A new shorthand lake defaults to
+backend and ordered layers, including named layer roles. It never creates
+or writes files. A new shorthand lake defaults to
 DuckDB; other calls retain the usual DuckLake default. The local layout and
 backend marker are shared with \code{\link[=open_lake]{open_lake()}}. Unknown non-empty folders are
 refused rather than interpreted as a new lake.
