@@ -37,17 +37,17 @@ test_that("external packages can substitute every component without changing the
     function(x, ...) invisible(x)
   )
   data <- data.frame(amount = c(10, 20))
-  tw_workflow <- function(source, transform, target = NULL) {
+  example_workflow <- function(source, transform, target = NULL) {
     tw_product("orders") |>
       tw_add_source(source) |>
       tw_add_transform(transform) |>
       tw_add_quality(~ amount > 0) |>
       tw_set_target(target)
   }
-  native <- tw_workflow(data, function(data) {
+  native <- example_workflow(data, function(data) {
     transform(data, amount = amount * 2)
   })
-  custom <- tw_workflow(
+  custom <- example_workflow(
     structure(list(data = data), class = "example_source"),
     structure(list(factor = 2), class = "example_transform"),
     structure(list(), class = "example_target")

@@ -1,5 +1,8 @@
 # One development grammar
 
+For the current prefixed API migration, use the
+[canonical migration guide](https://janwein.github.io/tidyweave/articles/api-migration.html).
+
 > Historical development record. Examples and findings describe their original
 > development stage. For current usage, follow [Get started](https://janwein.github.io/tidyweave/articles/get-started.html).
 

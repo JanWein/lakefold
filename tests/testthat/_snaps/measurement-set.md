@@ -9,8 +9,8 @@
 # measurement sets retain pinned inputs and report evidence
 
     Code
-      tw_report_release(f$lake, "monthly", tw_measure(original, metrics = list(renamed = metric)),
-      "v1")
+      tw_report_release(f$lake, "monthly", tw_measure(original, metrics = list(
+        renamed = metric)), "v1")
     Message
       Calculated an overall total. For grouped values use by = c("company"). Use by = character() for an explicit overall total.
     Condition

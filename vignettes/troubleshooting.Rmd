@@ -24,7 +24,7 @@ pass `stop_on_failure = FALSE`; retain their strict defaults in scheduled jobs.
 | A lookup rejects rows | Check for unmatched input keys and duplicate or missing lookup keys |
 | A rule errors or has no evaluable rows | Fix the rule or input; an unexecuted check is not a pass |
 
-Follow [lesson 2](check-delivery.html) for a complete failure and recovery.
+Follow [Check a delivery](check-delivery.html) for a complete failure and recovery.
 Checks do not silently repair or remove data.
 
 ## Storage does not behave as expected
@@ -47,14 +47,14 @@ writes and deliberate recovery belong in the
 
 Reports need published lake inputs and explicitly approved, versioned metrics.
 A trial result is useful for exploration but cannot be issued as a report.
-Use [lesson 4](save-report.html) to follow the supported sequence.
+Use [Save a report](save-report.html) to follow the supported sequence.
 
 An older report remaining unchanged after a correction is expected. Read its
 saved values with `tw_report_read()`. To issue changed content, use a new report ID.
 Declaring `dimensions = "company"` allows grouping; it does not group automatically.
 Request company totals with `tw_measure(..., by = "company")`.
 For a stock metric, select one reporting date with `at`; do not sum stocks
-across dates. [Lesson 5](getting-started.html) demonstrates this distinction.
+across dates. [Monthly reporting](getting-started.html) demonstrates this distinction.
 
 ## An integration fails
 

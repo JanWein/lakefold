@@ -118,9 +118,7 @@ test_that("successful results normalize without reruns and preserve provenance",
   )
   expect_error(tw_product("copy", failed), "successful run")
   expect_equal(dplyr::collect(first), tw_collect(first))
-  expect_identical(collect, dplyr::collect)
-  expect_identical(explain, dplyr::explain)
-  expect_identical(tbl, dplyr::tbl)
+  expect_output(tw_explain(next_product), "Product: copy")
   expect_output(dplyr::explain(next_product), "Product: copy")
   replacement <- next_product |>
     tw_add_source(data.frame(id = 3L), replace = TRUE)

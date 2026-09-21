@@ -2,8 +2,8 @@
 #'
 #' An empty [tw_workflow()] combines one product specification, one optional
 #' recipe, primary sources and an optional destination. Components remain
-#' independent R values. `add_*()` rejects occupied slots; `update_*()` replaces
-#' an existing slot and `remove_*()` clears it. Extraction returns the definition,
+#' independent R values. `tw_add_*()` rejects occupied slots; `tw_update_*()` replaces
+#' an existing slot and `tw_remove_*()` clears it. Extraction returns the definition,
 #' never executed data. These edits never read sources or invoke writers.
 #'
 #' A product specification may carry its own sources, checks and destination.

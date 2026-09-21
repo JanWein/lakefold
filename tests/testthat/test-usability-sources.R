@@ -179,7 +179,7 @@ test_that("targets embeds resolved defaults without activating child destination
 
 test_that("managed dbt correction validation runs before commands", {
   calls <- 0L
-  local_mocked_bindings(dbt_build = function(project, ...) {
+  local_mocked_bindings(tw_dbt_build = function(project, ...) {
     calls <<- calls + 1L
     project
   })

@@ -41,8 +41,8 @@ An updated definition, or the extracted component.
 \description{
 An empty \code{\link[=tw_workflow]{tw_workflow()}} combines one product specification, one optional
 recipe, primary sources and an optional destination. Components remain
-independent R values. \verb{add_*()} rejects occupied slots; \verb{update_*()} replaces
-an existing slot and \verb{remove_*()} clears it. Extraction returns the definition,
+independent R values. \verb{tw_add_*()} rejects occupied slots; \verb{tw_update_*()} replaces
+an existing slot and \verb{tw_remove_*()} clears it. Extraction returns the definition,
 never executed data. These edits never read sources or invoke writers.
 }
 \details{

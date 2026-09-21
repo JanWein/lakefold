@@ -152,7 +152,7 @@ test_that("construction and validation create no storage and reject invalid inpu
   expect_false(dir.exists(root))
   expect_error(
     tw_source_release(list(), "orders"),
-    "connected lake or lake_config"
+    "connected lake or tw_lake_config"
   )
   invalid <- config
   invalid$backend <- "unsupported"

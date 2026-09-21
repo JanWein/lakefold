@@ -188,10 +188,10 @@ test_that("batch calculation manages one owned connection and preserves closed r
     approved = TRUE,
     code_version = "v1"
   )
-  actual_connect <- tidyweave:::connect_lake
+  actual_connect <- tidyweave::tw_connect_lake
   opened <- list()
   testthat::local_mocked_bindings(
-    connect_lake = function(...) {
+    tw_connect_lake = function(...) {
       lake <- actual_connect(...)
       opened[[length(opened) + 1L]] <<- lake
       lake

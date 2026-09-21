@@ -43,7 +43,7 @@ test_that("managed project creation, updates and inspection are deferred", {
     ),
     class = "tw_run_result"
   )
-  testthat::local_mocked_bindings(connect_lake = function(...) {
+  testthat::local_mocked_bindings(tw_connect_lake = function(...) {
     stop("Unexpected connection")
   })
   project <- tw_dbt_project(

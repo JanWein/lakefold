@@ -40,8 +40,8 @@ test_that("result measurements borrow live lakes and recover closed handles", {
   expect_true(DBI::dbIsValid(lake$con))
   tw_close_lake(lake)
   opened <- NULL
-  connect <- connect_lake
-  testthat::local_mocked_bindings(connect_lake = function(
+  connect <- tw_connect_lake
+  testthat::local_mocked_bindings(tw_connect_lake = function(
     config,
     read_only = FALSE
   ) {
@@ -66,7 +66,7 @@ test_that("measure result preflight rejects failed runs, wrong assets and approv
     list(status = "blocked", asset = "orders", release_id = "r1"),
     class = "tw_run_result"
   )
-  testthat::local_mocked_bindings(connect_lake = function(...) {
+  testthat::local_mocked_bindings(tw_connect_lake = function(...) {
     stop("must not connect")
   })
   expect_error(tw_measure(result, total), "successful published result")
@@ -95,8 +95,8 @@ test_that("result measurements keep stock-date checks and close on errors", {
     code_version = "metric-v1"
   )
   opened <- NULL
-  connect <- connect_lake
-  testthat::local_mocked_bindings(connect_lake = function(
+  connect <- tw_connect_lake
+  testthat::local_mocked_bindings(tw_connect_lake = function(
     config,
     read_only = FALSE
   ) {

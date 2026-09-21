@@ -1,20 +1,24 @@
-# API by task
+# API map
 
-| Task | Start with |
+The public interface uses `tw_` throughout. Start with independently reusable
+components, then bind a delivery and execute.
+
+| Responsibility | Main functions |
 |---|---|
-| Define and execute a product | `tw_product(name, data)`, `tw_trial()`, `tw_collect()` |
-| Add preparation and expectations | Supported dplyr verbs, `tw_add_contract()`, `tw_add_quality()` |
-| Enrich without multiplying rows | `tw_add_lookup(..., by = join_by(...))` |
-| Accept a raw delivery | `data |> tw_ingest(to = ...)` |
-| Build and approve SQL outputs | `tw_dbt_project(..., lake, sources) |> tw_run() |> tw_publish("model")` |
-| Understand a definition | `tw_inspect()`, `tw_explain()`, `tw_validate()`, `tw_capabilities()` |
-| Select persistence | `tw_set_target()`, `tw_publish()`, `target_*()` |
-| Read execution evidence | `tw_status()`, `tw_quality()`, `tw_run_history()`, `tw_incidents()` |
-| Deliver external metadata | `tw_add_catalog()`, `catalog_*()`, `tw_retry_catalogs()` |
-| Reproduce an issued report | `tw_measure(published_result, metric)`, `tw_report_release()`, `tw_report_read()` |
-| Start a project or dependency graph | `tw_init_project()`, `tw_as_targets()` |
-| Implement an adapter | `tw_read_source()`, `tw_write_target()`, `tw_run_quality()` and S3 methods |
+| Product requirements | `tw_product()`, `tw_add_contract()`, `tw_add_quality()` |
+| Preparation instructions | `tw_recipe()`, `tw_step_*()`, `tw_lookup_spec()` |
+| Component assembly | `tw_workflow()`, `tw_add_product()`, `tw_add_recipe()` |
+| Component replacement | `tw_update_product()`, `tw_update_recipe()`, `tw_extract_recipe()` |
+| Operation implementation | `tw_set_engine()` |
+| Try or save a delivery | `tw_trial()`, `tw_run()`, `tw_publish()` |
+| Data and evidence | `tw_collect()`, `tw_status()`, `tw_quality_report()`, `tw_lineage()` |
+| Storage and integration | `tw_source_*()`, `tw_target_*()`, `tw_catalog_*()` |
+| Metrics and reports | `tw_metric_set()`, `tw_measure()`, `tw_report_release()` |
+| Extension protocols | `tw_read_source()`, `tw_execute_transform()`, `tw_write_target()` |
 
-Arguments, return values and examples have one canonical home in the
-[function reference](https://janwein.github.io/tidyweave/reference/index.html).
-Learn the grammar with the [five lessons](https://janwein.github.io/tidyweave/articles/get-started.html).
+The [function reference](https://janwein.github.io/tidyweave/reference/index.html)
+is the canonical source for arguments, returns and examples. Follow
+[Get started](https://janwein.github.io/tidyweave/articles/get-started.html) for
+one complete workflow, or the
+[migration guide](https://janwein.github.io/tidyweave/articles/api-migration.html)
+for existing code.

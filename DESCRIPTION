@@ -2,12 +2,12 @@ Package: tidyweave
 Title: Composable R Workflows for Governed Data Products
 Version: 0.12.0.9000
 Authors@R: person("Jan-Hendrik", "Weinert", role = c("aut", "cre"), email = "65009403+JanWein@users.noreply.github.com")
-Description: Composes data acquisition, transformation, contracts and quality
-    checks through simple R verbs and interchangeable S3 adapters. Runs ordinary
-    data-frame workflows without infrastructure and optionally publishes immutable
-    releases through DuckDB or DuckLake. Generates execution metadata and supports
-    DBI sources, pointblank checks, dbt workflows, governed metrics and reports.
-    Existing lazy database pipelines remain available for larger workloads.
+Description: Composes checked data products from reusable product specifications,
+    preparation recipes and execution workflows. Separates requirements from
+    transformation instructions and operation engines through prefixed R verbs
+    and interchangeable S3 adapters. Runs in memory and optionally publishes
+    immutable releases through DuckDB or DuckLake. Supports lazy DBI sources,
+    pointblank checks, dm relationships, dbt, metrics and retained report evidence.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Depends: R (>= 4.2.0)

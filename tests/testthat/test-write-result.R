@@ -3,8 +3,8 @@ test_that("write results are pinned product and lookup inputs", {
   lake <- tw_open_lake(withr::local_tempdir())
   withr::defer(tw_close_lake(lake))
   connections <- 0L
-  connect <- connect_lake
-  local_mocked_bindings(connect_lake = function(...) {
+  connect <- tw_connect_lake
+  local_mocked_bindings(tw_connect_lake = function(...) {
     connections <<- connections + 1L
     connect(...)
   })

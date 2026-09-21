@@ -79,7 +79,7 @@ tw_dbt_publish <- function(
     dbt_verified_result(result)
   }
   model <- dbt_publication_model(result$manifest, model)
-  node <- result$manifest$nodes[[tw_model]]
+  node <- result$manifest$nodes[[model]]
   if (
     is.null(node) ||
       !node$resource_type %in% c("model", "seed", "snapshot") ||

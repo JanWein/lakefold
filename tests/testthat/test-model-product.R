@@ -183,8 +183,8 @@ test_that("nested member selections reuse the active publication connection", {
   first <- tw_publish(tw_product("portfolio", model_fixture()), to = root)
   lake <- tw_open_lake(root)
   withr::defer(tw_close_lake(lake))
-  real_connect <- connect_lake
-  local_mocked_bindings(connect_lake = function(
+  real_connect <- tw_connect_lake
+  local_mocked_bindings(tw_connect_lake = function(
     config,
     read_only = config$read_only
   ) {
