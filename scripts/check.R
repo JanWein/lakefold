@@ -17,5 +17,15 @@ failed <- vapply(
   logical(1)
 )
 if (any(failed)) {
+  logs <- list.files(
+    "check",
+    pattern = "[.]Rout[.]fail$",
+    recursive = TRUE,
+    full.names = TRUE
+  )
+  for (log in logs) {
+    cat("\nTest log: ", log, "\n", sep = "")
+    cat(readLines(log), sep = "\n")
+  }
   stop("Package checks failed: ", paste(paths[failed], collapse = ", "))
 }

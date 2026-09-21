@@ -37,7 +37,7 @@ jobs:
           needs: website
       - name: Check and build documentation
         run: |
-          devtools::build_readme()
+          rmarkdown::render("README.Rmd", output_format = "github_document", quiet = TRUE)
           pkgdown::check_pkgdown()
           options(download.file.method = "curl",
                   download.file.extra = "--retry 3 --retry-all-errors")
