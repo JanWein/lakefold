@@ -2,7 +2,17 @@ library(tidyweave)
 job <- readRDS(commandArgs(trailingOnly = TRUE)[[1]])
 result <- tryCatch(
   {
-    if (job$action == "report") {
+    if (job$action == "hold") {
+      hold <- function() {
+        lake <- connect_lake(job$config)
+        on.exit(close_lake(lake), add = TRUE)
+        tidyweave:::assert_writable(lake)
+        file.create(job$ready)
+        Sys.sleep(30)
+      }
+      hold()
+      list(status = "held")
+    } else if (job$action == "report") {
       metrics <- metric_set(
         "shared",
         count = dplyr::n(),

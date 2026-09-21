@@ -42,6 +42,11 @@ test_that("model publication pins all members and rejects stale correction", {
   skip_if_not_installed("dm")
   skip_if_not_installed("duckdb")
   root <- withr::local_tempdir()
+  initialized <- open_lake(
+    root,
+    backend = Sys.getenv("TIDYWEAVE_TEST_BACKEND", "duckdb")
+  )
+  close_lake(initialized)
   spec <- product("portfolio", model_fixture())
   first <- publish(spec, to = root)
   second <- publish(
@@ -86,7 +91,10 @@ test_that("model publication pins all members and rejects stale correction", {
 test_that("a failed multi-table transaction leaves no partial release", {
   skip_if_not_installed("dm")
   skip_if_not_installed("duckdb")
-  lake <- open_lake(withr::local_tempdir())
+  lake <- open_lake(
+    withr::local_tempdir(),
+    backend = Sys.getenv("TIDYWEAVE_TEST_BACKEND", "duckdb")
+  )
   withr::defer(close_lake(lake))
   spec <- product("portfolio", model_fixture())
   first <- publish(spec, to = lake)
@@ -110,6 +118,11 @@ test_that("a failed multi-table transaction leaves no partial release", {
 test_that("table publication rejects a stale prior result", {
   skip_if_not_installed("duckdb")
   root <- withr::local_tempdir()
+  initialized <- open_lake(
+    root,
+    backend = Sys.getenv("TIDYWEAVE_TEST_BACKEND", "duckdb")
+  )
+  close_lake(initialized)
   spec <- product("orders", data.frame(id = 1L))
   first <- publish(spec, to = root)
   second <- publish(
@@ -129,7 +142,10 @@ test_that("table publication rejects a stale prior result", {
 test_that("model member names and established contracts cannot be bypassed", {
   skip_if_not_installed("dm")
   skip_if_not_installed("duckdb")
-  lake <- open_lake(withr::local_tempdir())
+  lake <- open_lake(
+    withr::local_tempdir(),
+    backend = Sys.getenv("TIDYWEAVE_TEST_BACKEND", "duckdb")
+  )
   withr::defer(close_lake(lake))
   spec <- product(
     "portfolio",

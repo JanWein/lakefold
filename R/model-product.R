@@ -183,7 +183,22 @@ run.tw_model_product <- function(
     }
   }
   if (result$status == "completed" && !is.null(x$target)) {
-    result <- publish_model_result(x, result, previous)
+    result <- tryCatch(
+      publish_model_result(x, result, previous),
+      error = function(e) {
+        result$status <- "error"
+        result$error <- e
+        if (stop_on_failure) {
+          abort(
+            conditionMessage(e),
+            class = class(e)[[1]],
+            parent = e,
+            result = result
+          )
+        }
+        result
+      }
+    )
   } else if (!is.null(previous) && is.null(x$target)) {
     abort("previous is available only when publishing to a lake.")
   }
@@ -293,7 +308,8 @@ publish_model_result <- function(x, result, previous) {
         "Model publication failed; prior model remains available."
       )
     },
-    add = TRUE
+    add = TRUE,
+    after = FALSE
   )
   DBI::dbWithTransaction(lake$con, {
     for (name in names(tables)) {

@@ -251,5 +251,10 @@ tbl.tw_lake <- function(src, asset, release = NULL, ...) {
   rlang::check_dots_empty()
   lake <- src
   r <- resolve_release(lake, asset_id(asset), release)
+  if (startsWith(r$table_name[[1]], "model_")) {
+    abort(
+      "Use read_release() to read a complete model, or select a published member table."
+    )
+  }
   dplyr::tbl(lake$con, table_id(r$schema_name[[1]], r$table_name[[1]]))
 }

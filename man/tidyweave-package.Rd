@@ -62,7 +62,8 @@ APIs. There is no required platform object or catalog service.
 
 Caller-supplied connections stay caller-owned; keep them open for lazy results.
 Factory-backed DBI sources materialize before closing their owned connections.
-Lake and local evidence writes need one coordinated writer. External catalog
+Local file lakes and evidence directories need one coordinated writer.
+PostgreSQL catalogs coordinate package writes through advisory locks. External catalog
 delivery is not part of a data transaction. No scheduler, streaming engine,
 distributed transaction system or enterprise authentication system is provided.
 Public interfaces remain experimental until the first stable release candidate.

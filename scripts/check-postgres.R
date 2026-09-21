@@ -2,8 +2,9 @@
 # The database must be empty; never point this script at an existing lake.
 library(tidyweave)
 stopifnot(nzchar(Sys.getenv("TIDYWEAVE_TEST_PG_CONNECTION")))
-root <- tempfile("tidyweave-shared-")
-dir.create(root)
+root <- normalizePath("check", mustWork = FALSE)
+root <- file.path(root, "postgres")
+dir.create(root, recursive = TRUE, showWarnings = FALSE)
 config <- lake_config(
   registry_postgres("TIDYWEAVE_TEST_PG_CONNECTION", lock_timeout = 30),
   storage_local(file.path(root, "data")),
@@ -33,7 +34,9 @@ finish <- function(job) {
     stop("Worker timed out")
   }
   stopifnot(job$process$get_exit_status() == 0L)
-  readRDS(job$output)
+  result <- readRDS(job$output)
+  print(result)
+  result
 }
 # Independent clients can publish without duplicate registration or schema races.
 a <- launch(list(action = "publish", asset = "left", value = 1L), 1)
@@ -62,6 +65,30 @@ stopifnot(
 a <- launch(list(action = "report", previous = first), 5)
 b <- launch(list(action = "report", previous = first), 6)
 stopifnot(finish(a)$status == "reported", finish(b)$status == "reported")
+# An interrupted session relinquishes the database lock; no manual lock-file cleanup.
+ready <- file.path(root, "writer-ready")
+holder <- launch(list(action = "hold", ready = ready), 7)
+deadline <- Sys.time() + 15
+while (!file.exists(ready) && Sys.time() < deadline) {
+  Sys.sleep(0.1)
+}
+stopifnot(file.exists(ready))
+short_wait <- config
+short_wait$catalog$lock_timeout <- 0
+busy <- tryCatch(
+  publish(product("busy", data.frame(id = 1L)), to = short_wait),
+  error = identity
+)
+stopifnot(inherits(busy$result$error, "tw_writer_busy"))
+reader <- connect_lake(config, read_only = TRUE)
+stopifnot(read_release(reader, "shared", first$release_id)$id == 1L)
+close_lake(reader)
+holder$process$kill()
+holder$process$wait(timeout = 10000)
+stopifnot(
+  publish(product("after_crash", data.frame(id = 1L)), to = config)$status ==
+    "published"
+)
 lake <- connect_lake(config)
 stopifnot(
   nrow(releases(lake, "shared")) == 2L,
