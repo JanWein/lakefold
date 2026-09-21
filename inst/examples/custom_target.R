@@ -110,7 +110,7 @@ for (name in names(methods)) {
   )
 }
 
-workflow <- function(source, target = NULL, check = ~ amount >= 0) {
+guide_workflow <- function(source, target = NULL, check = ~ amount >= 0) {
   product("orders") |>
     add_source(source) |>
     add_transform(function(data) transform(data, amount = amount * 2)) |>
@@ -119,8 +119,8 @@ workflow <- function(source, target = NULL, check = ~ amount >= 0) {
 }
 input <- data.frame(id = 1:2, amount = c(10, 20))
 path <- tempfile("custom-target-")
-native <- run(workflow(input))
-extended <- run(workflow(
+native <- run(guide_workflow(input))
+extended <- run(guide_workflow(
   guide_source(input),
   guide_target(path),
   guide_quality()
@@ -138,7 +138,7 @@ stopifnot(
 )
 
 blocked_path <- tempfile("blocked-target-")
-bad <- workflow(
+bad <- guide_workflow(
   guide_source(data.frame(id = 1L, amount = -1)),
   guide_target(blocked_path),
   guide_quality()

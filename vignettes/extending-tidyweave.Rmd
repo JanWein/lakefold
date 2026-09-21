@@ -144,7 +144,7 @@ execute a query or write a file just to decide whether a definition is valid.
 ## Prove that substitution leaves the workflow intact
 
 ```{r substitution}
-workflow <- function(source, target = NULL, check = ~ amount >= 0) {
+guide_workflow <- function(source, target = NULL, check = ~ amount >= 0) {
   product("orders") |>
     add_source(source) |>
     add_transform(function(data) transform(data, amount = amount * 2)) |>
@@ -153,8 +153,8 @@ workflow <- function(source, target = NULL, check = ~ amount >= 0) {
 }
 input <- data.frame(id = 1:2, amount = c(10, 20))
 path <- tempfile("custom-target-")
-native <- run(workflow(input))
-extended <- run(workflow(guide_source(input), guide_target(path), guide_quality()))
+native <- run(guide_workflow(input))
+extended <- run(guide_workflow(guide_source(input), guide_target(path), guide_quality()))
 stopifnot(identical(collect(native), collect(extended)))
 stopifnot(identical(readRDS(extended$outputs$path), as.data.frame(collect(native))))
 
@@ -170,7 +170,7 @@ a remote database supports a particular transaction or SQL translation.
 
 ```{r gate}
 blocked_path <- tempfile("blocked-target-")
-bad <- workflow(guide_source(data.frame(id = 1L, amount = -1)),
+bad <- guide_workflow(guide_source(data.frame(id = 1L, amount = -1)),
   guide_target(blocked_path), guide_quality())
 blocked <- run(bad, stop_on_failure = FALSE)
 stopifnot(blocked$status == "blocked", !file.exists(blocked_path))

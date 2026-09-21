@@ -15,29 +15,40 @@ install.packages("remotes")
 remotes::install_github("JanWein/tidyweave")
 ```
 
-## Try your first product
+## Define, prepare, assemble
 
-A table product is a reusable set of instructions for a named table.
+Keep the product's meaning separate from its preparation and its inputs.
+The interface follows the specification, recipe and workflow pattern used by
+parsnip, recipes and workflows.
 
 ```r
 library(tidyweave)
 
-delivery <- data.frame(id = 1:3, amount = c(25, 75, 50))
-orders <- product("orders", delivery) |>
-  dplyr::mutate(amount = round(amount, 2)) |>
+orders <- product("orders") |>
+  add_contract(c(id = "integer", amount = "numeric")) |>
   add_quality(~ amount >= 0)
 
-result <- orders |> trial()
+preparation <- recipe() |>
+  step_mutate(amount = round(amount, 2))
+
+flow <- workflow() |>
+  add_product(orders) |>
+  add_recipe(preparation)
+
+result <- trial(flow, data = data.frame(id = 1:3, amount = c(25, 75, 50)))
 collect(result)
 ```
 
-This returns the three checked rows, totalling **150**. `trial()` tries the
-instructions without writing a publication; `collect()` returns an ordinary
-tibble. No database or service is needed.
+The result contains three checked rows, totalling **150**. Definitions perform
+no reads or writes. Use the same workflow on the next delivery with `data =`.
+Swap preparation with `update_recipe()` and reuse it in another product.
+`trial()` disables configured writers; `publish()` saves checked output.
 
-For related tables, a model product keeps the dm relationships and publishes
-one consistent model. The [cancellation report](https://janwein.github.io/tidyweave/articles/cancellation-report.html)
-shows reusable contracts, model products and corrected reports.
+[Modular workflows](https://janwein.github.io/tidyweave/articles/modular-workflows.html)
+walks through customer, policy and broker data to a cancellation rate, and
+explains the mapping to tidymodels. Direct `product("orders", delivery)` pipelines
+with ordinary dplyr verbs continue to work. Model products retain their dm
+relationships; prepare their member tables before assembling the model.
 
 ## Learn tidyweave
 

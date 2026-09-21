@@ -58,7 +58,8 @@ editable_product <- function(x) {
 #' on the final candidate. Sources, transforms, rules and catalogs accumulate.
 #' A contract or target replaces the previously configured component.
 #'
-#' @param x Product created with `product("name")`.
+#' @param x Product created with `product("name")`. `add_source()` and
+#'   `set_target()` also accept modular [workflow()] definitions.
 #' @param source Data frame, file path, function or source adapter.
 #' @param replace Replace a source with the same name explicitly.
 #' @param reader Optional file reader. CSV, TSV, RDS and Excel have defaults.
@@ -82,6 +83,14 @@ editable_product <- function(x) {
 #'   add_quality(~ amount >= 0)
 #' orders |> trial() |> collect()
 add_source <- function(x, source, name = NULL, reader = NULL, replace = FALSE) {
+  if (inherits(x, "tw_product_workflow")) {
+    holder <- product("workflow")
+    holder$sources <- x$sources
+    holder <- add_source(holder, source, name, reader, replace)
+    x$sources <- holder$sources
+    check_workflow_slots(x)
+    return(x)
+  }
   x <- editable_product(x)
   flag(replace, "replace")
   if (is.null(name) && replace) {
@@ -111,6 +120,9 @@ add_source <- function(x, source, name = NULL, reader = NULL, replace = FALSE) {
 }
 
 normalize_source <- function(source, id, name, reader = NULL) {
+  if (inherits(source, "tw_product_workflow")) {
+    source <- compile_product_workflow(source)
+  }
   if (!is.null(reader) && (!is.character(source) || !is.function(reader))) {
     abort("reader is only used with a file path and must be a function.")
   }
@@ -201,6 +213,11 @@ add_quality <- function(x, quality, name = NULL, engine = NULL) {
 #' @rdname add_source
 #' @export
 set_target <- function(x, target) {
+  if (inherits(x, "tw_product_workflow")) {
+    x$target <- normalize_target(target)
+    check_workflow_slots(x)
+    return(x)
+  }
   x <- editable_product(x)
   x$target <- normalize_target(target)
   x

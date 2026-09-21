@@ -3,9 +3,9 @@
 \name{workflow}
 \alias{workflow}
 \alias{run.tw_workflow}
-\title{Define a delivery workflow with explicit dependencies}
+\title{Define a modular product workflow or a delivery dependency graph}
 \usage{
-workflow(..., inputs = list(), code_version)
+workflow(..., inputs = list(), code_version = NULL, execution = NULL)
 
 \method{run}{tw_workflow}(
   pipeline,
@@ -23,7 +23,11 @@ defaults and \code{...} in step functions are not supported.}
 
 \item{inputs}{Named list of initial input values.}
 
-\item{code_version}{Explicit version of workflow code and dependencies.}
+\item{code_version}{Explicit version of workflow code and dependencies.
+Required for function dependency graphs; optional for modular workflows.}
+
+\item{execution}{Optional connection-free \code{\link[=execution_config]{execution_config()}} for a modular
+workflow. Function graphs configure execution inside their steps.}
 
 \item{pipeline}{A workflow specification.}
 
@@ -37,17 +41,23 @@ defaults and \code{...} in step functions are not supported.}
 \code{FALSE} to inspect failures directly; errors also retain \code{condition$result}.}
 }
 \value{
-A workflow specification accepted by \code{\link[=run]{run()}}. Its result contains
-named \code{results}, effective \code{inputs}, and a step \code{status} table.
+A workflow specification. Modular workflows return ordinary product
+run results from \code{\link[=trial]{trial()}}, \code{\link[=run]{run()}} or \code{\link[=publish]{publish()}}. Function dependency
+graphs return named \code{results}, effective \code{inputs}, and a step \code{status} table.
 }
 \description{
+Call \code{workflow()} without step functions to start a modular assembly with
+\code{\link[=add_product]{add_product()}}, \code{\link[=add_recipe]{add_recipe()}} and \code{\link[=add_source]{add_source()}}. Bind data at definition
+time or with \code{trial(flow, data = delivery)}. Use \code{\link[=execution_config]{execution_config()}} for
+optional engine defaults. Each component can be extracted or replaced.
+}
+\details{
 Named functions describe the receipt, preparation and dbt steps once.
 Each function argument names an input or another step. Steps execute in
 dependency order; a failed step blocks its consumers. Results remain ordinary
 R values, so existing \code{\link[=ingest]{ingest()}}, \code{\link[=publish]{publish()}} and dbt calls keep their meaning.
 Keep report issuance outside the workflow as an explicit final decision.
-}
-\details{
+
 On correction, pass replacement \code{inputs} and the \code{previous} workflow result
 to \code{\link[=run]{run()}}. Unchanged successful branches are reused; changed inputs and their
 consumers rerun. Failed branches retry on the next explicit call. Change

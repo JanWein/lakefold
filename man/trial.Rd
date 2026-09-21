@@ -7,7 +7,7 @@
 trial(x, data = NULL, sources = NULL, stop_on_failure = FALSE)
 }
 \arguments{
-\item{x}{Product definition.}
+\item{x}{Product or modular \code{\link[=workflow]{workflow()}} definition.}
 
 \item{data, sources}{Replacement delivery or named sources, as in \code{\link[=run]{run()}}.}
 

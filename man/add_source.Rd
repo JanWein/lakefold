@@ -22,7 +22,8 @@ set_target(x, target)
 add_catalog(x, catalog, name = NULL)
 }
 \arguments{
-\item{x}{Product created with \code{product("name")}.}
+\item{x}{Product created with \code{product("name")}. \code{add_source()} and
+\code{set_target()} also accept modular \code{\link[=workflow]{workflow()}} definitions.}
 
 \item{source}{Data frame, file path, function or source adapter.}
 

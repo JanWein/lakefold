@@ -30,6 +30,9 @@ navbar:
         - text: Why tidyweave?
           href: articles/why-tidyweave.html
 reference:
+  - title: Compose specifications, recipes and workflows
+    desc: Define reusable components, assemble them, and choose operation engines.
+    contents: [recipe, step_transform, step_lookup, lookup_spec, set_engine, workflow-components]
   - title: Define, try and collect
     desc: Start here. For a guided introduction, follow [Get started](../articles/get-started.html).
     contents: [tidyweave-package, product, product-dplyr, trial, collect]
@@ -62,7 +65,7 @@ articles:
     desc: Follow these five lessons in order. Each includes its own setup.
     contents: [get-started, first-product, check-delivery, publish-data, save-report, getting-started]
   - title: Prepare, check and repeat
-    contents: [learn, composing-products, three-deliveries, quality-gates, quality-history, everyday-workflows]
+    contents: [learn, modular-workflows, composing-products, three-deliveries, quality-gates, quality-history, everyday-workflows]
   - title: Store and calculate
     contents: [create-ducklake, products-metrics, cancellation-report, shared-ducklake]
   - title: Connect tools and work through larger examples

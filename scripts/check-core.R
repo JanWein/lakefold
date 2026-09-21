@@ -98,3 +98,18 @@ stopifnot(!file.exists(path))
 cat(
   "Core installation without DuckDB: native workflows, execution defaults, contracts, corrections and publication gates passed.\n"
 )
+
+preparation <- recipe() |> step_mutate(amount = amount * 2)
+modular <- workflow() |>
+  add_product(product("core_modular") |> add_quality(~ amount > 0)) |>
+  add_recipe(preparation)
+checked <- trial(modular, data = data.frame(amount = c(10, 20)))
+stopifnot(identical(collect(checked)$amount, c(20, 40)))
+stopifnot(identical(extract_recipe(modular), preparation))
+stopifnot(identical(
+  trial(modular, data = data.frame(amount = -1))$status,
+  "blocked"
+))
+cat(
+  "Modular specifications, recipes and workflows passed without optional engines.\n"
+)

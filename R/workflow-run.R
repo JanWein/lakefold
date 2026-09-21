@@ -1,4 +1,9 @@
-#' Define a delivery workflow with explicit dependencies
+#' Define a modular product workflow or a delivery dependency graph
+#'
+#' Call `workflow()` without step functions to start a modular assembly with
+#' [add_product()], [add_recipe()] and [add_source()]. Bind data at definition
+#' time or with `trial(flow, data = delivery)`. Use [execution_config()] for
+#' optional engine defaults. Each component can be extracted or replaced.
 #'
 #' Named functions describe the receipt, preparation and dbt steps once.
 #' Each function argument names an input or another step. Steps execute in
@@ -17,8 +22,12 @@
 #'   defaults and `...` in step functions are not supported.
 #' @param inputs Named list of initial input values.
 #' @param code_version Explicit version of workflow code and dependencies.
-#' @returns A workflow specification accepted by [run()]. Its result contains
-#'   named `results`, effective `inputs`, and a step `status` table.
+#'   Required for function dependency graphs; optional for modular workflows.
+#' @param execution Optional connection-free [execution_config()] for a modular
+#'   workflow. Function graphs configure execution inside their steps.
+#' @returns A workflow specification. Modular workflows return ordinary product
+#'   run results from [trial()], [run()] or [publish()]. Function dependency
+#'   graphs return named `results`, effective `inputs`, and a step `status` table.
 #' @export
 #' @examples
 #' flow <- workflow(
@@ -33,8 +42,19 @@
 #' corrected <- run(flow, inputs = list(delivery = data.frame(amount = 40)),
 #'   previous = first)
 #' status(corrected)
-workflow <- function(..., inputs = list(), code_version) {
+workflow <- function(
+  ...,
+  inputs = list(),
+  code_version = NULL,
+  execution = NULL
+) {
   steps <- list(...)
+  if (!length(steps) && identical(inputs, list())) {
+    return(new_product_workflow(code_version, execution))
+  }
+  if (!is.null(execution)) {
+    abort("Configure execution inside the function workflow's steps.")
+  }
   scalar(code_version, "code_version")
   check_names <- function(x) {
     is.list(x) &&
