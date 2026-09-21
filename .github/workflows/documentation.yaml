@@ -26,6 +26,8 @@ jobs:
         with:
           extra-packages: |
             any::pkgdown
+            any::DiagrammeR
+            any::DiagrammeRsvg
             any::devtools
             local::packages/dataraft.core
             local::packages/dataraft.lake
