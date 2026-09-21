@@ -81,7 +81,7 @@ tw_collect(tw_trial(enriched_flow, data = delivery))
 The lookup checks reference-key uniqueness and, by default, requires every input
 key to match. `unmatched = "keep"` retains unmatched input rows explicitly.
 For a reusable relationship, create `tw_lookup_spec()` and attach it with
-`tw_step_transform()`. See [Engines](engines.html) for optional dm checking.
+`tw_step_transform()`. Select `tw_set_engine("dm")` on that specification for optional dm checking.
 
 ## Extend with ordinary R
 
@@ -104,3 +104,24 @@ Continue with [Workflows](modular-workflows.html).
 stopifnot(length(preparation$steps) == 2L,
           isTRUE(all.equal(sort(totals$total), c(30, 30.12))))
 ```
+
+## Choose an operation engine
+
+`tw_set_engine()` changes the implementation of a reusable specification.
+Selection stores configuration; optional packages are needed only at execution.
+
+```{r operation-engines}
+positive <- tw_quality_rule("positive", ~ amount > 0)
+positive |> tw_set_engine("native") |>
+  tw_run_quality(data.frame(amount = c(10, -1, NA)))
+
+relationship <- tw_lookup_spec(regions, by = "region", name = "regions")
+dm_relationship <- relationship |> tw_set_engine("dm")
+```
+
+The native check records two failures. Formula quality rules support `"native"`
+and `"pointblank"`; lookup specifications support `"native"` and `"dm"`.
+Attach a quality rule with `tw_add_quality()` and a lookup specification with
+`tw_step_transform()`. Arbitrary R callbacks cannot be switched to another engine.
+Explicit component choices override `tw_execution_config()` defaults. Storage
+is chosen independently through the workflow's target.

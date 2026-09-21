@@ -1,4 +1,4 @@
-test_that("reports preserve doubles and reject changes smaller than legacy rounding", {
+test_that("reports preserve doubles and detect small numeric changes", {
   f <- fixture()
   on.exit(fixture_cleanup(f))
   tw_run(f$pipeline, f$lake)
@@ -50,30 +50,4 @@ test_that("nested report values are rejected before any report is written", {
     tw_report_release(f$lake, "nested", list(total = value), "v1")
   )
   expect_equal(nrow(tw_registry(f$lake, "reports")), 0L)
-})
-
-test_that("legacy report JSON remains readable", {
-  f <- fixture()
-  on.exit(fixture_cleanup(f))
-  insert_meta(
-    f$lake,
-    "reports",
-    list(
-      id = "legacy",
-      created_at = now(),
-      manifest = jencode(list(
-        id = "legacy",
-        measures = list(
-          total = list(
-            manifest = list(metric = "total"),
-            values = data.frame(value = 300)
-          )
-        )
-      ))
-    )
-  )
-  expect_equal(
-    tw_report_read(f$lake, "legacy", values_only = TRUE)$total$value,
-    300
-  )
 })

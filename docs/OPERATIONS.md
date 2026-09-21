@@ -133,8 +133,7 @@ The environment-driven S3 example is [setup_s3.R](../inst/examples/setup_s3.R):
 | `DUCKLAKE_PG_CONNECTION` | PostgreSQL registry connection string when that backend is selected |
 
 These example variables are not mandatory package configuration. Changing
-`tw_registry_duckdb()` to `tw_registry_postgres()` connects to another registry; it does
-not migrate an existing lake. Back up registry metadata and data objects together,
+`tw_registry_duckdb()` to `tw_registry_postgres()` connects to another registry. Back up registry metadata and data objects together,
 and test restoration. A metadata-only backup cannot reconstruct the data files.
 
 ## Schedule a project

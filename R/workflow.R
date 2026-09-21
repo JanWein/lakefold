@@ -124,7 +124,7 @@ tw_plan <- function(pipeline) {
 #' Execute a pipeline, product, metric or dbt project with a consistent
 #'   object-first API
 #'
-#' Internal dispatch for legacy lake pipelines, metrics and dbt projects.
+#' Internal dispatch for lake pipelines, metrics and dbt projects.
 #' The public entry point is [tw_run()]. A connection opened here is closed on
 #' exit; an existing connection remains owned by its caller.
 #' @param object Pipeline, composed or derived product, metric or dbt project

@@ -182,6 +182,33 @@ subsequent requests with the same policies. Repeated requests, inconsistent page
 schemas and exceeding `max_pages` fail the run instead of silently truncating
 it. Without a configured retry bound, the adapter uses up to three httr2 attempts.
 
+## Local storage and reopening
+
+DuckDB >= 1.5.5 is optional. A local folder defaults to DuckDB; choose DuckLake
+explicitly when you need its storage engine and have its extension available.
+
+```{r local-storage, eval=requireNamespace("duckdb", quietly=TRUE)}
+folder <- file.path(root, "lake")
+lake <- tw_open_lake(folder)
+first <- tw_publish(orders_definition, to = lake)
+tw_close_lake(lake)
+lake <- tw_open_lake(folder, read_only = TRUE)
+tw_read_release(lake, "orders", first$release_id)
+tw_close_lake(lake)
+```
+
+Use `tw_open_lake(new_folder, backend = "ducklake")` for DuckLake. Backend and
+ordered layers, including role names, are saved in `tidyweave.json`. Reopen with
+only the path; explicit conflicting settings fail. `tw_lake_config(path = ...)`
+creates a connection-free configuration. Reading does not change metadata.
+Only the current configuration and registry formats are supported during
+pre-1.0 development; no format upgrades are performed.
+
+A correction replaces the complete table or supplied partition. Pass
+`previous = first` to reject corrections based on an outdated release. A failed
+publication preserves the accepted release. Never alter package-managed release
+tables directly.
+
 ## DuckLake, S3 and external catalogs
 
 A lake's technical registry records releases and execution. An external catalog
@@ -203,12 +230,25 @@ orders_definition |>
   tw_run(evidence = "runs")
 ```
 
-This configuration provisions no services and migrates no existing local lake.
+This configuration requires an existing database and bucket.
 Verify DuckLake, S3 conditional writes, PostgreSQL permissions, backups and restore
 in your own environment. The full configuration example is
 `system.file("examples", "setup_s3.R", package = "tidyweave")`.
 See the [operations guide](https://github.com/JanWein/tidyweave/blob/main/docs/OPERATIONS.md)
 for OpenLineage, OpenMetadata and retrying pending metadata deliveries.
+
+For shared DuckLake, use the same PostgreSQL catalog, S3 location and layer
+names in every client. The PostgreSQL connection environment variable accepts
+libpq keyword/value or `service=` strings; the writer coordinator does not accept
+URI strings. Configure a durable shared landing location independently of S3.
+
+PostgreSQL advisory locks serialize package writes per catalog database, including
+registration, publication, reports and recovery. `lock_timeout` bounds the wait.
+An idle open connection does not hold the writer lock. Model tables and their
+manifest commit together; derived products are separate publications. Direct SQL,
+dbt writes and unrelated clients do not participate. Local catalogs require one
+coordinated writer. Test your own S3 endpoint and failure behavior; package CI
+covers PostgreSQL coordination with independent processes.
 
 ## Let targets manage product dependencies
 
@@ -287,6 +327,3 @@ source(system.file("examples", "advanced_integrations.R", package = "tidyweave")
 ```{r cleanup, include=FALSE}
 unlink(root, recursive = TRUE)
 ```
-
-
-[Back to Learn](learn.html) · [Troubleshooting](troubleshooting.html)

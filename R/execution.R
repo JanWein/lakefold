@@ -219,7 +219,7 @@ collect.tw_run_result <- function(x, ...) {
     return(tw_read_release(lake, x$asset, x$release_id))
   }
   abort(
-    "This result has no output reference. Use tw_read_release(lake, name, release_id) for older run results."
+    "This result has no output reference."
   )
 }
 

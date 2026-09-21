@@ -487,7 +487,7 @@ measurement_quality <- function(x) {
     checks <- if (
       !identical(
         manifest$result_hash,
-        measurement_fingerprint(value, manifest)
+        report_fingerprint(as.data.frame(value))
       ) ||
         !is.list(reference) ||
         !identical(reference$asset, manifest$product) ||
@@ -556,7 +556,7 @@ diagnostic_measurements <- function(x) {
     return(x)
   }
   manifest <- attr(x, "tw_manifest")
-  if (!identical(manifest$result_hash, measurement_fingerprint(x, manifest))) {
+  if (!identical(manifest$result_hash, report_fingerprint(as.data.frame(x)))) {
     abort("Metric result changed after calculation.")
   }
   list(x)

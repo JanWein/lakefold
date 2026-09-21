@@ -102,12 +102,11 @@ want to execute the destinations already configured on a definition.
 
 ## Choose the next topic
 
-Read [product specifications](first-product.html),
-[preparation recipes](preparation-recipes.html) and
-[workflows](modular-workflows.html) for the component APIs.
-Then [diagnose a failed check](check-delivery.html),
-[publish corrections](publish-data.html), or [save report values](save-report.html).
-The [article index](learn.html) groups larger examples and integrations.
+Continue with [recipes](preparation-recipes.html) and
+[workflows](modular-workflows.html), then [quality checks](quality-gates.html)
+and [reports](save-report.html). [Integrations](optional-integrations.html)
+explains storage and optional tools. Function arguments and return values live
+in the [reference](../reference/index.html).
 
 ```{r verify, include=FALSE}
 stopifnot(sum(tw_collect(result)$amount) == 150,

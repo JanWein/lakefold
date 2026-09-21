@@ -94,4 +94,4 @@ unlink(folder, recursive = TRUE)
 
 ## Continue
 
-[Previous: Publish and correct data](publish-data.html) · [Next: Work through a reporting month](getting-started.html) · [Get started](get-started.html)
+[Previous: Publish and correct data](modular-workflows.html) · [Next: Work through a reporting month](save-report.html) · [Get started](get-started.html)

@@ -8,9 +8,6 @@
 #' custom remote or split-location configuration still open through
 #' [tw_connect_lake()]. Use [tw_lake_config()] for a connection-free definition.
 #'
-#' Older folders stored only their backend. Default-layer folders are upgraded
-#' on writable open. If extra schemas exist, supply your original `layers` once,
-#' in their intended order; their roles cannot be recovered from schema names.
 #' Read-only opens never update the folder configuration.
 #' @param path Local folder, created if needed. Defaults to `"tidyweave"` in
 #'   the working directory.

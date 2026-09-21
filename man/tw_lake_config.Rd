@@ -30,7 +30,7 @@ S3).}
 \item{install_extensions}{Allow DuckDB to install required extensions.}
 
 \item{read_only}{Attach existing storage read-only and skip schema creation
-and migration. A lake created by a newer package may require an upgrade.}
+writes. Only the current registry schema is supported.}
 
 \item{path}{Optional local lake folder. Derives \code{metadata.duckdb}, \code{data}
 and \code{landing} within that folder. Supply either \code{path} or explicit

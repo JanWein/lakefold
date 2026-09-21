@@ -47,9 +47,6 @@ custom remote or split-location configuration still open through
 \code{\link[=tw_connect_lake]{tw_connect_lake()}}. Use \code{\link[=tw_lake_config]{tw_lake_config()}} for a connection-free definition.
 }
 \details{
-Older folders stored only their backend. Default-layer folders are upgraded
-on writable open. If extra schemas exist, supply your original \code{layers} once,
-in their intended order; their roles cannot be recovered from schema names.
 Read-only opens never update the folder configuration.
 }
 \examples{

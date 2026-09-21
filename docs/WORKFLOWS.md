@@ -1,9 +1,0 @@
-# Workflow design
-
-The canonical, executable guide is
-[Workflow design](https://janwein.github.io/tidyweave/articles/workflow-design.html).
-Its source is [the package vignette](../vignettes/workflow-design.Rmd).
-
-Design findings and remaining gaps are maintained in
-[the critical review](REFACTOR_REVIEW.md) and
-[the modern data stack comparison](MODERN_DATA_STACK.md).

@@ -72,7 +72,8 @@ tw_collect(tw_trial(bound))
 Sources are configured in one place: a workflow rejects sources that conflict
 with sources already on its product. `data =` binds or replaces a single primary
 delivery. Use named `sources =` replacements for several input deliveries,
-including checked lookup dependencies. See [Compose products](composing-products.html).
+including checked lookup dependencies. A nested product can supply an upstream input; the execution graph evaluates
+shared dependencies once.
 
 ## Choose execution deliberately
 
@@ -95,7 +96,9 @@ tw_collect(saved)
 
 Output checks gate publication. Lake publication retains immutable releases;
 database, Parquet and pins targets retain their own documented guarantees.
-[Publish and correct data](publish-data.html) demonstrates a complete correction.
+For a correction, supply the complete table or partition and use
+`previous = saved` to reject a stale starting point. A blocked correction leaves
+the last accepted release available. `tw_compare(first, second)` shows changes.
 
 ## Inspect definitions and results
 
@@ -119,5 +122,20 @@ so it exposes trial and publication instead of model fitting and prediction.
 
 For sequential orchestration, `tw_workflow()` also accepts named functions whose
 arguments declare dependencies. That interface reuses unchanged branches after
-corrections; see [Repeat a workflow](everyday-workflows.html). It is a separate
+corrections. It is a separate
 composition mode and does not accept product or recipe slots.
+
+```{r dependency-workflow}
+steps <- tw_workflow(
+  total = function(input) sum(input$amount),
+  inputs = list(input = data.frame(amount = c(10, 20))),
+  code_version = "v1"
+)
+initial <- tw_run(steps)
+corrected <- tw_run(steps, previous = initial,
+  inputs = list(input = data.frame(amount = c(15, 20))))
+```
+
+Keep recipes as the primary interface for preparing one product. Function
+workflows are useful when coordinating several dependent calculations. See
+`?tw_workflow` for selective reruns and result extraction.

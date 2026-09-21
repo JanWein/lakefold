@@ -57,18 +57,28 @@ test_that("simple partition writes retain months and delivery evidence", {
 test_that("automatic numeric schemas widen without weakening explicit integer contracts", {
   f <- fixture()
   on.exit(fixture_cleanup(f))
-  legacy <- automatic_schema("legacy", c(id = "integer", amount = "integer"))
+  previous <- automatic_schema(
+    "previous",
+    c(id = "integer", amount = "integer")
+  )
   first <- tw_ingest_data(
     f$lake,
     data.frame(id = 1L, amount = 10L),
-    legacy,
-    "legacy",
+    previous,
+    "previous",
     code_version = "old"
   )
   old <- tw_registry(f$lake, "assets")
-  second <- tw_write_data(f$lake, data.frame(id = 1L, amount = 10.5), "legacy")
+  second <- tw_write_data(
+    f$lake,
+    data.frame(id = 1L, amount = 10.5),
+    "previous"
+  )
   expect_equal(second$status, "published")
-  expect_equal(tw_read_release(f$lake, "legacy", first$release_id)$amount, 10L)
+  expect_equal(
+    tw_read_release(f$lake, "previous", first$release_id)$amount,
+    10L
+  )
   current <- tw_registry(f$lake, "assets")
   expect_true(all(old$fingerprint %in% current$fingerprint))
   strict <- tw_contract(
@@ -358,29 +368,4 @@ test_that("product builders can explicitly bypass cached releases", {
     sum(tw_read_release(f$lake, "scaled", first$release_id)$reserve),
     300
   )
-})
-
-test_that("schema 2 migration retains history and read-only opening never migrates", {
-  f <- fixture()
-  on.exit(fixture_cleanup(f))
-  first <- tw_write_data(f$lake, data.frame(id = 1L), "orders")
-  original <- tw_registry(f$lake, "assets")
-  exec(f$lake, paste("DELETE FROM", meta(f$lake, "schema_version")))
-  insert_meta(f$lake, "schema_version", list(version = 2L, applied_at = now()))
-  exec(f$lake, paste("DROP TABLE", meta(f$lake, "run_owners")))
-  config <- f$lake$config
-  tw_close_lake(f$lake)
-  expect_error(
-    tw_connect_lake(config, read_only = TRUE),
-    "Unsupported registry version"
-  )
-  f$lake <- tw_connect_lake(config)
-  expect_equal(tw_registry(f$lake, "schema_version")$version, c(2L, 4L))
-  expect_identical(tw_registry(f$lake, "assets"), original)
-  expect_equal(tw_read_release(f$lake, "orders", first$release_id)$id, 1L)
-  registry_init(f$lake)
-  expect_equal(tw_registry(f$lake, "schema_version")$version, c(2L, 4L))
-  expect_equal(nrow(tw_registry(f$lake, "run_owners")), 0)
-  expect_identical(tw_registry(f$lake, "run"), tw_registry(f$lake, "runs"))
-  expect_identical(tw_registry(f$lake, "ru"), tw_registry(f$lake, "runs"))
 })

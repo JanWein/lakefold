@@ -59,49 +59,6 @@ test_that("both folder entry points retain named roles and read-only opens do no
   expect_identical(readLines(marker), before)
 })
 
-test_that("older custom folders require explicit one-time recovery without adding schemas", {
-  root <- file.path(withr::local_tempdir(), "lake")
-  layers <- c("raw", "staging", "core", "marts")
-  lake <- tw_open_lake(root, layers = layers)
-  tw_close_lake(lake)
-  marker <- file.path(root, "tidyweave.json")
-  old <- '{"format":1,"backend":"duckdb"}'
-  writeLines(old, marker)
-  expect_snapshot(error = TRUE, tw_open_lake(root))
-  expect_identical(readLines(marker), old)
-  lake <- tw_open_lake(root, layers = layers, read_only = TRUE)
-  expect_identical(lake$config$layers, layers)
-  tw_close_lake(lake)
-  expect_identical(readLines(marker), old)
-  lake <- tw_open_lake(root, layers = layers)
-  schemas <- DBI::dbGetQuery(
-    lake$con,
-    "SELECT schema_name FROM information_schema.schemata WHERE catalog_name = 'lake'"
-  )$schema_name
-  tw_close_lake(lake)
-  expect_setequal(setdiff(schemas, c("main", "_dl")), layers)
-  expect_identical(tw_lake_config(path = root)$layers, layers)
-})
-
-test_that("old default folders upgrade and corrupt saved layers are rejected", {
-  root <- withr::local_tempdir()
-  lake <- tw_open_lake(root)
-  tw_close_lake(lake)
-  marker <- file.path(root, "tidyweave.json")
-  writeLines('{"format":1,"backend":"duckdb"}', marker)
-  config <- tw_lake_config(path = root)
-  lake <- tw_connect_lake(config)
-  DBI::dbExecute(lake$con, "CREATE SCHEMA lake.extra")
-  tw_close_lake(lake)
-  lake <- tw_connect_lake(config)
-  tw_close_lake(lake)
-  expect_identical(jsonlite::fromJSON(marker)$format, 2L)
-  writeLines('{"format":2,"backend":"duckdb","layers":["raw","raw"]}', marker)
-  before <- readLines(marker)
-  expect_snapshot(error = TRUE, tw_open_lake(root))
-  expect_identical(readLines(marker), before)
-})
-
 test_that("a single layer is preserved without JSON scalar conversion", {
   root <- withr::local_tempdir()
   lake <- tw_open_lake(root, layers = "raw")

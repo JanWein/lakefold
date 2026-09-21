@@ -491,7 +491,6 @@ tw_run.tw_pipeline <- function(
   }
   assert_writable(lake)
   expected_config <- pipeline$config
-  expected_config$read_only <- expected_config$read_only %||% FALSE
   if (!identical(lake$config, expected_config)) {
     abort("Pipeline and execution lake configurations differ.")
   }

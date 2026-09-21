@@ -56,7 +56,7 @@ writer_state <- function(owner) {
 #'
 #' Preview first. A known live writer always blocks recovery. On Linux, the
 #' recorded host, boot ID and process start distinguish a dead process from a
-#' reused PID. For legacy, remote or unsupported hosts, recovery requires the
+#' reused PID. For remote or unsupported hosts, recovery requires the
 #' caller to stop the original writer and explicitly set `writer_stopped`.
 #' Age alone never proves that a writer has stopped.
 #'

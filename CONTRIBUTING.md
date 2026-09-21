@@ -27,51 +27,25 @@ DuckLake integration with `TIDYWEAVE_TEST_DUCKLAKE=true`. Real dbt tests use
 `TIDYWEAVE_DBT_EXECUTABLE`. The core-only CI job runs `scripts/check-core.R`
 without optional infrastructure. Keep external services out of normal examples.
 
-## Documentation structure
+## Documentation
 
-Organize the documentation around product specifications, preparation recipes,
-workflow assembly and execution. The README and Get started share a compact,
-complete modular example. Component guides explain one responsibility; task
-articles cover checks, publication, reports and integrations. The reference uses
-the same object and lifecycle groups. Every guide states prerequisites and runs
-independently. All public tidyweave functions use the `tw_` prefix. Preserve
-ordinary dplyr dispatch and document intentional development-API changes in the
-migration guide. Prefer `tw_trial()` for exploration and `tw_publish()` for saving.
+All documentation and user-facing messages are English. The README is the short
+introduction. Nine executable vignettes cover the current lifecycle: get started,
+recipes, workflows, quality, reports, integrations, dbt, one reference case and
+extensions. Extend the relevant guide rather than adding overlapping tutorials.
+Arguments and return values belong in roxygen help. Operational responsibilities
+live in `docs/OPERATIONS.md`; do not keep completed plans or duplicate tutorials.
 
 Build the site with `TIDYWEAVE_TEST_DUCKLAKE=true`, then run
-`python scripts/check-site-links.py site`. PR builds produce a preview artifact;
-main builds deploy to Pages. Keep existing article URLs when changing titles.
+`python scripts/check-site-links.py site`. PR builds provide a preview artifact;
+main builds deploy to Pages. Remove obsolete pages and their incoming links.
 
-## One canonical home for each tutorial
-
-All package documentation and user-facing messages are English. The README is
-the short introduction. **Executable vignettes are the canonical tutorials.**
-`docs/` holds design decisions, operational notes and concise links to tutorials,
-not a second copy of their prose. Function arguments and return types belong in
-roxygen help. `_pkgdown.yml` groups beginner functions before advanced adapters.
-
-The downloadable examples are extracted from the corresponding vignettes:
-
-| Script | Source |
-|---|---|
-| `cancellation_report.R` | `cancellation-report.Rmd` |
-| `everyday_workflows.R` | `three-deliveries.Rmd` |
-| `create_ducklake.R` | `create-ducklake.Rmd` |
-| `composing_products.R` | `composing-products.Rmd` |
-| `monthly_reporting.R` | `getting-started.Rmd` |
-| `custom_target.R` | `extending-tidyweave.Rmd` |
-| `end_to_end.R` | Runs `composing_products.R` |
-| `relational-insurance.R` | `relational-insurance.Rmd` |
-
-Use `knitr::purl(..., documentation = 0)` after tutorial edits. Chunks requiring
-user files, credentials or optional services use `purl = FALSE`. Add
-`library(tidyweave)` only if the extracted chunks do not include it. The monthly
-script guards its optional DuckDB dependency. The insurance vignette wraps its
-extracted workflow in `run_relational_insurance()`: its hidden opening/closing
-chunks use the knitr `tangle` option, and conditional execution chunks enable
-extraction without running the CLI. Do not replace the visible steps with helper
-wrappers or maintain a separate copy of the runner. Execute the changed vignette and
-its generated script; assertions in examples should test meaningful outcomes.
+Two downloadable examples are generated with `knitr::purl(documentation = 0)`:
+`custom_target.R` from `extending-tidyweave.Rmd`, and `relational-insurance.R`
+from `relational-insurance.Rmd`. The insurance vignette's hidden `tangle` chunks
+wrap the script in `run_relational_insurance()`; set `run_stack <- FALSE` during
+extraction. Keep visible steps and extracted code in sync. Other example scripts
+exercise distinct integrations rather than repeat introductory tutorials.
 
 ## Design discipline
 
@@ -86,7 +60,7 @@ do not add classes merely for symmetry. Declare adapter limits and verify that a
 failed quality gate does not invoke its writer.
 
 The package is in development. Public interfaces can change without compatibility
-aliases until the first stable release candidate. This does not excuse careless
+aliases, migration guides or stored-format upgrades before version 1.0. This does not excuse careless
 handling of stored data: immutable releases, complete-candidate checks and pinned
 report evidence remain integrity requirements. Document actual test coverage and
 production boundaries without claiming untested guarantees.
@@ -103,4 +77,4 @@ are pinned release sources; other results reuse submitted data or a lazy query
 with its backend's mutability. `tw_measure(lake_result, metric)` retains the lake
 release identity.
 Managed dbt projects own generated profiles and bindings, while normal SQL,
-contracts and tests stay in the project. See [the design plan](https://github.com/JanWein/tidyweave/blob/main/docs/UNIFIED_GRAMMAR_PLAN.md).
+contracts and tests stay in the project.
