@@ -182,6 +182,11 @@ measure <- function(
   metrics = NULL,
   period = c("each", "aggregate")
 ) {
+  if (inherits(x, "tw_model_result")) {
+    abort(
+      "Choose a reporting table with product('report', model_result, table = 'table_name'), then trial() or publish() that product before measure()."
+    )
+  }
   if (!is.null(metrics)) {
     if (!is.null(metric)) {
       abort("Supply either metric or metrics, not both.")

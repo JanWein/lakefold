@@ -35,6 +35,8 @@
 #'   Defaults to the reference product id or a bare source variable's name.
 #'   For expressions such as file readers, supply a name explicitly; otherwise
 #'   an automatic lookup name is used. [explain()] shows the available names.
+#' @param table Table to select when source is a successful model result. The
+#'   table name is also the default delivery name; published members stay pinned.
 #' @returns An updated product specification.
 #' @export
 #' @examples
@@ -51,9 +53,16 @@ add_lookup <- function(
   engine = c("native", "dm"),
   unmatched = c("error", "keep"),
   suffix = c(".x", ".y"),
-  name = NULL
+  name = NULL,
+  table = NULL
 ) {
   source_expr <- substitute(source)
+  if (!is.null(table)) {
+    source <- model_member_result(source, table)
+    name <- name %||% table
+  } else if (inherits(source, "tw_model_result")) {
+    abort("Choose the model lookup table with table = 'table_name'.")
+  }
   x <- editable_product(x)
   step_name <- paste0("lookup_", length(x$transforms) + 1L)
   name <- name %||%

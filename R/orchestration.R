@@ -22,7 +22,8 @@
 #' and mutable environment state need an explicit cue, just like remote data.
 #' Give definition variables names such as `orders_definition` when the target
 #' is named `orders`, to avoid targets' global-object name collision warning.
-#' @param x Product or named list of products. Nested products are included.
+#' @param x Table product or named list of table products. Nested products are
+#'   included. Schedule a complete model publication with targets::tar_target().
 #' @param cue Optional [targets::tar_cue()] applied to product targets.
 #' @param evidence Optional directory for [run()] evidence.
 #' @returns A list of objects from [targets::tar_target_raw()]. Product target
@@ -65,6 +66,11 @@ as_targets <- function(x, cue = NULL, evidence = NULL) {
   })
   products <- list()
   visit <- function(product, stack = character()) {
+    if (inherits(product, "tw_model_product")) {
+      abort(
+        "as_targets() expands table products only. Schedule the complete model with targets::tar_target(name, publish(model_definition, to = destination))."
+      )
+    }
     if (product$id %in% stack) {
       abort(paste(
         "Product dependency cycle:",

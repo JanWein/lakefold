@@ -82,3 +82,11 @@ dedicated CI service and independent processes in scripts/check-postgres.R.
 Check the PR's latest results for execution status; a script is not proof of a
 successful run. Production S3 connectivity and a human first-use study remain
 separate acceptance tasks.
+
+The PostgreSQL CI run on commit
+[5090db7](https://github.com/JanWein/tidyweave/commit/5090db758e6ce783c620b6148bf414a138eba048)
+passed with PostgreSQL 16 and actual DuckLake. It exercised independent writers,
+a conflicting correction, idempotent report issuance, a timed-out writer,
+read-only access during a held lock, lock release after process termination,
+nested publication and the model relationship gate. Shared files in this test
+were local to one runner; this is not an S3 deployment test.

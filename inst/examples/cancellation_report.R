@@ -80,15 +80,8 @@ portfolio_model <- dm::dm(
   dm::dm_add_fk(policies, broker_id, brokers)
 stopifnot(all(dm::dm_examine_constraints(portfolio_model)$is_key))
 
-portfolio <- product(
-  "portfolio",
-  portfolio_model,
-  contracts = list(
-    customers = customer_contract,
-    policies = policy_contract,
-    brokers = broker_contract
-  )
-)
+portfolio <- product("portfolio", portfolio_model) |>
+  replace_sources(customers = customers, policies = policies, brokers = brokers)
 checked_model <- trial(portfolio)
 collect(checked_model)
 
@@ -105,16 +98,8 @@ reporting_month <- function(data, from, until) {
 }
 reporting_product <- function(model_result) {
   product("august_portfolio", model_result, table = "policies") |>
-    add_lookup(
-      product("report_customers", model_result, table = "customers"),
-      by = "customer_id",
-      name = "customers"
-    ) |>
-    add_lookup(
-      product("report_brokers", model_result, table = "brokers"),
-      by = "broker_id",
-      name = "brokers"
-    ) |>
+    add_lookup(model_result, table = "customers", by = "customer_id") |>
+    add_lookup(model_result, table = "brokers", by = "broker_id") |>
     add_transform(\(data) {
       reporting_month(data, as.Date("2026-08-01"), as.Date("2026-09-01"))
     })

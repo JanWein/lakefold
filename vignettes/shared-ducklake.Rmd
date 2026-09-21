@@ -103,3 +103,8 @@ These do not replace testing your S3 endpoint, authentication and network-failur
 behavior in the deployment environment.
 
 [Back to Learn](learn.html) · [Local DuckLake](create-ducklake.html)
+
+For scheduling with targets, put the whole model publication in an ordinary
+`targets::tar_target()` call. `as_targets()` currently expands table-product
+dependencies only; it refuses model expansion rather than splitting an atomic
+model into independently published tables.

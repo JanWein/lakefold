@@ -3,6 +3,7 @@
 * `product()` accepts dm models with named table contracts. `trial()` checks
   the complete model; `publish()` commits all member tables and their manifest
   together. `collect()` and `read_release()` restore the pinned model.
+  `product()` and `add_lookup()` select model members with `table =`.
 * Lake publication accepts `previous` to reject stale corrections.
 * PostgreSQL catalogs coordinate package writes with database-scoped advisory
   locks using RPostgres. Metadata schema 4 prevents older writers reopening

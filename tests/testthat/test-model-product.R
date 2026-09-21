@@ -190,3 +190,25 @@ test_that("nested member selections reuse the active publication connection", {
   out <- publish(selected, to = lake)
   expect_equal(collect(out)$amount, c(10, 20))
 })
+
+test_that("model lookups use table names without an extra wrapper product", {
+  skip_if_not_installed("dm")
+  checked <- trial(product("portfolio", model_fixture()))
+  selected <- product("summary", checked, table = "policies") |>
+    add_lookup(checked, table = "customers", by = "id")
+  expect_equal(collect(trial(selected))$amount, c(10, 20))
+  expect_equal(
+    sort(names(delivery_aliases(selected))),
+    c("customers", "summary")
+  )
+})
+
+test_that("a model never silently chooses a metric grain", {
+  skip_if_not_installed("dm")
+  result <- trial(product("portfolio", model_fixture()))
+  error <- tryCatch(
+    measure(result, metrics = metric_set("portfolio", count = dplyr::n())),
+    error = identity
+  )
+  expect_match(conditionMessage(error), "Choose a reporting table")
+})
