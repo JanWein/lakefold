@@ -8,7 +8,7 @@
 #' @return Path. This adapter exports metadata; it does not execute or install
 #'   commons.
 #' @export
-#' @examples
+#' @examplesIf requireNamespace("yaml", quietly = TRUE)
 #' metric <- dr_metric(
 #'   "orders.total", "orders", expr = sum(amount), time_behavior = "flow",
 #'   unit = "EUR", owner = "Analytics", description = "Total order value",

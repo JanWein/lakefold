@@ -25,6 +25,7 @@ commons.
 Export an explicit declarative definition for data-dict and commons
 }
 \examples{
+\dontshow{if (requireNamespace("yaml", quietly = TRUE)) (if (getRversion() >= "3.4") withAutoprint else force)(\{ # examplesIf}
 metric <- dr_metric(
   "orders.total", "orders", expr = sum(amount), time_behavior = "flow",
   unit = "EUR", owner = "Analytics", description = "Total order value",
@@ -34,4 +35,5 @@ path <- tempfile(fileext = ".yml")
 dr_commons_yaml(metric, "orders", "SUM(amount)", path)
 cat(readLines(path), sep = "\n")
 unlink(path)
+\dontshow{\}) # examplesIf}
 }
