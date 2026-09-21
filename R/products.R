@@ -1,7 +1,8 @@
 #' Define a composable data product
 #'
 #' Add named sources, ordinary transformation functions and optional checks or
-#' a target. Nothing executes until [run()] or [publish()]. Products can be
+#' a target. Use [trial()] to try it, or [publish()] to save checked output.
+#' [run()] executes the full configuration, including writers. Products can be
 #' sources of other products; shared dependencies run once per execution.
 #' @param id Product identity, unique within a dependency graph.
 #' @param data Optional table, path, source adapter, product, or successful run.
@@ -20,12 +21,11 @@
 #' @returns A `tw_product`, ready for composition, inspection and execution.
 #' @export
 #' @examples
-#' orders <- product("orders") |> add_source(data.frame(id = 1:2))
-#' product("summary") |>
-#'   add_source(orders) |>
-#'   add_transform(function(data) data.frame(rows = nrow(data))) |>
-#'   run() |>
-#'   collect()
+#' orders <- product("orders", data.frame(id = 1:2, amount = c(25, 75))) |>
+#'   dplyr::mutate(amount = round(amount, 2)) |>
+#'   add_quality(~ amount >= 0)
+#' orders |> trial() |> collect()
+
 product <- function(
   id,
   data = NULL,

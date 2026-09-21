@@ -1,0 +1,91 @@
+---
+title: "3. Publish and correct data"
+description: "Keep the first accepted delivery when a correction changes the current table."
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{3. Publish and correct data}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE, purl=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", message = FALSE,
+  eval = requireNamespace("duckdb", quietly = TRUE))
+```
+
+**Goal:** save a checked table and retain its earlier version after a correction.
+**Needs:** tidyweave and DuckDB >= 1.5.5. Install DuckDB once with
+`install.packages("duckdb")`. No database server is needed.
+
+## Define the table and its destination
+
+```{r definition}
+library(tidyweave)
+folder <- tempfile("orders-history-")
+delivery <- data.frame(id = 1:3, amount = c(25, 75, 50))
+orders <- product("orders", delivery) |>
+  add_contract(contract(
+    columns = c(id = "integer", amount = "numeric"), key = "id")) |>
+  add_quality(~ amount >= 0) |>
+  set_target(folder)
+```
+
+The temporary folder makes this example disposable. For real work, choose a
+project folder such as `"data/orders-lake"` instead. `set_target()` remembers
+where to save the result. A new folder uses ordinary DuckDB; actual DuckLake is
+an explicit option covered in [Create a DuckLake](create-ducklake.html).
+
+## Save the first accepted delivery
+
+```{r first}
+first <- orders |> publish()
+collect(first)
+```
+
+`publish()` writes checked data to the chosen destination. It does not make
+your data public on the internet. The connection is opened and closed for you.
+A **release** is a saved version of the table. `first` refers to this exact
+release, whose total is **150**.
+
+## Publish a corrected complete table
+
+```{r correction}
+corrected <- data.frame(id = 1:3, amount = c(30, 75, 50))
+second <- orders |> publish(data = corrected)
+collect(second)
+collect(first)
+compare(first, second)$numeric_summary
+```
+
+The current total is **155**, and the first release still totals **150**.
+The comparison shows an increase of **5**.
+
+This delivery replaces the **complete table**. If you supplied only order 1,
+orders 2 and 3 would disappear from the current table. For complete-month
+replacement, use the explicit partition choice in [lesson 5](getting-started.html).
+Do not submit a partial correction as though it were a complete delivery.
+
+## Read it in another session
+
+```{r reopen}
+lake <- open_lake(folder, read_only = TRUE)
+read_release(lake, "orders")
+close_lake(lake)
+```
+
+In a new R session, load tidyweave and use your durable folder path here. You do
+not need the original R result object to read the current table.
+
+Use `trial()` to experiment even after setting a destination. `publish()` makes
+saving explicit. The more general `run()` executes configured writers too;
+it is useful for orchestration but is not a substitute for a write-free trial.
+Lake writes need one coordinated writer.
+
+```{r verify-and-cleanup, include=FALSE}
+stopifnot(sum(collect(first)$amount) == 150, sum(collect(second)$amount) == 155)
+unlink(folder, recursive = TRUE)
+```
+
+## Continue
+
+[Previous: Check a delivery](check-delivery.html) · [Next: Save a report](save-report.html) · [All five lessons](get-started.html)

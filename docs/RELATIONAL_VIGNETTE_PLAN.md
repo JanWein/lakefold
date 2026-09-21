@@ -1,5 +1,9 @@
 # Relational insurance reporting vignette (0.9.0 baseline)
 
+> Historical development record. Examples and findings describe their original
+> development stage. For current usage, follow [Get started](https://janwein.github.io/tidyweave/articles/get-started.html).
+
+
 This records the earlier implementation and its validation. The 0.10.0
 [unified grammar plan](UNIFIED_GRAMMAR_PLAN.md) replaces the integration helpers
 with direct product, lookup, dplyr and managed dbt calls. New verification belongs

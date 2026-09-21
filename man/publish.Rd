@@ -39,10 +39,12 @@ targets, \code{business_date}, \code{notify} and \code{cache}. dbt builds accept
 A run result. An exception on failure includes \code{condition$result}.
 }
 \description{
-\code{run()} executes a composed product in memory unless it has a target.
-\code{publish()} adds a local lake target when none was supplied. A folder
-string uses DuckDB; \code{\link[=target_lake]{target_lake()}} accepts other lake configurations.
-Both automatically validate the definition before source acquisition.
+Use \code{\link[=trial]{trial()}} to try a product without configured framework writers.
+\code{run()} executes its full configuration, including targets and catalogs.
+\code{publish()} adds a local lake target when none was supplied. A new folder
+uses DuckDB; an existing folder retains its saved backend. \code{\link[=target_lake]{target_lake()}}
+accepts other lake configurations. Execution automatically validates the
+definition before source acquisition.
 Use \code{\link[=collect]{collect()}} to obtain the output as an ordinary tibble.
 }
 \section{Publishing a dbt model}{

@@ -28,9 +28,12 @@ successful test is not evidence that a later GitHub job or deployment passed.
 
 ## Documentation site
 
-The Documentation workflow builds pkgdown into `site/` and deploys its artifact
-to GitHub Pages. The installed package also includes function help and vignettes.
-Locally, run `pkgdown::build_site()` after installing the documentation dependencies.
+The Documentation workflow builds pkgdown into `site/` for pull requests and main.
+It checks internal links and uploads a `documentation-preview` artifact on PRs.
+Only a main-branch build deploys its Pages artifact to GitHub Pages. The installed package also includes function help and vignettes.
+Locally, set `TIDYWEAVE_TEST_DUCKLAKE=true`, then run `pkgdown::build_site()`
+after installing the documentation dependencies. Run
+`python scripts/check-site-links.py site` on the generated site.
 Review article links, examples and the reference index before deployment.
 
 ## Release preparation

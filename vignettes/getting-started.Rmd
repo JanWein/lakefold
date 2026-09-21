@@ -1,8 +1,8 @@
 ---
-title: "Monthly deliveries, corrections and reproducible reports"
+title: "5. Work through a reporting month"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Monthly deliveries, corrections and reproducible reports}
+  %\VignetteIndexEntry{5. Work through a reporting month}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -12,8 +12,12 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>", message = FALSE,
   eval = requireNamespace("duckdb", quietly = TRUE))
 ```
 
-This guide uses optional DuckDB >= 1.5.5 and synthetic data. For a first example
-without infrastructure, start with [Compose a product](composing-products.html).
+**Goal:** combine the first four lessons in a complete monthly workflow.
+**Needs:** tidyweave and optional DuckDB >= 1.5.5. The example is self-contained.
+Read [Save a report](save-report.html) first if report issuance is new to you.
+
+This adds two decisions: a delivery replaces one complete month, and a reserve
+is measured at one date rather than added across dates.
 
 We will publish August's total of **350**, accept a correction to **370**,
 reject a duplicate, add September's **390**, and read the original issued
@@ -36,7 +40,7 @@ reserves <- product("reserves", august) |>
   add_quality(~ amount >= 0, name = "nonnegative") |>
   set_target(target_lake(root, partition_by = "date"))
 
-first <- run(reserves, business_date = "2026-08-31")
+first <- publish(reserves, business_date = "2026-08-31")
 sum(collect(first)$amount)
 stopifnot(first$status == "published", sum(collect(first)$amount) == 350)
 ```
@@ -45,9 +49,8 @@ The contract requires one row per entity and date. The rule rejects negative
 amounts. The target replaces complete delivered dates and retains other dates.
 No owner, catalog service or manually assigned definition version is required.
 
-`first$release_id` identifies a checked, immutable table state. A reporting date
-is a value inside the table; a release ID identifies its version. They are
-different things.
+`first` retains the exact saved table. Its reporting date is a value inside
+the data; a correction for that date creates another saved version.
 
 ## 2. Record the report when it is issued
 
@@ -56,15 +59,12 @@ so adding August and September is not a valid reserve total. The stock setting
 requires selection of one reporting date.
 
 ```{r issued-report}
-total_reserve <- metric("total_reserve", "reserves",
-  expr = sum(amount, na.rm = TRUE), time_column = "date", time_behavior = "stock",
-  unit = "EUR", approved = TRUE, code_version = "report-v1")
-as_reported <- measure(first, total_reserve, at = august_date)
-lake <- open_lake(root)
-report_release(lake, "august-report-v1",
-  results = list(total_reserve = as_reported), code_version = "report-v1")
-close_lake(lake)
-stopifnot(as_reported$value == 350)
+metrics <- metric_set("reserves", total_reserve = sum(amount, na.rm = TRUE),
+  time_column = "date", time_behavior = "stock", units = "EUR",
+  approved = TRUE, code_version = "reserves-v1")
+as_reported <- measure(first, metrics = metrics, at = august_date)
+as_reported |> report_release("august-report-v1", code_version = "report-v1")
+stopifnot(collect(as_reported)$value == 350)
 ```
 
 `approved = TRUE` records your declared business approval; it does not perform
@@ -77,17 +77,15 @@ can use the value.
 ```{r correction}
 corrected <- august
 corrected$amount[corrected$entity == "South"] <- 270
-reserves <- reserves |>
-  add_source(corrected, replace = TRUE)
-correction <- run(reserves, business_date = "2026-08-31")
+correction <- publish(reserves, data = corrected, business_date = "2026-08-31")
 sum(collect(correction)$amount)
 sum(collect(first)$amount)
 stopifnot(sum(collect(correction)$amount) == 370,
   sum(collect(first)$amount) == 350)
 ```
 
-`replace = TRUE` replaces the sole primary source in the product definition. The lake
-target separately controls how the resulting delivery updates stored data.
+`data = corrected` submits the replacement delivery to the existing definition.
+The target replaces only the complete dates present in that delivery.
 The current release now totals 370. Reading the first run still selects its
 exact release, not whatever happens to be current.
 
@@ -95,10 +93,8 @@ exact release, not whatever happens to be current.
 
 ```{r duplicate}
 bad <- rbind(corrected, corrected[2, ])
-blocked <- reserves |>
-  add_source(bad, replace = TRUE) |>
-  run(stop_on_failure = FALSE)
-incidents(blocked)
+blocked <- publish(reserves, data = bad, stop_on_failure = FALSE)
+quality_report(blocked)
 stopifnot(blocked$status == "blocked")
 ```
 
@@ -112,9 +108,7 @@ upstream source, not inside a quality check that silently deletes a row.
 ```{r september}
 september <- data.frame(entity = c("North", "South"),
   date = rep(as.Date("2026-09-30"), 2), amount = c(110, 280))
-latest <- reserves |>
-  add_source(september, replace = TRUE) |>
-  run(business_date = "2026-09-30")
+latest <- publish(reserves, data = september, business_date = "2026-09-30")
 collect(latest) |> dplyr::arrange(date, entity)
 stopifnot(nrow(collect(latest)) == 4L)
 ```
@@ -130,7 +124,7 @@ the complete candidate, including retained August rows.
 monthly_totals <- product("monthly_totals", latest) |>
   dplyr::group_by(date) |>
   dplyr::summarise(total = sum(amount, na.rm = TRUE), .groups = "drop")
-totals <- collect(run(monthly_totals)) |> dplyr::arrange(date)
+totals <- collect(trial(monthly_totals)) |> dplyr::arrange(date)
 totals
 stopifnot(identical(totals$total, c(370, 390)))
 ```
@@ -142,13 +136,11 @@ and closes the read connection; no manual release-ID plumbing is needed.
 ## 7. Read the issued report, without recalculating it
 
 ```{r read-report}
-lake <- open_lake(root, read_only = TRUE)
-issued <- report_read(lake, "august-report-v1", values_only = TRUE)
-current <- measure(lake, total_reserve, at = august_date)
-issued$total_reserve$value
-current$value
-stopifnot(issued$total_reserve$value == 350, current$value == 370)
-close_lake(lake)
+issued <- report_read(root, "august-report-v1", values_only = TRUE)
+current <- measure(latest, metrics = metrics, at = august_date)
+issued
+collect(current)
+stopifnot(issued$value == 350, collect(current)$value == 370)
 ```
 
 | Event | Current data | Issued August report |
@@ -174,7 +166,7 @@ read_reserves <- function(path) {
 reserves |>
   add_source("incoming/reserves.xlsx",
     reader = read_reserves, replace = TRUE) |>
-  run(evidence = "runs")
+  publish(evidence = "runs")
 ```
 
 Passing a file path lets the lake archive the original workbook. Passing an R
@@ -186,3 +178,10 @@ arguments to every step. See [workflow design](workflow-design.html) and the
 ```{r cleanup}
 unlink(root, recursive = TRUE)
 ```
+
+## Continue
+
+You can now process deliveries, reject a bad input, accept a correction and
+reopen the original report. Choose your next task in [Learn](learn.html).
+
+[Previous: Save a report](save-report.html) · [All five lessons](get-started.html)

@@ -6,4 +6,4 @@ calculations and immutable report values.
 
 Its canonical source is [products-metrics.Rmd](../vignettes/products-metrics.Rmd).
 For a first workflow without storage or metrics, start with
-[composing products](https://janwein.github.io/tidyweave/articles/composing-products.html).
+[Get started](https://janwein.github.io/tidyweave/articles/get-started.html).

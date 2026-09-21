@@ -1,11 +1,16 @@
 ---
-title: "Products, relationships and reproducible metrics"
+title: "Group metrics and inspect relationships"
+description: "Add dimensions, explicit time meaning and optional dm exploration."
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Products, relationships and reproducible metrics}
+  %\VignetteIndexEntry{Group metrics and inspect relationships}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
+
+Use this after [Save a report](save-report.html) for grouped calculations
+and relationships across tables. Storage sections require DuckDB; relationship
+exploration additionally uses dm. The example is self-contained.
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>", message = FALSE)
@@ -145,3 +150,6 @@ stopifnot(sum(values$value) == 60,
 close_lake(lake)
 unlink(root, recursive = TRUE)
 ```
+
+
+[Back to Learn](learn.html) · [Troubleshooting](troubleshooting.html)

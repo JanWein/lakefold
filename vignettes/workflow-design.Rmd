@@ -1,11 +1,16 @@
 ---
-title: "Why this architecture: simple products, interchangeable components"
+title: "Architecture and execution boundaries"
+description: "Understand definitions, execution, adapters and resource ownership."
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Why this architecture: simple products, interchangeable components}
+  %\VignetteIndexEntry{Architecture and execution boundaries}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
+
+For maintainers and advanced users. The [introductory lessons](get-started.html)
+are sufficient for everyday work. Read this when choosing an integration or
+extending the package; it explains responsibilities rather than setup steps.
 
 ## Begin with what the user wants
 
@@ -195,11 +200,12 @@ set. `collect()` exposes a long tibble with dimensions, `.metric`, `.period`,
 explicit multi-date selection for `period = "aggregate"`. Aggregate mode still
 rejects a multi-date stock metric; convenience does not change time semantics.
 
-`report_release(config, id, measurements, code_version = ...)` issues the original
+`measurements |> report_release(id, code_version = ...)` issues the original
 measurement set. Its values and labels are integrity-checked, and its exact input
 releases remain evidence. An ordinary collected table does not carry enough
 information to issue that report. `report_read(config, id, values_only = TRUE)`
-returns the saved batch as tidy values without recalculation. See the
+returns the saved batch as tidy values without recalculation. The destination
+can be inferred from published measurements; pass `to` when it cannot. See the
 [insurance example](relational-insurance.html) for correction and preservation
 assertions across two monthly periods.
 
@@ -239,3 +245,6 @@ before they solve a current problem.
 See [the extension guide](extending-tidyweave.html), the
 [critical review](https://github.com/JanWein/tidyweave/blob/main/docs/REFACTOR_REVIEW.md)
 and the [modern data stack comparison](https://github.com/JanWein/tidyweave/blob/main/docs/MODERN_DATA_STACK.md).
+
+
+[Back to Learn](learn.html) · [Troubleshooting](troubleshooting.html)

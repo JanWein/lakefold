@@ -1,0 +1,54 @@
+---
+title: "Get started"
+description: "A five-lesson path from a table to a reproducible monthly report."
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Get started}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+You receive a table, calculate a number and send a report. Next month, another
+table arrives. Later, someone corrects an earlier delivery. These five lessons
+show how to repeat the work and keep the original report explainable.
+
+## Before you begin
+
+You should be comfortable creating an R data frame and using a pipe. Familiarity
+with `dplyr::mutate()` and `dplyr::summarise()` helps. You do not need a database,
+dbt, pointblank or a data catalog to start.
+
+```{r installation, eval=FALSE, purl=FALSE}
+install.packages("remotes")
+remotes::install_github("JanWein/tidyweave")
+```
+
+Use R 4.2 or later. This installs the development version, whose API can still
+change. Lessons 3 to 5 also use `install.packages("duckdb")` for local history.
+
+## Follow the lessons in order
+
+| Lesson | What you will be able to do | What you need |
+|---|---|---|
+| [1. Build a product](first-product.html) | Prepare a table and collect the result | R and tidyweave |
+| [2. Check a delivery](check-delivery.html) | Find a bad row, correct it and try again | R and tidyweave |
+| [3. Publish and correct data](publish-data.html) | Save a checked table while retaining earlier values | Optional DuckDB >= 1.5.5 |
+| [4. Save a report](save-report.html) | Save agreed calculations and read them without recalculating | Optional DuckDB >= 1.5.5 |
+| [5. Work through a reporting month](getting-started.html) | Handle complete monthly deliveries and a late correction | Optional DuckDB >= 1.5.5 |
+
+Each lesson includes its own setup. Start a fresh R session and run its visible
+code from top to bottom; objects from another lesson are not required. Examples
+use synthetic data and temporary folders. Use a project folder for real work.
+
+**[Begin lesson 1: Build a product](first-product.html)**
+
+## After the basics
+
+[Learn](learn.html) organizes the remaining guides by task. The
+[function reference](../reference/index.html) lists arguments and return values.
+[Terms](glossary.html) explains the small vocabulary as you encounter it.
+If a call fails, use [troubleshooting](troubleshooting.html).
+
+This learning structure follows the distinction between a guided
+[tidymodels introduction](https://www.tidymodels.org/start/) and its
+[task-focused learning articles](https://www.tidymodels.org/learn/).

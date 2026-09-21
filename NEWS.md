@@ -1,5 +1,10 @@
 # tidyweave 0.12.0.9000
 
+* Documentation now starts with five ordered, self-contained lessons. Task guides,
+  reference and troubleshooting are separated, with consistent trial, publication
+  and report examples. The complete website and its internal links are checked
+  on pull requests before the main-branch Pages deployment.
+
 * Local lake folders now preserve their ordered layers and named layer roles
   together with the backend. Reopening no longer adds default layers or rejects
   publication into an originally configured layer. Conflicting settings fail

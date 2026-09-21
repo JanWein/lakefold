@@ -52,8 +52,8 @@ editable_product <- function(x) {
 #' Compose a data product using ordinary R objects
 #'
 #' These functions describe work without executing it. Start with
-#' `product("orders")`, add a data frame, file path, zero-argument function
-#' or source adapter, then add only the capabilities you need.
+#' `product("orders", data)`, then add only the capabilities you need.
+#' Sources can be tables, file paths, functions or source adapters.
 #' Transformations run in addition order; the contract and quality checks run
 #' on the final candidate. Sources, transforms, rules and catalogs accumulate.
 #' A contract or target replaces the previously configured component.
@@ -72,7 +72,7 @@ editable_product <- function(x) {
 #'   adapter. Use [target_lake()] for partition or layer options.
 #' @param catalog Function receiving run metadata, or catalog adapter.
 #' @returns An updated product specification. No source data are read.
-#' @seealso [run()], [publish()], [validate()], [inspect()]
+#' @seealso [trial()], [run()], [publish()], [validate()], [inspect()]
 #' @export
 #' @examples
 #' orders <- product("orders") |>
@@ -80,7 +80,7 @@ editable_product <- function(x) {
 #'   add_transform(function(data) transform(data, amount = amount * 2)) |>
 #'   add_contract(c(id = "integer", amount = "numeric")) |>
 #'   add_quality(~ amount >= 0)
-#' orders |> run() |> collect()
+#' orders |> trial() |> collect()
 add_source <- function(x, source, name = NULL, reader = NULL, replace = FALSE) {
   x <- editable_product(x)
   flag(replace, "replace")

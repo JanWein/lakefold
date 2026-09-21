@@ -1,5 +1,9 @@
 # Everyday usability
 
+> Historical development record. Examples and findings describe their original
+> development stage. For current usage, follow [Get started](https://janwein.github.io/tidyweave/articles/get-started.html).
+
+
 The public path is define, try, publish, correct, calculate and reopen. Familiar
 R data and dplyr expressions remain the starting point. Infrastructure detail is
 introduced by task, while business decisions stay explicit.

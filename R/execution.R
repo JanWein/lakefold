@@ -86,10 +86,12 @@ publish_metadata.default <- function(catalog, metadata, ...) {
 
 #' Execute and publish a product with sensible local defaults
 #'
-#' `run()` executes a composed product in memory unless it has a target.
-#' `publish()` adds a local lake target when none was supplied. A folder
-#' string uses DuckDB; [target_lake()] accepts other lake configurations.
-#' Both automatically validate the definition before source acquisition.
+#' Use [trial()] to try a product without configured framework writers.
+#' `run()` executes its full configuration, including targets and catalogs.
+#' `publish()` adds a local lake target when none was supplied. A new folder
+#' uses DuckDB; an existing folder retains its saved backend. [target_lake()]
+#' accepts other lake configurations. Execution automatically validates the
+#' definition before source acquisition.
 #' Use [collect()] to obtain the output as an ordinary tibble.
 #' @param x Composed product, data frame, or successful dbt build.
 #' @param name Product name for a data frame, or an exact or unambiguous model

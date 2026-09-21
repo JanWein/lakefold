@@ -1,0 +1,74 @@
+---
+title: "1. Build a product"
+description: "Prepare a table once and use the same instructions on another delivery."
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{1. Build a product}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE, purl=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", message = FALSE)
+```
+
+**Goal:** turn a table into a reusable preparation step. **Needs:** tidyweave;
+no storage or optional engine. Start in a fresh R session.
+
+## Start with a delivery
+
+```{r delivery}
+library(tidyweave)
+delivery <- data.frame(id = 1:3, amount = c(25, 75, 50))
+```
+
+There is one row per order. `id` identifies it, and `amount` is its value.
+The total is 150. For now, the data is already in R; reading a file can come later.
+
+## Describe the work
+
+```{r product}
+orders <- product("orders", delivery) |>
+  dplyr::mutate(amount = round(amount, 2))
+```
+
+A **product** is the instructions for a named table. This call describes a
+rounding step; it has not run the step or written anything yet. Supported dplyr
+verbs work on a product in the same order as in your pipe.
+
+## Try it, then use the result
+
+```{r trial}
+result <- orders |> trial()
+collect(result)
+collect(result) |> dplyr::summarise(total = sum(amount))
+```
+
+`trial()` executes the instructions without configured publication or catalog
+writers. The **result** records that attempt. `collect()` gives you an ordinary
+tibble for further analysis. The total is **150**.
+
+## Reuse the instructions
+
+```{r next-delivery}
+next_delivery <- data.frame(id = 1:3, amount = c(30, 75, 50))
+next_result <- orders |> trial(data = next_delivery)
+collect(next_result) |> dplyr::summarise(total = sum(amount))
+```
+
+The new total is **155**. You passed new data to the same definition; you did not
+copy the preparation code. Neither result has been saved beyond this R session.
+
+## What you learned
+
+`product()` defines the work, `trial()` tries it, and `collect()` returns the
+usable table. Before saving results, add the checks that make a delivery acceptable.
+
+```{r verify, include=FALSE}
+stopifnot(sum(collect(result)$amount) == 150,
+  sum(collect(next_result)$amount) == 155)
+```
+
+## Continue
+
+[Previous: Get started](get-started.html) · [Next: Check a delivery](check-delivery.html) · [All five lessons](get-started.html)

@@ -1,5 +1,9 @@
 # Architecture review: tidyweave 0.10 to 0.11
 
+> Historical development record. Examples and findings describe their original
+> development stage. For current usage, follow [Get started](https://janwein.github.io/tidyweave/articles/get-started.html).
+
+
 The 0.11.0 refactor removes repeated decisions and transitions from the existing
 product grammar. It keeps genuine dplyr evaluation, optional infrastructure,
 immutable lake releases and explicit business promises. This page records design,

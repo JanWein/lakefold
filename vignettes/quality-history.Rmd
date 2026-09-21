@@ -1,11 +1,16 @@
 ---
-title: "Quality and history: explain a result and reproduce it"
+title: "Inspect quality and saved history"
+description: "Diagnose attempts, keep execution evidence and select earlier releases."
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Quality and history: explain a result and reproduce it}
+  %\VignetteIndexEntry{Inspect quality and saved history}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
+
+Use this after [Check a delivery](check-delivery.html) and [Publish and
+correct data](publish-data.html). Local diagnostics need no database; release
+history examples need optional DuckDB.
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>", message = FALSE)
@@ -95,8 +100,9 @@ files. Two ordinary writes are enough to create history:
 ```{r release-history, eval=requireNamespace("duckdb", quietly = TRUE)}
 root <- tempfile("tidyweave-history-")
 lake <- open_lake(root)
-first <- write_data(lake, data.frame(id = 1L, amount = 10), "orders")
-second <- write_data(lake, data.frame(id = 1L, amount = 12), "orders")
+definition <- product("orders", data.frame(id = 1L, amount = 10))
+first <- publish(definition, to = lake)
+second <- publish(definition, data = data.frame(id = 1L, amount = 12), to = lake)
 read_release(lake, "orders")
 read_release(lake, "orders", release = first$release_id)
 releases(lake, "orders") |>
@@ -107,10 +113,9 @@ The first read returns 12; the pinned read returns 10. To use the earlier data
 inside a new workflow, use the same product grammar:
 
 ```{r pinned-source, eval=requireNamespace("duckdb", quietly = TRUE)}
-historical_total <- product("historical_total") |>
-  add_source(source_release(lake, "orders", first$release_id)) |>
-  add_transform(function(data) dplyr::summarise(data, total = sum(amount))) |>
-  run()
+historical_total <- product("historical_total", first) |>
+  dplyr::summarise(total = sum(amount, na.rm = TRUE)) |>
+  trial()
 collect(historical_total)
 ```
 
@@ -150,8 +155,8 @@ optional; without a transport, no message is sent. A transport should use the
 event ID for idempotency, because a crash after delivery and before local
 confirmation can cause a duplicate.
 
-For partition corrections, comparisons and read-only analysis, continue with
-[everyday workflows](everyday-workflows.html). Published-history retention,
+For partition corrections, continue with [monthly reporting](getting-started.html).
+For comparing results and read-only access, see [lesson 3](publish-data.html). Published-history retention,
 distributed locking and atomic multi-product publication remain separate
 operational concerns.
 
@@ -163,3 +168,6 @@ if (has_duckdb) {
   unlink(root, recursive = TRUE)
 }
 ```
+
+
+[Back to Learn](learn.html) · [Troubleshooting](troubleshooting.html)

@@ -1,5 +1,9 @@
 # tidyweave development plan
 
+> Historical development record. Examples and findings describe their original
+> development stage. For current usage, follow [Get started](https://janwein.github.io/tidyweave/articles/get-started.html).
+
+
 This is a breaking development release. Compatibility starts with the first
 stable release candidate. Preserve immutable lake releases, full-candidate
 quality gates, transaction boundaries and pinned report inputs.

@@ -1,5 +1,9 @@
 # A smaller product grammar
 
+> Historical development record. Examples and findings describe their original
+> development stage. For current usage, follow [Get started](https://janwein.github.io/tidyweave/articles/get-started.html).
+
+
 ## Review
 
 The core already separates product definitions, source and target adapters,

@@ -1,11 +1,17 @@
 ---
-title: "Build a layered data stack, one step at a time"
+title: "Build a layered workflow"
+description: "Check received data, run dbt layers and publish a checked output."
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Build a layered data stack, one step at a time}
+  %\VignetteIndexEntry{Build a layered workflow}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
+
+An advanced walkthrough for separately checked receipts and SQL models.
+Start with [Get started](get-started.html), then [Use dbt](dbt-workflows.html).
+The full example adds DuckDB, pointblank and a dbt CLI; individual examples
+state which optional dependencies they need.
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
@@ -476,3 +482,6 @@ BI service, scheduler or distributed transaction.
 ```{r cleanup, include=FALSE}
 unlink(root, recursive = TRUE)
 ```
+
+
+[Back to Learn](learn.html) · [Troubleshooting](troubleshooting.html)

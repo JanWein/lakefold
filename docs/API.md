@@ -2,7 +2,7 @@
 
 | Task | Start with |
 |---|---|
-| Define and execute a product | `product(name, data)`, `run()`, `collect()` |
+| Define and execute a product | `product(name, data)`, `trial()`, `collect()` |
 | Add preparation and expectations | Supported dplyr verbs, `add_contract()`, `add_quality()` |
 | Enrich without multiplying rows | `add_lookup(..., by = join_by(...))` |
 | Accept a raw delivery | `data |> ingest(to = ...)` |
@@ -17,4 +17,4 @@
 
 Arguments, return values and examples have one canonical home in the
 [function reference](https://janwein.github.io/tidyweave/reference/index.html).
-Learn the grammar with the [product tutorial](https://janwein.github.io/tidyweave/articles/composing-products.html).
+Learn the grammar with the [five lessons](https://janwein.github.io/tidyweave/articles/get-started.html).
