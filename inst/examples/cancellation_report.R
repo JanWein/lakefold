@@ -31,17 +31,17 @@ policies_data <- tibble(
   ))
 )
 
-customer_contract <- contract(
+customer_contract <- tw_contract(
   columns = c(customer_id = "character", segment = "character"),
   key = "customer_id",
   grain = "One customer"
 )
-broker_contract <- contract(
+broker_contract <- tw_contract(
   columns = c(broker_id = "character", channel = "character"),
   key = "broker_id",
   grain = "One broker"
 )
-policy_contract <- contract(
+policy_contract <- tw_contract(
   columns = c(
     policy_id = "character",
     customer_id = "character",
@@ -54,24 +54,28 @@ policy_contract <- contract(
   grain = "One policy with at most one cancellation",
   rules = list(date_order = ~ is.na(cancelled_on) | cancelled_on >= started_on)
 )
-customers <- product("customers", customers_data, contract = customer_contract)
-brokers <- product("brokers", brokers_data, contract = broker_contract)
-policies <- product("policies", policies_data, contract = policy_contract)
+customers <- tw_product(
+  "customers",
+  customers_data,
+  contract = customer_contract
+)
+brokers <- tw_product("brokers", brokers_data, contract = broker_contract)
+policies <- tw_product("policies", policies_data, contract = policy_contract)
 
-attempt <- trial(policies)
-quality_rows(attempt)
-stopifnot(identical(quality_rows(attempt)$policy_id, "P6"))
+attempt <- tw_trial(policies)
+tw_quality_rows(attempt)
+stopifnot(identical(tw_quality_rows(attempt)$policy_id, "P6"))
 fixed_policies <- policies_data
 fixed_policies$cancelled_on[fixed_policies$policy_id == "P6"] <- as.Date(
   "2026-07-31"
 )
-policies <- replace_sources(policies, policies = fixed_policies)
-stopifnot(nrow(collect(trial(policies))) == 8L)
+policies <- tw_replace_sources(policies, policies = fixed_policies)
+stopifnot(nrow(tw_collect(tw_trial(policies))) == 8L)
 
 portfolio_model <- dm::dm(
-  customers = collect(trial(customers)),
-  policies = collect(trial(policies)),
-  brokers = collect(trial(brokers))
+  customers = tw_collect(tw_trial(customers)),
+  policies = tw_collect(tw_trial(policies)),
+  brokers = tw_collect(tw_trial(brokers))
 ) |>
   dm::dm_add_pk(customers, customer_id) |>
   dm::dm_add_pk(policies, policy_id) |>
@@ -80,10 +84,14 @@ portfolio_model <- dm::dm(
   dm::dm_add_fk(policies, broker_id, brokers)
 stopifnot(all(dm::dm_examine_constraints(portfolio_model)$is_key))
 
-portfolio <- product("portfolio", portfolio_model) |>
-  replace_sources(customers = customers, policies = policies, brokers = brokers)
-checked_model <- trial(portfolio)
-collect(checked_model)
+portfolio <- tw_product("portfolio", portfolio_model) |>
+  tw_replace_sources(
+    customers = customers,
+    policies = policies,
+    brokers = brokers
+  )
+checked_model <- tw_trial(portfolio)
+tw_collect(checked_model)
 
 reporting_month <- function(data, from, until) {
   data |>
@@ -97,16 +105,16 @@ reporting_month <- function(data, from, until) {
     )
 }
 reporting_product <- function(model_result) {
-  product("august_portfolio", model_result, table = "policies") |>
-    add_lookup(model_result, table = "customers", by = "customer_id") |>
-    add_lookup(model_result, table = "brokers", by = "broker_id") |>
-    add_transform(\(data) {
+  tw_product("august_portfolio", model_result, table = "policies") |>
+    tw_add_lookup(model_result, table = "customers", by = "customer_id") |>
+    tw_add_lookup(model_result, table = "brokers", by = "broker_id") |>
+    tw_add_transform(\(data) {
       reporting_month(data, as.Date("2026-08-01"), as.Date("2026-09-01"))
     })
 }
 august <- reporting_product(checked_model)
 define_cancellation_metrics <- function(approved = FALSE, code_version = NULL) {
-  metric_set(
+  tw_metric_set(
     "august_portfolio",
     opening = sum(opening, na.rm = TRUE),
     cancellations = sum(cancelled, na.rm = TRUE),
@@ -127,41 +135,49 @@ define_cancellation_metrics <- function(approved = FALSE, code_version = NULL) {
   )
 }
 cancellation_metrics <- define_cancellation_metrics()
-preview <- trial(august)
-values <- measure(preview, metrics = cancellation_metrics, by = character())
-collect(values)
+preview <- tw_trial(august)
+values <- tw_measure(preview, metrics = cancellation_metrics, by = character())
+tw_collect(values)
 stopifnot(
-  nrow(collect(preview)) == 8L,
-  sum(collect(preview)$opening) == 5,
-  sum(collect(preview)$cancelled) == 2
+  nrow(tw_collect(preview)) == 8L,
+  sum(tw_collect(preview)$opening) == 5,
+  sum(tw_collect(preview)$cancelled) == 2
 )
 
 
 root <- tempfile("cancellation-reference-")
-first_model <- publish(portfolio, to = root)
-first <- publish(reporting_product(first_model), to = root)
+first_model <- tw_publish(portfolio, to = root)
+first <- tw_publish(reporting_product(first_model), to = root)
 reviewed_metrics <- define_cancellation_metrics(
   approved = TRUE,
   code_version = "opening-cohort-v1"
 )
-first_values <- measure(first, metrics = reviewed_metrics, by = character())
-report_release(first_values, "august-original", code_version = "report-v1")
+first_values <- tw_measure(first, metrics = reviewed_metrics, by = character())
+tw_report_release(first_values, "august-original", code_version = "report-v1")
 
 corrected_policies <- fixed_policies
 corrected_policies$cancelled_on[
   corrected_policies$policy_id == "P7"
 ] <- as.Date("2026-08-15")
-second_model <- publish(
+second_model <- tw_publish(
   portfolio,
   to = root,
   previous = first_model,
   sources = list(policies = corrected_policies)
 )
-second <- publish(reporting_product(second_model), to = root, previous = first)
-second_values <- measure(second, metrics = reviewed_metrics, by = character())
-report_release(second_values, "august-corrected", code_version = "report-v1")
-original <- report_read(root, "august-original", values_only = TRUE)
-corrected <- report_read(root, "august-corrected", values_only = TRUE)
+second <- tw_publish(
+  reporting_product(second_model),
+  to = root,
+  previous = first
+)
+second_values <- tw_measure(
+  second,
+  metrics = reviewed_metrics,
+  by = character()
+)
+tw_report_release(second_values, "august-corrected", code_version = "report-v1")
+original <- tw_report_read(root, "august-original", values_only = TRUE)
+corrected <- tw_report_read(root, "august-corrected", values_only = TRUE)
 original
 corrected
 stopifnot(
@@ -169,9 +185,9 @@ stopifnot(
   corrected$value[corrected$.metric == "cancellation_rate"] == 0.6
 )
 stopifnot(
-  sum(collect(first)$cancelled) == 2,
-  sum(collect(second)$cancelled) == 3,
-  sum(collect(second)$opening) == 5
+  sum(tw_collect(first)$cancelled) == 2,
+  sum(tw_collect(second)$cancelled) == 3,
+  sum(tw_collect(second)$opening) == 5
 )
 
 unlink(root, recursive = TRUE)

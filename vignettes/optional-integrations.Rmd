@@ -28,34 +28,34 @@ source, dependency-aware execution or a deployment environment.
 The business definition stays small. This product does not choose infrastructure.
 
 ```{r definition}
-orders_definition <- product("orders", data.frame(id = 1:3, amount = c(25, 75, 50))) |>
+orders_definition <- tw_product("orders", data.frame(id = 1:3, amount = c(25, 75, 50))) |>
   dplyr::mutate(amount = amount * 2) |>
-  add_quality(~ amount >= 0)
+  tw_add_quality(~ amount >= 0)
 
-collect(run(orders_definition))
+tw_collect(tw_run(orders_definition))
 ```
 
-Choose a target when you need to write the checked result. `set_target()` replaces
+Choose a target when you need to write the checked result. `tw_set_target()` replaces
 only that component; the transformations and quality gate stay the same.
 
 ```{r sqlite, eval=requireNamespace("RSQLite", quietly=TRUE)}
 con <- DBI::dbConnect(RSQLite::SQLite(), ":memory:")
 result <- orders_definition |>
-  set_target(target_database(con, "orders")) |>
-  run(evidence = file.path(root, "evidence"))
+  tw_set_target(tw_target_database(con, "orders")) |>
+  tw_run(evidence = file.path(root, "evidence"))
 DBI::dbReadTable(con, "orders")
 
 # A caller-owned connection permits lazy database transformations.
-from_database <- product("large.orders") |>
-  add_source(source_database(con, table = "orders")) |>
+from_database <- tw_product("large.orders") |>
+  tw_add_source(tw_source_database(con, table = "orders")) |>
   dplyr::filter(amount >= 100) |>
-  add_quality(~ amount >= 0) |>
-  run()
-collect(from_database)
+  tw_add_quality(~ amount >= 0) |>
+  tw_run()
+tw_collect(from_database)
 DBI::dbDisconnect(con)
 ```
 
-`source_database()` accepts a `DBI::Id()` or SQL query as well as a plain table
+`tw_source_database()` accepts a `DBI::Id()` or SQL query as well as a plain table
 name. Parameterized queries use `params` and return materialized data.
 Caller-owned connections stay open; close them after collecting lazy results.
 A zero-argument connection factory opens a fresh connection during execution,
@@ -64,29 +64,29 @@ materializes the source and closes it, including after failure.
 ```{r parquet, eval=requireNamespace("arrow", quietly=TRUE)}
 parquet_path <- file.path(root, "orders.parquet")
 orders_definition |>
-  set_target(target_parquet(parquet_path)) |>
-  run()
+  tw_set_target(tw_target_parquet(parquet_path)) |>
+  tw_run()
 
-from_parquet <- product("parquet.orders") |>
-  add_source(source_parquet(parquet_path)) |>
+from_parquet <- tw_product("parquet.orders") |>
+  tw_add_source(tw_source_parquet(parquet_path)) |>
   dplyr::filter(amount >= 100) |>
-  add_quality(~ amount >= 0) |>
-  run()
-collect(from_parquet)
+  tw_add_quality(~ amount >= 0) |>
+  tw_run()
+tw_collect(from_parquet)
 ```
 
 An Arrow source stays lazy through supported dplyr transformations and native
-aggregate checks. `collect()` and targets that require ordinary R tables create
+aggregate checks. `tw_collect()` and targets that require ordinary R tables create
 materialization boundaries. A lazy workflow can still issue count/schema queries;
 "lazy" does not mean "no queries until collect".
 
 ```{r pins, eval=requireNamespace("pins", quietly=TRUE)}
 board <- pins::board_folder(file.path(root, "pins"), versioned = TRUE)
 pinned <- orders_definition |>
-  set_target(target_pins(board, "orders")) |>
-  run()
+  tw_set_target(tw_target_pins(board, "orders")) |>
+  tw_run()
 
-read_source(source_pins(board, "orders", version = pinned$outputs$version))
+tw_read_source(tw_source_pins(board, "orders", version = pinned$outputs$version))
 ```
 
 Version retention and authentication belong to the pins board. Reading a reported
@@ -106,13 +106,13 @@ pin version is distinct from the immutable-release guarantees of a governed lake
 | httr2 API source | Collects pages into one table | No consistent remote snapshot unless the API supplies one | Request factory obtains runtime authentication |
 | dbt transform | Stages input and materializes selected output | dbt owns model writes; failed final product checks do not undo them | Fresh connections close before/after the CLI |
 
-`capabilities(component)` describes declared support; it does not prove remote
+`tw_capabilities(component)` describes declared support; it does not prove remote
 permissions or a driver's transaction guarantees. For DBI append, the adapter
 checks the combined existing and incoming table inside its transaction. This
-requires collecting the existing table. `collect(result)` still represents the
+requires collecting the existing table. `tw_collect(result)` still represents the
 incoming batch; `result$outputs$rows` reports the full destination size.
 
-`target_parquet()` writes a **single local file**, not a remote object or a
+`tw_target_parquet()` writes a **single local file**, not a remote object or a
 partitioned dataset. It refuses replacement unless `overwrite = TRUE`. For larger
 storage requirements choose an appropriate backend or implement a target adapter.
 
@@ -132,13 +132,13 @@ hana_connection <- function() {
   DBI::dbConnect(odbc::odbc(), dsn = Sys.getenv("HANA_DSN"))
 }
 
-product("contracts") |>
-  add_source(source_database(hana_connection,
+tw_product("contracts") |>
+  tw_add_source(tw_source_database(hana_connection,
     table = DBI::Id(schema = "RISK", table = "CONTRACTS"))) |>
-  add_quality(~ amount >= 0) |>
-  set_target(target_database(postgres_connection,
+  tw_add_quality(~ amount >= 0) |>
+  tw_set_target(tw_target_database(postgres_connection,
     DBI::Id(schema = "analytics", table = "contracts"))) |>
-  run(evidence = "runs")
+  tw_run(evidence = "runs")
 ```
 
 Factories prioritize clear connection ownership and return materialized sources.
@@ -159,7 +159,7 @@ make_request <- function(cursor = NULL) {
     httr2::req_retry(max_tries = 4) |>
     httr2::req_throttle(rate = 5)
 }
-api <- source_api(
+api <- tw_source_api(
   request = function() make_request(),
   parse = function(response) {
     body <- httr2::resp_body_json(response, simplifyVector = TRUE)
@@ -171,10 +171,10 @@ api <- source_api(
   },
   max_pages = 100
 )
-api_definition <- product("api.orders") |>
-  add_source(api) |>
-  add_quality(~ amount >= 0)
-run(api_definition, evidence = "runs")
+api_definition <- tw_product("api.orders") |>
+  tw_add_source(api) |>
+  tw_add_quality(~ amount >= 0)
+tw_run(api_definition, evidence = "runs")
 ```
 
 The factory reads fresh credentials when execution starts. The callback rebuilds
@@ -188,9 +188,9 @@ A lake's technical registry records releases and execution. An external catalog
 receives descriptive metadata. Configure these independently.
 
 ```{r remote-storage, eval=FALSE}
-config <- lake_config(
-  catalog = registry_postgres("DUCKLAKE_PG_CONNECTION"),
-  storage = storage_s3(
+config <- tw_lake_config(
+  catalog = tw_registry_postgres("DUCKLAKE_PG_CONNECTION"),
+  storage = tw_storage_s3(
     bucket = Sys.getenv("TIDYWEAVE_S3_BUCKET"),
     prefix = "tidyweave/production",
     endpoint = Sys.getenv("TIDYWEAVE_S3_ENDPOINT")
@@ -199,8 +199,8 @@ config <- lake_config(
   backend = "ducklake"
 )
 orders_definition |>
-  set_target(target_lake(config)) |>
-  run(evidence = "runs")
+  tw_set_target(tw_target_lake(config)) |>
+  tw_run(evidence = "runs")
 ```
 
 This configuration provisions no services and migrates no existing local lake.
@@ -212,7 +212,7 @@ for OpenLineage, OpenMetadata and retrying pending metadata deliveries.
 
 ## Let targets manage product dependencies
 
-A nested product is an upstream dependency. `as_targets()` converts the same
+A nested product is an upstream dependency. `tw_as_targets()` converts the same
 composition to real [targets](https://books.ropensci.org/targets/) targets.
 Save the following as `_targets.R`; this example is displayed without executing
 a build inside the vignette.
@@ -220,19 +220,19 @@ a build inside the vignette.
 ```{r targets-script, eval=FALSE}
 library(tidyweave)
 
-orders_definition <- product("orders") |> add_source("orders.csv")
-totals_definition <- product("totals") |>
-  add_source(orders_definition) |>
-  add_transform(function(data) dplyr::summarise(data, total = sum(amount)))
+orders_definition <- tw_product("orders") |> tw_add_source("orders.csv")
+totals_definition <- tw_product("totals") |>
+  tw_add_source(orders_definition) |>
+  tw_add_transform(function(data) dplyr::summarise(data, total = sum(amount)))
 
-as_targets(totals_definition, evidence = "runs")
+tw_as_targets(totals_definition, evidence = "runs")
 ```
 
 Then run:
 
 ```{r targets-run, eval=FALSE}
 targets::tar_make()
-collect(targets::tar_read(totals))
+tw_collect(targets::tar_read(totals))
 ```
 
 Each product executes once. Downstream products consume the completed upstream
@@ -243,7 +243,7 @@ referenced function globals are tracked; dynamic lookups, mutable environments
 and remote database/API changes need an explicit cue:
 
 ```{r targets-cue, eval=FALSE}
-as_targets(api_definition, cue = targets::tar_cue(mode = "always"),
+tw_as_targets(api_definition, cue = targets::tar_cue(mode = "always"),
   evidence = "runs")
 ```
 
@@ -257,7 +257,7 @@ belongs to your CI runner, scheduler or deployment platform.
 
 ```{r project}
 project_path <- file.path(root, "project")
-init_project(project_path, targets = TRUE, renv = TRUE, connect = TRUE)
+tw_init_project(project_path, targets = TRUE, renv = TRUE, connect = TRUE)
 list.files(project_path)
 ```
 

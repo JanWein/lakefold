@@ -15,14 +15,14 @@
 #' @param targets Write `_targets.R` for dependency-aware execution.
 #' @param connect Write `job.qmd` and deployment instructions for Posit Connect.
 #' @returns The normalized project path, invisibly.
-#' @seealso [product()], [as_targets()]
+#' @seealso [tw_product()], [tw_as_targets()]
 #' @export
 #' @examples
 #' path <- tempfile("orders-project-")
-#' init_project(path)
+#' tw_init_project(path)
 #' list.files(path)
 #' unlink(path, recursive = TRUE)
-init_project <- function(
+tw_init_project <- function(
   path,
   name = "orders",
   renv = FALSE,

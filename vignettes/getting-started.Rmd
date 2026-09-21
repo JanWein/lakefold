@@ -1,8 +1,8 @@
 ---
-title: "5. Work through a reporting month"
+title: "Work through a reporting month"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{5. Work through a reporting month}
+  %\VignetteIndexEntry{Work through a reporting month}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -12,7 +12,7 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>", message = FALSE,
   eval = requireNamespace("duckdb", quietly = TRUE))
 ```
 
-**Goal:** combine the first four lessons in a complete monthly workflow.
+**Goal:** combine specifications, checks and publication in a monthly workflow.
 **Needs:** tidyweave and optional DuckDB >= 1.5.5. The example is self-contained.
 Read [Save a report](save-report.html) first if report issuance is new to you.
 
@@ -32,17 +32,17 @@ august_date <- as.Date("2026-08-31")
 august <- data.frame(entity = c("North", "South"),
   date = rep(august_date, 2), amount = c(100, 250))
 
-reserves <- product("reserves", august) |>
-  add_contract(contract(
+reserves <- tw_product("reserves", august) |>
+  tw_add_contract(tw_contract(
     columns = c(entity = "character", date = "Date", amount = "numeric"),
     key = c("entity", "date")
   )) |>
-  add_quality(~ amount >= 0, name = "nonnegative") |>
-  set_target(target_lake(root, partition_by = "date"))
+  tw_add_quality(~ amount >= 0, name = "nonnegative") |>
+  tw_set_target(tw_target_lake(root, partition_by = "date"))
 
-first <- publish(reserves, business_date = "2026-08-31")
-sum(collect(first)$amount)
-stopifnot(first$status == "published", sum(collect(first)$amount) == 350)
+first <- tw_publish(reserves, business_date = "2026-08-31")
+sum(tw_collect(first)$amount)
+stopifnot(first$status == "published", sum(tw_collect(first)$amount) == 350)
 ```
 
 The contract requires one row per entity and date. The rule rejects negative
@@ -59,12 +59,12 @@ so adding August and September is not a valid reserve total. The stock setting
 requires selection of one reporting date.
 
 ```{r issued-report}
-metrics <- metric_set("reserves", total_reserve = sum(amount, na.rm = TRUE),
+metrics <- tw_metric_set("reserves", total_reserve = sum(amount, na.rm = TRUE),
   time_column = "date", time_behavior = "stock", units = "EUR",
   approved = TRUE, code_version = "reserves-v1")
-as_reported <- measure(first, metrics = metrics, at = august_date)
-as_reported |> report_release("august-report-v1", code_version = "report-v1")
-stopifnot(collect(as_reported)$value == 350)
+as_reported <- tw_measure(first, metrics = metrics, at = august_date)
+as_reported |> tw_report_release("august-report-v1", code_version = "report-v1")
+stopifnot(tw_collect(as_reported)$value == 350)
 ```
 
 `approved = TRUE` records your declared business approval; it does not perform
@@ -77,11 +77,11 @@ can use the value.
 ```{r correction}
 corrected <- august
 corrected$amount[corrected$entity == "South"] <- 270
-correction <- publish(reserves, data = corrected, business_date = "2026-08-31")
-sum(collect(correction)$amount)
-sum(collect(first)$amount)
-stopifnot(sum(collect(correction)$amount) == 370,
-  sum(collect(first)$amount) == 350)
+correction <- tw_publish(reserves, data = corrected, business_date = "2026-08-31")
+sum(tw_collect(correction)$amount)
+sum(tw_collect(first)$amount)
+stopifnot(sum(tw_collect(correction)$amount) == 370,
+  sum(tw_collect(first)$amount) == 350)
 ```
 
 `data = corrected` submits the replacement delivery to the existing definition.
@@ -93,14 +93,14 @@ exact release, not whatever happens to be current.
 
 ```{r duplicate}
 bad <- rbind(corrected, corrected[2, ])
-blocked <- publish(reserves, data = bad, stop_on_failure = FALSE)
-quality_report(blocked)
+blocked <- tw_publish(reserves, data = bad, stop_on_failure = FALSE)
+tw_quality_report(blocked)
 stopifnot(blocked$status == "blocked")
 ```
 
 The repeated South row violates the contract key. It never becomes current.
 The default raises an error on a failed run; `stop_on_failure = FALSE` lets
-this lesson inspect the outcome. Correcting data belongs in preparation or the
+this guide inspect the outcome. Correcting data belongs in preparation or the
 upstream source, not inside a quality check that silently deletes a row.
 
 ## 5. Add a complete September partition
@@ -108,9 +108,9 @@ upstream source, not inside a quality check that silently deletes a row.
 ```{r september}
 september <- data.frame(entity = c("North", "South"),
   date = rep(as.Date("2026-09-30"), 2), amount = c(110, 280))
-latest <- publish(reserves, data = september, business_date = "2026-09-30")
-collect(latest) |> dplyr::arrange(date, entity)
-stopifnot(nrow(collect(latest)) == 4L)
+latest <- tw_publish(reserves, data = september, business_date = "2026-09-30")
+tw_collect(latest) |> dplyr::arrange(date, entity)
+stopifnot(nrow(tw_collect(latest)) == 4L)
 ```
 
 Both dates are now in the current table. Each supplied date must contain its
@@ -121,10 +121,10 @@ the complete candidate, including retained August rows.
 ## 6. Reuse a pinned release in another product
 
 ```{r derived-product}
-monthly_totals <- product("monthly_totals", latest) |>
+monthly_totals <- tw_product("monthly_totals", latest) |>
   dplyr::group_by(date) |>
   dplyr::summarise(total = sum(amount, na.rm = TRUE), .groups = "drop")
-totals <- collect(trial(monthly_totals)) |> dplyr::arrange(date)
+totals <- tw_collect(tw_trial(monthly_totals)) |> dplyr::arrange(date)
 totals
 stopifnot(identical(totals$total, c(370, 390)))
 ```
@@ -136,11 +136,11 @@ and closes the read connection; no manual release-ID plumbing is needed.
 ## 7. Read the issued report, without recalculating it
 
 ```{r read-report}
-issued <- report_read(root, "august-report-v1", values_only = TRUE)
-current <- measure(latest, metrics = metrics, at = august_date)
+issued <- tw_report_read(root, "august-report-v1", values_only = TRUE)
+current <- tw_measure(latest, metrics = metrics, at = august_date)
 issued
-collect(current)
-stopifnot(issued$value == 350, collect(current)$value == 370)
+tw_collect(current)
+stopifnot(issued$value == 350, tw_collect(current)$value == 370)
 ```
 
 | Event | Current data | Issued August report |
@@ -164,9 +164,9 @@ read_reserves <- function(path) {
     dplyr::mutate(date = as.Date(date))
 }
 reserves |>
-  add_source("incoming/reserves.xlsx",
+  tw_add_source("incoming/reserves.xlsx",
     reader = read_reserves, replace = TRUE) |>
-  publish(evidence = "runs")
+  tw_publish(evidence = "runs")
 ```
 
 Passing a file path lets the lake archive the original workbook. Passing an R
@@ -186,4 +186,4 @@ reopen the original report. Continue with [three related deliveries](three-deliv
 for named inputs, grouped reporting and reference corrections, or choose a task
 in [Learn](learn.html).
 
-[Previous: Save a report](save-report.html) · [All five lessons](get-started.html)
+[Previous: Save a report](save-report.html) · [Get started](get-started.html)

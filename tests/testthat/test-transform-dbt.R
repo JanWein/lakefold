@@ -1,19 +1,19 @@
 test_that("dbt transform definitions do not connect or execute", {
   calls <- 0
-  step <- transform_dbt(
-    dbt_project("missing"),
+  step <- tw_transform_dbt(
+    tw_dbt_project("missing"),
     "model.shop.orders",
     connection = function() {
       calls <<- calls + 1
     },
     input = DBI::Id(schema = "raw", table = "orders")
   )
-  expect_equal(inspect(step)$type, "dbt transformation")
-  expect_equal(inspect(step)$input, list(schema = "raw", table = "orders"))
+  expect_equal(tw_inspect(step)$type, "dbt transformation")
+  expect_equal(tw_inspect(step)$input, list(schema = "raw", table = "orders"))
   expect_equal(calls, 0)
   error <- tryCatch(
-    transform_dbt(
-      dbt_project("missing"),
+    tw_transform_dbt(
+      tw_dbt_project("missing"),
       "orders",
       connection = identity,
       input = "orders"
@@ -81,18 +81,18 @@ test_that("real dbt transformation consumes staged input and propagates test fai
     connections[[length(connections) + 1L]] <<- con
     con
   }
-  step <- transform_dbt(
-    dbt_project(root, root, executable = executable),
+  step <- tw_transform_dbt(
+    tw_dbt_project(root, root, executable = executable),
     "model.shop.orders",
     connection = factory,
     input = "staged_orders"
   )
-  first_run <- product("dbt.orders") |>
-    add_source(data.frame(id = 1:2, amount = c(10, 20))) |>
-    add_transform(step, "dbt") |>
-    add_transform(identity, "after_dbt") |>
-    run()
-  first <- collect(first_run)
+  first_run <- tw_product("dbt.orders") |>
+    tw_add_source(data.frame(id = 1:2, amount = c(10, 20))) |>
+    tw_add_transform(step, "dbt") |>
+    tw_add_transform(identity, "after_dbt") |>
+    tw_run()
+  first <- tw_collect(first_run)
   expect_equal(
     first_run$metadata$transformations$dbt$model,
     "model.shop.orders"
@@ -100,11 +100,11 @@ test_that("real dbt transformation consumes staged input and propagates test fai
   expect_equal(first$amount, c(20, 40))
   expect_null(attr(first, "tw_transform_metadata"))
   expect_null(first_run$metadata$transformations$after_dbt)
-  second <- execute_transform(step, data.frame(id = 1:2, amount = c(15, 25)))
+  second <- tw_execute_transform(step, data.frame(id = 1:2, amount = c(15, 25)))
   expect_equal(second$amount, c(30, 50))
   expect_equal(any(vapply(connections, DBI::dbIsValid, logical(1))), FALSE)
   error <- tryCatch(
-    execute_transform(step, data.frame(id = c(1L, 1L), amount = c(10, 20))),
+    tw_execute_transform(step, data.frame(id = c(1L, 1L), amount = c(10, 20))),
     error = identity
   )
   expect_s3_class(error, "tw_dbt_failed")

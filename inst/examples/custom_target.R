@@ -3,18 +3,18 @@ library(tidyweave)
 guide_source <- function(data) {
   structure(list(data = data), class = "guide_source")
 }
-read_source.guide_source <- function(source, ...) source$data
-check_component.guide_source <- function(x, ...) {
+tw_read_source.guide_source <- function(source, ...) source$data
+tw_check_component.guide_source <- function(x, ...) {
   if (!is.data.frame(x$data)) {
     stop("Supply an R data frame.")
   }
   invisible(x)
 }
-inspect.guide_source <- function(x, ...) {
+tw_inspect.guide_source <- function(x, ...) {
   list(type = "example reader", columns = names(x$data))
 }
-capabilities.guide_source <- function(x, ...) {
-  component_capabilities(
+tw_capabilities.guide_source <- function(x, ...) {
+  tw_component_capabilities(
     read = TRUE,
     write = FALSE,
     lazy = FALSE,
@@ -27,7 +27,7 @@ capabilities.guide_source <- function(x, ...) {
 guide_target <- function(path) {
   structure(list(path = path), class = "guide_target")
 }
-check_component.guide_target <- function(x, ...) {
+tw_check_component.guide_target <- function(x, ...) {
   if (
     !is.character(x$path) ||
       length(x$path) != 1L ||
@@ -44,11 +44,11 @@ check_component.guide_target <- function(x, ...) {
   }
   invisible(x)
 }
-inspect.guide_target <- function(x, ...) {
+tw_inspect.guide_target <- function(x, ...) {
   list(type = "new RDS directory", path = x$path)
 }
-capabilities.guide_target <- function(x, ...) {
-  component_capabilities(
+tw_capabilities.guide_target <- function(x, ...) {
+  tw_component_capabilities(
     read = FALSE,
     write = TRUE,
     lazy = FALSE,
@@ -57,8 +57,8 @@ capabilities.guide_target <- function(x, ...) {
     immutable = FALSE
   )
 }
-write_target.guide_target <- function(target, data, context, ...) {
-  check_component(target)
+tw_write_target.guide_target <- function(target, data, context, ...) {
+  tw_check_component(target)
   if (!dir.create(target$path, showWarnings = FALSE)) {
     stop("Could not create the new destination.")
   }
@@ -71,35 +71,35 @@ write_target.guide_target <- function(target, data, context, ...) {
 }
 
 guide_quality <- function() {
-  rule <- quality_rule("nonnegative", ~ amount >= 0)
+  rule <- tw_quality_rule("nonnegative", ~ amount >= 0)
   class(rule) <- c("guide_quality", class(rule))
   rule
 }
-run_quality.guide_quality <- function(rule, data, ...) {
+tw_run_quality.guide_quality <- function(rule, data, ...) {
   # A real external engine would supply these aggregate counts.
   failed <- sum(is.na(data$amount) | data$amount < 0)
   total <- nrow(data)
-  native <- quality_rule(
+  native <- tw_quality_rule(
     rule$name,
-    function(data) quality_counts(failed, total),
+    function(data) tw_quality_counts(failed, total),
     severity = rule$severity,
     max_failure = rule$max_failure
   )
-  evidence <- run_quality(native, data)
+  evidence <- tw_run_quality(native, data)
   evidence$engine <- "example"
   evidence
 }
 
 methods <- list(
-  read_source.guide_source = read_source.guide_source,
-  check_component.guide_source = check_component.guide_source,
-  inspect.guide_source = inspect.guide_source,
-  capabilities.guide_source = capabilities.guide_source,
-  check_component.guide_target = check_component.guide_target,
-  inspect.guide_target = inspect.guide_target,
-  capabilities.guide_target = capabilities.guide_target,
-  write_target.guide_target = write_target.guide_target,
-  run_quality.guide_quality = run_quality.guide_quality
+  tw_read_source.guide_source = tw_read_source.guide_source,
+  tw_check_component.guide_source = tw_check_component.guide_source,
+  tw_inspect.guide_source = tw_inspect.guide_source,
+  tw_capabilities.guide_source = tw_capabilities.guide_source,
+  tw_check_component.guide_target = tw_check_component.guide_target,
+  tw_inspect.guide_target = tw_inspect.guide_target,
+  tw_capabilities.guide_target = tw_capabilities.guide_target,
+  tw_write_target.guide_target = tw_write_target.guide_target,
+  tw_run_quality.guide_quality = tw_run_quality.guide_quality
 )
 for (name in names(methods)) {
   registerS3method(
@@ -111,29 +111,29 @@ for (name in names(methods)) {
 }
 
 guide_workflow <- function(source, target = NULL, check = ~ amount >= 0) {
-  product("orders") |>
-    add_source(source) |>
-    add_transform(function(data) transform(data, amount = amount * 2)) |>
-    add_quality(check) |>
-    set_target(target)
+  tw_product("orders") |>
+    tw_add_source(source) |>
+    tw_add_transform(function(data) transform(data, amount = amount * 2)) |>
+    tw_add_quality(check) |>
+    tw_set_target(target)
 }
 input <- data.frame(id = 1:2, amount = c(10, 20))
 path <- tempfile("custom-target-")
-native <- run(guide_workflow(input))
-extended <- run(guide_workflow(
+native <- tw_run(guide_workflow(input))
+extended <- tw_run(guide_workflow(
   guide_source(input),
   guide_target(path),
   guide_quality()
 ))
-stopifnot(identical(collect(native), collect(extended)))
+stopifnot(identical(tw_collect(native), tw_collect(extended)))
 stopifnot(identical(
   readRDS(extended$outputs$path),
-  as.data.frame(collect(native))
+  as.data.frame(tw_collect(native))
 ))
 
-flags <- capabilities(guide_target(tempfile()))
+flags <- tw_capabilities(guide_target(tempfile()))
 stopifnot(
-  setequal(names(flags), names(component_capabilities())),
+  setequal(names(flags), names(tw_component_capabilities())),
   all(vapply(flags, function(x) is.logical(x) && length(x) == 1L, logical(1)))
 )
 
@@ -143,7 +143,7 @@ bad <- guide_workflow(
   guide_target(blocked_path),
   guide_quality()
 )
-blocked <- run(bad, stop_on_failure = FALSE)
+blocked <- tw_run(bad, stop_on_failure = FALSE)
 stopifnot(blocked$status == "blocked", !file.exists(blocked_path))
 
 unlink(path, recursive = TRUE)

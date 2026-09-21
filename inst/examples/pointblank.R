@@ -7,11 +7,11 @@ if (requireNamespace("pointblank", quietly = TRUE)) {
     date = as.Date("2026-09-30"),
     reserve = c(100, 200)
   )
-  schema <- contract(
+  schema <- tw_contract(
     columns = c(id = "character", date = "Date", reserve = "numeric"),
     key = c("id", "date")
   )
-  checks <- pointblank_checks(
+  checks <- tw_pointblank_checks(
     "business_checks",
     function(data) {
       pointblank::create_agent(
@@ -23,13 +23,13 @@ if (requireNamespace("pointblank", quietly = TRUE)) {
     policy = "agent"
   )
 
-  result <- product("reserves") |>
-    add_source(reserves) |>
-    add_contract(schema) |>
-    add_quality(checks) |>
-    run()
-  print(quality(result))
-  print(collect(result))
+  result <- tw_product("reserves") |>
+    tw_add_source(reserves) |>
+    tw_add_contract(schema) |>
+    tw_add_quality(checks) |>
+    tw_run()
+  print(tw_quality(result))
+  print(tw_collect(result))
 } else {
   message("Install optional package pointblank to run this example.")
 }

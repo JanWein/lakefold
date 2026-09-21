@@ -10,7 +10,7 @@
 #' and examines real primary and foreign key constraints. Both engines use the
 #' same dplyr left join for consistent column naming and verify the row count.
 #' Lookup checks run at this transformation step, before subsequent transforms.
-#' Ordinary [add_quality()] checks still apply to the final candidate.
+#' Ordinary [tw_add_quality()] checks still apply to the final candidate.
 #'
 #' The reference is an explicit execution dependency: products are validated
 #' and shared results are reused within a run. No source is read at definition
@@ -34,19 +34,19 @@
 #' @param name Stable delivery name used by `sources = list(name = new_data)`.
 #'   Defaults to the reference product id or a bare source variable's name.
 #'   For expressions such as file readers, supply a name explicitly; otherwise
-#'   an automatic lookup name is used. [explain()] shows the available names.
+#'   an automatic lookup name is used. [tw_explain()] shows the available names.
 #' @param table Table to select when source is a successful model result. The
 #'   table name is also the default delivery name; published members stay pinned.
 #' @returns An updated product specification.
 #' @export
 #' @examples
 #' customers <- data.frame(id = c("a", "b"), region = c("North", "South"))
-#' product("orders") |>
-#'   add_source(data.frame(customer_id = c("a", "a", "b"))) |>
-#'   add_lookup(customers, by = c(customer_id = "id")) |>
-#'   run() |>
-#'   collect()
-add_lookup <- function(
+#' tw_product("orders") |>
+#'   tw_add_source(data.frame(customer_id = c("a", "a", "b"))) |>
+#'   tw_add_lookup(customers, by = c(customer_id = "id")) |>
+#'   tw_run() |>
+#'   tw_collect()
+tw_add_lookup <- function(
   x,
   source,
   by,
@@ -86,7 +86,7 @@ add_lookup <- function(
     abort(paste0(
       "Delivery name '",
       name,
-      "' is already used. Supply a unique name in add_lookup(name = )."
+      "' is already used. Supply a unique name in tw_add_lookup(name = )."
     ))
   }
   step <- structure(
@@ -101,7 +101,7 @@ add_lookup <- function(
     ),
     class = "tw_lookup_transform"
   )
-  add_transform(x, step, name = step_name)
+  tw_add_transform(x, step, name = step_name)
 }
 
 lookup_keys <- function(by) {
@@ -158,7 +158,7 @@ replace_component_sources.tw_lookup_transform <- function(x, sources, ...) {
 }
 
 #' @export
-check_component.tw_lookup_transform <- function(x, ...) {
+tw_check_component.tw_lookup_transform <- function(x, ...) {
   lookup_keys(x$by)
   lookup_suffix(x$suffix)
   match.arg(x$engine, c("native", "dm"))
@@ -170,11 +170,11 @@ check_component.tw_lookup_transform <- function(x, ...) {
 }
 
 #' @export
-inspect.tw_lookup_transform <- function(x, ...) {
+tw_inspect.tw_lookup_transform <- function(x, ...) {
   source <- if (inherits(x$source, "tw_product")) {
     list(type = "product", id = x$source$id, version = x$source$version)
   } else {
-    inspect(x$source)
+    tw_inspect(x$source)
   }
   source$rows <- NULL
   if (is.list(source$data)) {
@@ -191,16 +191,19 @@ inspect.tw_lookup_transform <- function(x, ...) {
 }
 
 #' @export
-execute_transform.tw_lookup_transform <- function(
+tw_execute_transform.tw_lookup_transform <- function(
   transform,
   data,
   ...,
   sources = list()
 ) {
-  check_component(transform)
+  tw_check_component(transform)
   reference <- sources$lookup
   if (is.null(reference)) {
-    abort("A lookup reference must be resolved by run().", "tw_lookup_invalid")
+    abort(
+      "A lookup reference must be resolved by tw_run().",
+      "tw_lookup_invalid"
+    )
   }
   data <- table_result(data, "Lookup input")
   reference <- table_result(reference, "Lookup reference")

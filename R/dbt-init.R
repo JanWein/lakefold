@@ -10,41 +10,41 @@
 #' attachment. Supported configurations use a local metadata catalog and local
 #' storage. For S3, PostgreSQL or dbt v2 catalog configuration, create and
 #'   verify
-#' an appropriate profile yourself and use [dbt_project()]. The starter
+#' an appropriate profile yourself and use [tw_dbt_project()]. The starter
 #' uses the dbt-duckdb profile format; it does not install dbt or adapters.
 #'
 #' @param path Character scalar giving a new or empty directory.
-#' @param config A [lake_config()] with a local DuckDB catalog and local storage.
+#' @param config A [tw_lake_config()] with a local DuckDB catalog and local storage.
 #' @param name Character scalar. A dbt project identifier containing letters,
 #'   digits and underscores, starting with a letter.
-#' @param sources Optional named list accepted by [dbt_sources()]. The canned
+#' @param sources Optional named list accepted by [tw_dbt_sources()]. The canned
 #'   order example requires an `orders` entry whose recorded schema includes
 #'   `order_id`, `customer_id` and `amount`. Staging casts `amount` to SQL
 #'   `double`, including when input amounts are character strings. Invalid
 #'   numeric strings fail the dbt build. Other named sources also receive
-#'   staging models. For arbitrary business models use [dbt_sources()] with
+#'   staging models. For arbitrary business models use [tw_dbt_sources()] with
 #'   your own project instead of this order-specific starter.
-#' @inheritParams dbt_project
-#' @returns A [dbt_project()] specification pointing to the written project
+#' @inheritParams tw_dbt_project
+#' @returns A [tw_dbt_project()] specification pointing to the written project
 #'   and profile. Its `source_config` records the expected catalog. Source mode
 #'   creates no seeds and never writes RAW tables. Configure
-#'   `layers = c("raw", "staging", "core", "marts")` in [lake_config()].
+#'   `layers = c("raw", "staging", "core", "marts")` in [tw_lake_config()].
 #'   A named layer vector can map `staging`, `core` and `marts` to other schema
 #'   names; the ingestion schema remains `raw`. Seed mode also works with the
 #'   usual three-layer lake configuration, creating its dbt schemas on build.
-#' @seealso [dbt_build()], [product()]
+#' @seealso [tw_dbt_build()], [tw_product()]
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE) && requireNamespace("yaml", quietly = TRUE)
 #' root <- tempfile("tidyweave-example-")
-#' config <- lake_config(
-#'   catalog = registry_duckdb(file.path(root, "lake.duckdb")),
-#'   storage = storage_local(file.path(root, "data")),
+#' config <- tw_lake_config(
+#'   catalog = tw_registry_duckdb(file.path(root, "lake.duckdb")),
+#'   storage = tw_storage_local(file.path(root, "data")),
 #'   landing = file.path(root, "landing"), backend = "duckdb"
 #' )
-#' project <- dbt_init(file.path(root, "dbt"), config)
+#' project <- tw_dbt_init(file.path(root, "dbt"), config)
 #' project
 #' unlink(root, recursive = TRUE)
 #' @export
-dbt_init <- function(
+tw_dbt_init <- function(
   path,
   config,
   name = "tidyweave_demo",
@@ -59,7 +59,7 @@ dbt_init <- function(
       config$storage$type != "local"
   ) {
     abort(
-      "The starter requires lake_config() with local catalog and storage.",
+      "The starter requires tw_lake_config() with local catalog and storage.",
       "tw_dbt_invalid"
     )
   }
@@ -82,7 +82,7 @@ dbt_init <- function(
     }
     if (!"orders" %in% names(sources)) {
       abort(
-        "The order starter needs sources = list(orders = accepted_raw). Use dbt_sources() for a general project.",
+        "The order starter needs sources = list(orders = accepted_raw). Use tw_dbt_sources() for a general project.",
         "tw_dbt_invalid"
       )
     }
@@ -120,7 +120,7 @@ dbt_init <- function(
           c("character", "integer", "numeric", "integer64")
     ) {
       abort(
-        "The order starter requires order_id, customer_id and amount as numbers or numeric strings. Use dbt_sources() for other schemas.",
+        "The order starter requires order_id, customer_id and amount as numbers or numeric strings. Use tw_dbt_sources() for other schemas.",
         "tw_dbt_invalid"
       )
     }
@@ -156,7 +156,7 @@ dbt_init <- function(
       "tw_dbt_invalid"
     )
   }
-  project <- dbt_project(path, path, target = "dev", executable = executable)
+  project <- tw_dbt_project(path, path, target = "dev", executable = executable)
   project$source_config <- config
   directories <- c("models/staging", "models/core", "models/marts", "macros")
   if (is.null(sources)) {
@@ -207,7 +207,7 @@ dbt_init <- function(
   }
   yaml::write_yaml(definition, file.path(path, "dbt_project.yml"))
   if (!is.null(sources)) {
-    dbt_sources(project, sources, name = "raw")
+    tw_dbt_sources(project, sources, name = "raw")
   }
   for (source_name in names(source_types)) {
     columns <- source_types[[source_name]]
@@ -305,20 +305,20 @@ dbt_init <- function(
       "",
       "```r",
       "library(tidyweave)",
-      "project <- dbt_project(\".\", profiles_dir = \".\")",
-      "result <- dbt_build(project)",
-      "dbt_status(result)",
-      "dbt_lineage(result)",
+      "project <- tw_dbt_project(\".\", profiles_dir = \".\")",
+      "result <- tw_dbt_build(project)",
+      "tw_dbt_status(result)",
+      "tw_dbt_lineage(result)",
       "```",
       "",
       if (is.null(sources)) {
-        "For real ingestion, create a new project with dbt_init(..., sources = list(orders = accepted_raw))."
+        "For real ingestion, create a new project with tw_dbt_init(..., sources = list(orders = accepted_raw))."
       } else {
-        "This project has no dbt seeds. Rebind a newer accepted release explicitly with dbt_sources(project, list(orders = accepted_raw), name = 'raw')."
+        "This project has no dbt seeds. Rebind a newer accepted release explicitly with tw_dbt_sources(project, list(orders = accepted_raw), name = 'raw')."
       },
       "stg_orders casts source types; core_orders names order_amount and derives is_positive_order.",
       "customer_revenue aggregates the core model by customer_id.",
-      "dbt_sources() manages only its marked source YAML; edit the SQL models normally.",
+      "tw_dbt_sources() manages only its marked source YAML; edit the SQL models normally.",
       "Close R connections to this catalog before running dbt. Reconnect afterwards.",
       "profiles.yml contains machine-specific paths and is intentionally gitignored.",
       "The schema macro uses exact schema names. Use a separate catalog for each environment.",

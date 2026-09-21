@@ -8,7 +8,7 @@ execute:
 
 ```{r}
 source("run.R")
-utils::head(collect(result))
+utils::head(tw_collect(result))
 ```
 
 A failed run stops rendering. Inspect durable run evidence for every execution;

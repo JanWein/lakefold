@@ -1,10 +1,10 @@
 #' Replace inputs without rebuilding a workflow
 #'
 #' Edits definitions only: no readers, transformations, connections or dbt
-#' commands run. Execute the returned definition with [run()] or [publish()],
-#' or rebuild its [as_targets()] graph to let targets cache unaffected products.
+#' commands run. Execute the returned definition with [tw_run()] or [tw_publish()],
+#' or rebuild its [tw_as_targets()] graph to let targets cache unaffected products.
 #'
-#' For products, names select a delivery name shown by [explain()] or a nested
+#' For products, names select a delivery name shown by [tw_explain()] or a nested
 #' product ID. A product ID updates the ordinary delivery at the end of its
 #' single-primary-input chain, retaining every product's transforms, checks and
 #' target in every reference, including
@@ -23,17 +23,17 @@
 #' Unselected bindings retain their exact release IDs. Files are updated only
 #' when the project executes. External-profile projects are not supported.
 #'
-#' @param x A product or managed [dbt_project()] definition.
-#' @param ... Named replacement sources, using the same values as [add_source()]
+#' @param x A product or managed [tw_dbt_project()] definition.
+#' @param ... Named replacement sources, using the same values as [tw_add_source()]
 #'   for products. For managed dbt, successful published lake results.
 #' @returns An updated definition of the same class as `x`.
 #' @export
 #' @examples
-#' orders <- product("orders", data.frame(amount = 10))
-#' totals <- product("totals", orders)
-#' corrected <- totals |> replace_sources(orders = data.frame(amount = 20))
-#' corrected |> run() |> collect()
-replace_sources <- function(x, ...) {
+#' orders <- tw_product("orders", data.frame(amount = 10))
+#' totals <- tw_product("totals", orders)
+#' corrected <- totals |> tw_replace_sources(orders = data.frame(amount = 20))
+#' corrected |> tw_run() |> tw_collect()
+tw_replace_sources <- function(x, ...) {
   replace_sources_list(x, list(...))
 }
 
@@ -208,7 +208,7 @@ delivery_aliases <- function(x) {
         next
       }
       abort(
-        "Delivery names must be unique. Rename the lookup with add_lookup(name = )."
+        "Delivery names must be unique. Rename the lookup with tw_add_lookup(name = )."
       )
     }
     aliases <- c(aliases, stats::setNames(paths, labels))
@@ -243,7 +243,7 @@ replace_primary_delivery <- function(product, replacement) {
   if (inherits(source, "tw_product")) {
     replacement <- replace_primary_delivery(source, replacement)
   }
-  add_source(product, replacement, replace = TRUE)
+  tw_add_source(product, replacement, replace = TRUE)
 }
 
 replacement_graph <- function(x) {

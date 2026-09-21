@@ -1,9 +1,9 @@
 fixture <- function(backend = Sys.getenv("TIDYWEAVE_TEST_BACKEND", "duckdb")) {
   root <- tempfile("dataloom-test-")
   dir.create(root)
-  lake <- setup_lake(
-    registry_duckdb(file.path(root, "meta.duckdb")),
-    storage_local(file.path(root, "data")),
+  lake <- tw_setup_lake(
+    tw_registry_duckdb(file.path(root, "meta.duckdb")),
+    tw_storage_local(file.path(root, "data")),
     landing = file.path(root, "landing"),
     backend = backend
   )
@@ -23,7 +23,7 @@ fixture <- function(backend = Sys.getenv("TIDYWEAVE_TEST_BACKEND", "duckdb")) {
     )
     x
   }
-  contract <- contract(
+  contract <- tw_contract(
     "risk.contract",
     "1.0.0",
     "Risk",
@@ -37,17 +37,17 @@ fixture <- function(backend = Sys.getenv("TIDYWEAVE_TEST_BACKEND", "duckdb")) {
     ),
     key = c("id", "date"),
     max_age_hours = 48,
-    rules = list(quality_rule("nonnegative", function(x) {
+    rules = list(tw_quality_rule("nonnegative", function(x) {
       counts <- dplyr::collect(dplyr::summarise(
         x,
         n = dplyr::n(),
         failed = sum(as.integer(reserve < 0), na.rm = TRUE)
       ))
-      quality_counts(counts$failed, counts$n)
+      tw_quality_counts(counts$failed, counts$n)
     }))
   )
   pipeline <- tw_pipeline("risk.import", lake, code_version = "test-code-v1") |>
-    tw_step_land(source_file("risk.source", path, reader = reader)) |>
+    tw_step_land(tw_source_file("risk.source", path, reader = reader)) |>
     tw_step_extract() |>
     tw_step_validate(contract) |>
     tw_step_publish("risk.validated")
@@ -62,11 +62,11 @@ fixture <- function(backend = Sys.getenv("TIDYWEAVE_TEST_BACKEND", "duckdb")) {
   )
 }
 fixture_cleanup <- function(f) {
-  disconnect_lake(f$lake)
+  tw_disconnect_lake(f$lake)
   unlink(f$root, recursive = TRUE)
 }
 reserve_metric <- function(product = "risk.validated") {
-  metric(
+  tw_metric(
     "risk.reserve",
     product,
     expr = sum(reserve, na.rm = TRUE),

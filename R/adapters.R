@@ -5,15 +5,15 @@
 #'   serialized as runnable YAML.
 #' @export
 #' @examples
-#' contract <- contract(
+#' contract <- tw_contract(
 #'   "orders", "1.0.0", "Analytics", "Order amounts", "One order",
 #'   c(order_id = "integer", amount = "numeric"), key = "order_id"
 #' )
 #' path <- tempfile(fileext = ".yml")
-#' contract_yaml(contract, path)
+#' tw_contract_yaml(contract, path)
 #' cat(readLines(path), sep = "\n")
 #' unlink(path)
-contract_yaml <- function(contract, path) {
+tw_contract_yaml <- function(contract, path) {
   need("yaml")
   x <- list(
     format = "tidyweave-contract",
@@ -59,16 +59,16 @@ contract_yaml <- function(contract, path) {
 #'   commons.
 #' @export
 #' @examples
-#' metric <- metric(
+#' metric <- tw_metric(
 #'   "orders.total", "orders", expr = sum(amount), time_behavior = "flow",
 #'   unit = "EUR", owner = "Analytics", description = "Total order value",
 #'   approved = TRUE, code_version = "v1"
 #' )
 #' path <- tempfile(fileext = ".yml")
-#' commons_yaml(metric, "orders", "SUM(amount)", path)
+#' tw_commons_yaml(metric, "orders", "SUM(amount)", path)
 #' cat(readLines(path), sep = "\n")
 #' unlink(path)
-commons_yaml <- function(metric, table, sql_expr, path) {
+tw_commons_yaml <- function(metric, table, sql_expr, path) {
   need("yaml")
   scalar(table, "table")
   scalar(sql_expr, "sql_expr")

@@ -76,16 +76,16 @@ registry_init <- function(lake) {
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("tidyweave-example-")
-#' config <- lake_config(
-#'   registry_duckdb(file.path(root, "lake.db")),
-#'   storage_local(file.path(root, "data")),
+#' config <- tw_lake_config(
+#'   tw_registry_duckdb(file.path(root, "lake.db")),
+#'   tw_storage_local(file.path(root, "data")),
 #'   landing = file.path(root, "landing"), backend = "duckdb"
 #' )
-#' lake <- connect_lake(config)
-#' registry(lake, "runs")
-#' disconnect_lake(lake)
+#' lake <- tw_connect_lake(config)
+#' tw_registry(lake, "runs")
+#' tw_disconnect_lake(lake)
 #' unlink(root, recursive = TRUE)
-registry <- function(
+tw_registry <- function(
   lake,
   table = c(
     "assets",
@@ -116,21 +116,21 @@ registry <- function(
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("tidyweave-example-")
-#' config <- lake_config(
-#'   registry_duckdb(file.path(root, "lake.db")),
-#'   storage_local(file.path(root, "data")),
+#' config <- tw_lake_config(
+#'   tw_registry_duckdb(file.path(root, "lake.db")),
+#'   tw_storage_local(file.path(root, "data")),
 #'   landing = file.path(root, "landing"), backend = "duckdb"
 #' )
-#' lake <- connect_lake(config)
-#' contract <- contract(
+#' lake <- tw_connect_lake(config)
+#' contract <- tw_contract(
 #'   "orders", "1.0.0", "Analytics", "Order amounts", "One order",
 #'   c(order_id = "integer", amount = "numeric"), key = "order_id"
 #' )
-#' register(lake, contract)
-#' registry(lake, "assets")
-#' disconnect_lake(lake)
+#' tw_register(lake, contract)
+#' tw_registry(lake, "assets")
+#' tw_disconnect_lake(lake)
 #' unlink(root, recursive = TRUE)
-register <- function(lake, object) {
+tw_register <- function(lake, object) {
   assert_writable(lake)
   if (inherits(object, "tw_contract")) {
     assert_contract_ready(object)
@@ -219,33 +219,33 @@ resolve_release <- function(lake, asset, release = NULL) {
 #' @param release Release id; NULL selects latest.
 #' @param ... Reserved for extensions.
 #' @return A lazy dbplyr table.
-#' @name tbl
+#' @name tw_tbl
 #' @importFrom dplyr tbl
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("tidyweave-example-")
-#' config <- lake_config(
-#'   registry_duckdb(file.path(root, "lake.db")),
-#'   storage_local(file.path(root, "data")),
+#' config <- tw_lake_config(
+#'   tw_registry_duckdb(file.path(root, "lake.db")),
+#'   tw_storage_local(file.path(root, "data")),
 #'   landing = file.path(root, "landing"), backend = "duckdb"
 #' )
-#' lake <- connect_lake(config)
+#' lake <- tw_connect_lake(config)
 #' path <- file.path(root, "orders.csv")
 #' utils::write.csv(data.frame(order_id = 1:2, amount = c(25, 75)), path,
 #'   row.names = FALSE)
-#' source <- source_file("orders.file", path, reader = utils::read.csv)
-#' contract <- contract(
+#' source <- tw_source_file("orders.file", path, reader = utils::read.csv)
+#' contract <- tw_contract(
 #'   "orders", "1.0.0", "Analytics", "Order amounts", "One order",
 #'   c(order_id = "integer", amount = "numeric"), key = "order_id"
 #' )
-#' release <- product("orders", contract = contract, code_version = "v1") |>
-#'   add_source(source) |> publish(to = lake)
-#' tbl(lake, "orders", release$release_id) |> dplyr::collect()
-#' disconnect_lake(lake)
+#' release <- tw_product("orders", contract = contract, code_version = "v1") |>
+#'   tw_add_source(source) |> tw_publish(to = lake)
+#' tw_tbl(lake, "orders", release$release_id) |> dplyr::collect()
+#' tw_disconnect_lake(lake)
 #' unlink(root, recursive = TRUE)
-dplyr::tbl
+tw_tbl <- function(src, ...) dplyr::tbl(src, ...)
 
-#' @rdname tbl
+#' @rdname tw_tbl
 #' @export
 tbl.tw_lake <- function(src, asset, release = NULL, ...) {
   rlang::check_dots_empty()
@@ -253,7 +253,7 @@ tbl.tw_lake <- function(src, asset, release = NULL, ...) {
   r <- resolve_release(lake, asset_id(asset), release)
   if (startsWith(r$table_name[[1]], "model_")) {
     abort(
-      "Use read_release() to read a complete model, or select a published member table."
+      "Use tw_read_release() to read a complete model, or select a published member table."
     )
   }
   dplyr::tbl(lake$con, table_id(r$schema_name[[1]], r$table_name[[1]]))

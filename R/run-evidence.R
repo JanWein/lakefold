@@ -1,34 +1,34 @@
 #' Read durable execution history and quality incidents
 #'
-#' Pass `evidence = "runs"` to [run()] to keep one JSON record per run.
+#' Pass `evidence = "runs"` to [tw_run()] to keep one JSON record per run.
 #' Evidence contains descriptive metadata and quality counts, never input rows,
 #' executable definitions, connections, request objects or raw conditions.
 #' URL credentials and query strings are removed. Business descriptions and
 #' identifiers remain visible: treat the directory as operational metadata.
 #'
 #' Records are written by replacing a file in the same directory. Use a single
-#' coordinated writer for a directory, including [retry_catalogs()]. This is
+#' coordinated writer for a directory, including [tw_retry_catalogs()]. This is
 #' a local evidence store, not a distributed transaction log. Writing data and
 #' recording evidence are separate operations; evidence errors never imply that
 #' published data was rolled back. A successful write followed by a process
 #' crash before recording evidence remains a reconciliation responsibility.
 #' @param path Evidence directory.
 #' @param product Optional product name to filter.
-#' @param run_id Run identifier returned by [run()].
+#' @param run_id Run identifier returned by [tw_run()].
 #' @param x A run result, an evidence record or an evidence directory.
-#' @returns `run_history()` and `incidents()` return tibbles. `read_run()`
+#' @returns `tw_run_history()` and `tw_incidents()` return tibbles. `tw_read_run()`
 #'   returns a descriptive list, including catalog delivery state.
 #' @export
 #' @examples
 #' path <- tempfile("runs-")
-#' result <- product("orders") |>
-#'   add_source(data.frame(id = 1:2)) |>
-#'   run(evidence = path)
-#' run_history(path)
-#' read_run(path, result$run_id)$status
-#' incidents(path)
+#' result <- tw_product("orders") |>
+#'   tw_add_source(data.frame(id = 1:2)) |>
+#'   tw_run(evidence = path)
+#' tw_run_history(path)
+#' tw_read_run(path, result$run_id)$status
+#' tw_incidents(path)
 #' unlink(path, recursive = TRUE)
-run_history <- function(path, product = NULL) {
+tw_run_history <- function(path, product = NULL) {
   if (!is.null(product)) {
     scalar(product, "product")
   }
@@ -70,9 +70,9 @@ run_history <- function(path, product = NULL) {
   out[order(out$started_at, out$run_id), , drop = FALSE]
 }
 
-#' @rdname run_history
+#' @rdname tw_run_history
 #' @export
-read_run <- function(path, run_id) {
+tw_read_run <- function(path, run_id) {
   file <- evidence_file(path, run_id)
   if (!file.exists(file)) {
     abort("This run has no saved evidence in path.")
@@ -80,9 +80,9 @@ read_run <- function(path, run_id) {
   read_evidence_file(file)
 }
 
-#' @rdname run_history
+#' @rdname tw_run_history
 #' @export
-incidents <- function(x) {
+tw_incidents <- function(x) {
   records <- if (inherits(x, "tw_run_result")) {
     list(safe_run_evidence(x))
   } else if (is.character(x) && length(x) == 1L) {
@@ -140,7 +140,7 @@ incidents <- function(x) {
 #' deliveries to matching destination IDs are attempted. Supply the adapters
 #' again, with fresh authentication if needed. Request objects and callbacks
 #' are never serialized. Named callback lists must use the same names passed
-#' to `add_catalog(name = ...)`; unnamed callbacks use `callback-1`, etc.
+#' to `tw_add_catalog(name = ...)`; unnamed callbacks use `callback-1`, etc.
 #'
 #' Delivery is at least once: a process can stop after the remote server
 #' accepts a request but before local acknowledgement is saved. Consumers
@@ -151,8 +151,8 @@ incidents <- function(x) {
 #' @returns Updated run history, invisibly. Delivery failures remain pending.
 #' @export
 #' @examples
-#' # retry_catalogs("runs", list(catalog_openlineage("https://lineage.example/api/v1/lineage")))
-retry_catalogs <- function(path, catalogs) {
+#' # tw_retry_catalogs("runs", list(tw_catalog_openlineage("https://lineage.example/api/v1/lineage")))
+tw_retry_catalogs <- function(path, catalogs) {
   catalogs <- normalize_catalogs(catalogs)
   for (record in evidence_records(path)) {
     for (id in intersect(names(record$deliveries), names(catalogs))) {
@@ -163,7 +163,7 @@ retry_catalogs <- function(path, catalogs) {
       save_run_evidence(record, path)
     }
   }
-  invisible(run_history(path))
+  invisible(tw_run_history(path))
 }
 
 finalize_product_run <- function(result, product, evidence = NULL) {
@@ -214,7 +214,7 @@ finalize_product_run <- function(result, product, evidence = NULL) {
           id,
           "` delivery failed; execution status is unchanged. ",
           if (saved && !is.null(evidence)) {
-            "Retry with retry_catalogs()."
+            "Retry with tw_retry_catalogs()."
           } else {
             "Inspect result$catalog_delivery and retry with fresh metadata."
           }
@@ -272,7 +272,7 @@ deliver_catalog <- function(record, catalog, id) {
   delivery$error_class <- NULL
   tryCatch(
     {
-      publish_metadata(catalog, record)
+      tw_publish_metadata(catalog, record)
       delivery$status <- "delivered"
     },
     error = function(e) {

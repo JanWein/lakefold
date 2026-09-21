@@ -10,7 +10,7 @@ specific source → input checks → raw → dbt staging/core/marts → approved
 
 ## Design
 
-Use existing lake publication and dbt execution machinery. Add a small `ingest()`
+Use existing lake publication and dbt execution machinery. Add a small `tw_ingest()`
 entry point for optional native/pointblank checks before RAW persistence. Keep
 original landing deliveries even when checks reject data. Supply dbt with named,
 explicit references to successful RAW releases rather than guessing generated
@@ -49,13 +49,13 @@ are required before the first stable release candidate.
 
 The previous components worked separately, but there was no small, explicit
 bridge from an accepted R delivery to the dbt source graph. Final product checks
-also occurred too late to serve as input acceptance. `ingest()` now reuses the
-existing pipeline with an input gate, while `dbt_sources()` binds its immutable
+also occurred too late to serve as input acceptance. `tw_ingest()` now reuses the
+existing pipeline with an input gate, while `tw_dbt_sources()` binds its immutable
 result instead of exposing generated table-name guessing to users.
 
-The starter adds normal dbt files, not another workflow object. `dbt_contract()`
+The starter adds normal dbt files, not another workflow object. `tw_dbt_contract()`
 is deliberately a bounded schema bridge. The original R contract remains the
-source of business rules that cannot be translated. `dbt_publish()` supplies
+source of business rules that cannot be translated. `tw_dbt_publish()` supplies
 structural defaults and a separate immutable approval boundary; it cannot turn
 a multi-model dbt build into one database transaction.
 
@@ -64,7 +64,7 @@ its own installed ingestion engine and separate delivery receipts. Database
 inventory refresh remains an explicit prerequisite for newly created relations;
 a zero CLI exit is not proof that every lineage edge was found.
 
-Consumer workflows revealed one additional usability gap: `source_release()`
+Consumer workflows revealed one additional usability gap: `tw_source_release()`
 now accepts configurations as well as open lakes. Configurations produce ordinary
 data through owned read-only connections, and same-lake execution can safely
 reuse its existing connection. Caller-owned sources retain lazy access.

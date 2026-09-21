@@ -17,13 +17,13 @@
 #' @param parse Function converting one response into a data frame.
 #' @param next_request Optional function returning the next request or `NULL`.
 #' @param max_pages Maximum number of pages, default 1000.
-#' @returns A source specification for [add_source()].
+#' @returns A source specification for [tw_add_source()].
 #' @export
 #' @examplesIf requireNamespace("httr2", quietly = TRUE)
 #' # Construction does not send a request.
-#' api <- source_api(httr2::request("https://example.org/orders"))
-#' inspect(api)
-source_api <- function(
+#' api <- tw_source_api(httr2::request("https://example.org/orders"))
+#' tw_inspect(api)
+tw_source_api <- function(
   request,
   parse = api_parse_json,
   next_request = NULL,
@@ -61,14 +61,14 @@ source_api <- function(
 }
 
 #' @export
-check_component.tw_api_source <- function(x, ...) {
+tw_check_component.tw_api_source <- function(x, ...) {
   need("httr2")
   invisible(x)
 }
 
 #' @export
-read_source.tw_api_source <- function(source, ...) {
-  check_component(source)
+tw_read_source.tw_api_source <- function(source, ...) {
+  tw_check_component(source)
   request <- if (is.function(source$request)) {
     api_safely(source$request(), "The API request factory failed.")
   } else {
@@ -112,7 +112,7 @@ read_source.tw_api_source <- function(source, ...) {
     if (!is.data.frame(data)) {
       abort("The API parse function must return a data frame or tibble.")
     }
-    check_component(data)
+    tw_check_component(data)
     if (length(pages) && !identical(names(data), names(pages[[1L]]))) {
       abort("API pages have different columns. Normalize them in parse.")
     }
@@ -136,7 +136,7 @@ read_source.tw_api_source <- function(source, ...) {
 }
 
 #' @export
-inspect.tw_api_source <- function(x, ...) {
+tw_inspect.tw_api_source <- function(x, ...) {
   list(
     type = "HTTP API",
     pagination = !is.null(x$next_request),
@@ -146,8 +146,8 @@ inspect.tw_api_source <- function(x, ...) {
 }
 
 #' @export
-capabilities.tw_api_source <- function(x, ...) {
-  component_capabilities(
+tw_capabilities.tw_api_source <- function(x, ...) {
+  tw_component_capabilities(
     read = TRUE,
     write = FALSE,
     lazy = FALSE,

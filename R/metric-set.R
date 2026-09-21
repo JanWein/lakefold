@@ -1,27 +1,27 @@
 #' Define related metrics with shared defaults
 #'
 #' Captures named summary expressions without evaluating them. Returns an
-#' ordinary named list of [metric()] definitions for `measure(metrics = ...)`.
+#' ordinary named list of [tw_metric()] definitions for `tw_measure(metrics = ...)`.
 #' Each id combines the product id and expression name, separated by a dot.
 #' Business approval is explicit; exploratory definitions need no code version.
 #' `dimensions` lists permitted grouping and filtering columns; it does not
-#' choose a report layout. Select the grouping with `measure(by = "company")`
-#' or request an overall total explicitly with `measure(by = character())`.
+#' choose a report layout. Select the grouping with `tw_measure(by = "company")`
+#' or request an overall total explicitly with `tw_measure(by = character())`.
 #' @param product Input asset id shared by all metrics.
 #' @param ... Named tidy summary expressions, as in [dplyr::summarise()].
 #' @param dimensions,time_column,owner,version,approved,code_version,na_policy
-#'   Shared arguments passed to [metric()].
+#'   Shared arguments passed to [tw_metric()].
 #' @param time_behavior One shared `"stock"` or `"flow"` value, or a named
 #'   vector covering every metric. Defaults to stock with a time column.
 #' @param units One shared unit, or a named vector. Omitted names have no unit.
-#' @return An ordinary named list of `tw_metric` definitions.
+#' @return An ordinary named list of `metric` definitions.
 #' @export
 #' @examples
-#' definitions <- metric_set(
+#' definitions <- tw_metric_set(
 #'   "orders", total = sum(amount), count = dplyr::n(),
 #'   dimensions = "company", units = c(total = "EUR")
 #' )
-metric_set <- function(
+tw_metric_set <- function(
   product,
   ...,
   dimensions = character(),
@@ -65,7 +65,7 @@ metric_set <- function(
   unit_values <- expand(units, "units", "")
   stats::setNames(
     lapply(seq_along(expressions), function(i) {
-      metric(
+      tw_metric(
         paste(product, labels[[i]], sep = "."),
         product,
         expr = !!expressions[[i]],

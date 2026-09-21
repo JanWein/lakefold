@@ -2,68 +2,68 @@
 % Please edit documentation in R/product-workflow.R
 \name{workflow-components}
 \alias{workflow-components}
-\alias{add_product}
-\alias{add_recipe}
-\alias{update_product}
-\alias{update_recipe}
-\alias{remove_product}
-\alias{remove_recipe}
-\alias{extract_product}
-\alias{extract_recipe}
+\alias{tw_add_product}
+\alias{tw_add_recipe}
+\alias{tw_update_product}
+\alias{tw_update_recipe}
+\alias{tw_remove_product}
+\alias{tw_remove_recipe}
+\alias{tw_extract_product}
+\alias{tw_extract_recipe}
 \title{Assemble product specifications and reusable recipes}
 \usage{
-add_product(x, product)
+tw_add_product(x, product)
 
-add_recipe(x, recipe)
+tw_add_recipe(x, recipe)
 
-update_product(x, product)
+tw_update_product(x, product)
 
-update_recipe(x, recipe)
+tw_update_recipe(x, recipe)
 
-remove_product(x)
+tw_remove_product(x)
 
-remove_recipe(x)
+tw_remove_recipe(x)
 
-extract_product(x)
+tw_extract_product(x)
 
-extract_recipe(x)
+tw_extract_recipe(x)
 }
 \arguments{
-\item{x}{A modular \code{\link[=workflow]{workflow()}}. \code{add_recipe()} also accepts a table product.}
+\item{x}{A modular \code{\link[=tw_workflow]{tw_workflow()}}. \code{tw_add_recipe()} also accepts a table product.}
 
 \item{product}{A product specification carrying identity and output checks.}
 
-\item{recipe}{A preparation specification from \code{\link[=recipe]{recipe()}}.}
+\item{recipe}{A preparation specification from \code{\link[=tw_recipe]{tw_recipe()}}.}
 }
 \value{
 An updated definition, or the extracted component.
 }
 \description{
-An empty \code{\link[=workflow]{workflow()}} combines one product specification, one optional
+An empty \code{\link[=tw_workflow]{tw_workflow()}} combines one product specification, one optional
 recipe, primary sources and an optional destination. Components remain
-independent R values. \verb{add_*()} rejects occupied slots; \verb{update_*()} replaces
-an existing slot and \verb{remove_*()} clears it. Extraction returns the definition,
+independent R values. \verb{tw_add_*()} rejects occupied slots; \verb{tw_update_*()} replaces
+an existing slot and \verb{tw_remove_*()} clears it. Extraction returns the definition,
 never executed data. These edits never read sources or invoke writers.
 }
 \details{
 A product specification may carry its own sources, checks and destination.
 Workflow sources and destinations must not conflict with those settings.
 Keep preparation in the recipe when using this interface: products with
-embedded transformations are rejected by \code{add_product()}. Existing direct
+embedded transformations are rejected by \code{tw_add_product()}. Existing direct
 product pipelines remain executable. Model products can be added directly;
 prepare their member tables with recipes before assembling the dm model.
 
-\code{\link[=trial]{trial()}}, \code{\link[=run]{run()}} and \code{\link[=publish]{publish()}} compile the components into the existing
+\code{\link[=tw_trial]{tw_trial()}}, \code{\link[=tw_run]{tw_run()}} and \code{\link[=tw_publish]{tw_publish()}} compile the components into the existing
 product execution graph, retaining its quality gates, dependency sharing,
 lazy behavior and immutable release semantics. Use \verb{data =} at execution to
 bind a first primary input or replace the existing single primary delivery.
 }
 \examples{
-spec <- product("orders") |>
-  add_contract(c(id = "integer", amount = "numeric")) |>
-  add_quality(~ amount >= 0)
-preparation <- recipe() |> step_mutate(amount = round(amount, 2))
-flow <- workflow() |> add_product(spec) |> add_recipe(preparation)
-trial(flow, data = data.frame(id = 1:2, amount = c(10.123, 20))) |>
-  collect()
+spec <- tw_product("orders") |>
+  tw_add_contract(c(id = "integer", amount = "numeric")) |>
+  tw_add_quality(~ amount >= 0)
+preparation <- tw_recipe() |> tw_step_mutate(amount = round(amount, 2))
+flow <- tw_workflow() |> tw_add_product(spec) |> tw_add_recipe(preparation)
+tw_trial(flow, data = data.frame(id = 1:2, amount = c(10.123, 20))) |>
+  tw_collect()
 }

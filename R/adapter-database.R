@@ -5,7 +5,7 @@
 #' This catches constraint violations caused by driver casts as well as append
 #' conflicts with existing rows. It materializes the stored table in R. Append
 #' requires an explicit contract; direct replacement without one infers structure
-#' from the incoming table. [run()] always supplies its resolved contract.
+#' from the incoming table. [tw_run()] always supplies its resolved contract.
 #'
 #' The driver and table storage must support transactions, including rollback of
 #' replacement DDL. No silent fallback is provided. Coordinate concurrent writers
@@ -15,7 +15,7 @@
 #' DuckDB connections reading or writing `BIGINT`/`integer64` columns must use
 #' `bigint = "integer64"` to prevent lossy conversion. This is checked before
 #' appending to an existing BIGINT table and before validating a stored table.
-#' For append, `collect(result)` returns the transformed incoming batch;
+#' For append, `tw_collect(result)` returns the transformed incoming batch;
 #' `result$outputs$rows` counts the complete destination and `written_rows`
 #' counts appended rows. Run quality evidence describes the complete candidate.
 #'
@@ -26,19 +26,19 @@
 #' @param table Table name or [DBI::Id()].
 #' @param mode Replace the table or append, with a gate before commit.
 #' @param transaction Must be `TRUE`. Nontransactional publication requires a
-#'   custom [write_target()] adapter with an explicit consistency policy.
+#'   custom [tw_write_target()] adapter with an explicit consistency policy.
 #' @param ... Named additional arguments to [DBI::dbWriteTable()].
-#' @returns A target specification for [set_target()].
+#' @returns A target specification for [tw_set_target()].
 #' @export
 #' @examplesIf requireNamespace("RSQLite", quietly = TRUE)
 #' con <- DBI::dbConnect(RSQLite::SQLite(), ":memory:")
-#' result <- product("orders") |>
-#'   add_source(data.frame(id = 1:2)) |>
-#'   set_target(target_database(con, "orders")) |>
-#'   run()
+#' result <- tw_product("orders") |>
+#'   tw_add_source(data.frame(id = 1:2)) |>
+#'   tw_set_target(tw_target_database(con, "orders")) |>
+#'   tw_run()
 #' DBI::dbReadTable(con, "orders")
 #' DBI::dbDisconnect(con)
-target_database <- function(
+tw_target_database <- function(
   connection,
   table,
   mode = c("replace", "append"),
@@ -55,8 +55,8 @@ target_database <- function(
   }
   if (!transaction) {
     abort(paste0(
-      "target_database() requires transaction = TRUE. ",
-      "Use a custom write_target() adapter for nontransactional publication."
+      "tw_target_database() requires transaction = TRUE. ",
+      "Use a custom tw_write_target() adapter for nontransactional publication."
     ))
   }
   options <- list(...)
@@ -77,11 +77,11 @@ target_database <- function(
 }
 
 #' @export
-check_component.tw_database_target <- function(x, ...) {
+tw_check_component.tw_database_target <- function(x, ...) {
   need("DBI")
   if (!isTRUE(x$transaction)) {
     abort(
-      "target_database() requires transaction = TRUE to protect its stored-data gate."
+      "tw_target_database() requires transaction = TRUE to protect its stored-data gate."
     )
   }
   if (!is.function(x$connection) && !DBI::dbIsValid(x$connection)) {
@@ -93,8 +93,8 @@ check_component.tw_database_target <- function(x, ...) {
 }
 
 #' @export
-write_target.tw_database_target <- function(target, data, context, ...) {
-  check_component(target)
+tw_write_target.tw_database_target <- function(target, data, context, ...) {
+  tw_check_component(target)
   data <- adapter_frame(data)
   con <- target$connection
   if (is.function(con)) {
@@ -141,7 +141,7 @@ write_target.tw_database_target <- function(target, data, context, ...) {
     )
     database_integer64_guard(con, data, target$table)
     candidate <- DBI::dbReadTable(con, target$table)
-    checks <- validate(candidate, schema, keep_errors = TRUE)
+    checks <- tw_validate(candidate, schema, keep_errors = TRUE)
     candidate_quality <<- checks
     if (!quality_ok(checks)) {
       abort(
@@ -167,7 +167,7 @@ write_target.tw_database_target <- function(target, data, context, ...) {
 }
 
 #' @export
-inspect.tw_database_target <- function(x, ...) {
+tw_inspect.tw_database_target <- function(x, ...) {
   list(
     type = "DBI target",
     table = database_table_descriptor(x$table),
@@ -178,8 +178,8 @@ inspect.tw_database_target <- function(x, ...) {
 }
 
 #' @export
-capabilities.tw_database_target <- function(x, ...) {
-  component_capabilities(
+tw_capabilities.tw_database_target <- function(x, ...) {
+  tw_component_capabilities(
     write = TRUE,
     lazy = FALSE,
     transactions = NA,
@@ -231,7 +231,7 @@ adapter_frame <- function(data) {
   if (is.data.frame(data)) {
     return(tibble::as_tibble(data))
   }
-  collect(data)
+  tw_collect(data)
 }
 
 adapter_named_options <- function(options, reserved = character()) {

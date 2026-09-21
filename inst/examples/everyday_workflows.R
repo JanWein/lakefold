@@ -14,10 +14,10 @@ broker_data <- data.frame(
   channel = c("Broker", "Direct")
 )
 
-payments <- product("payments", payment_data) |>
-  add_lookup(contract_data, by = "policy_id", name = "contracts") |>
-  add_lookup(broker_data, by = "broker_id", name = "brokers") |>
-  add_contract(contract(
+payments <- tw_product("payments", payment_data) |>
+  tw_add_lookup(contract_data, by = "policy_id", name = "contracts") |>
+  tw_add_lookup(broker_data, by = "broker_id", name = "brokers") |>
+  tw_add_contract(tw_contract(
     columns = c(
       payment_id = "character",
       policy_id = "character",
@@ -28,38 +28,38 @@ payments <- product("payments", payment_data) |>
     ),
     key = "payment_id"
   )) |>
-  add_quality(~ amount >= 0, name = "nonnegative")
+  tw_add_quality(~ amount >= 0, name = "nonnegative")
 payments
 
-preview <- trial(payments)
+preview <- tw_trial(payments)
 preview
-quality_report(preview)
-quality_rows(preview)
-stopifnot(identical(quality_rows(preview)$payment_id, "T3"))
+tw_quality_report(preview)
+tw_quality_rows(preview)
+stopifnot(identical(tw_quality_rows(preview)$payment_id, "T3"))
 
 fixed_payments <- payment_data
 fixed_payments$amount[fixed_payments$payment_id == "T3"] <- 50
-preview <- trial(payments, sources = list(payments = fixed_payments))
-collect(preview)
-stopifnot(sum(collect(preview)$amount) == 350)
+preview <- tw_trial(payments, sources = list(payments = fixed_payments))
+tw_collect(preview)
+stopifnot(sum(tw_collect(preview)$amount) == 350)
 
-metrics <- metric_set(
+metrics <- tw_metric_set(
   "payments",
   total = sum(amount, na.rm = TRUE),
   dimensions = "company",
   units = "EUR"
 )
-preview_values <- measure(preview, metrics = metrics, by = "company")
+preview_values <- tw_measure(preview, metrics = metrics, by = "company")
 preview_values
-stopifnot(identical(collect(preview_values)$value, c(300, 50)))
+stopifnot(identical(tw_collect(preview_values)$value, c(300, 50)))
 
 
 root <- tempfile("tidyweave-everyday-")
-payments <- payments |> set_target(root)
-first <- publish(payments, sources = list(payments = fixed_payments))
+payments <- payments |> tw_set_target(root)
+first <- tw_publish(payments, sources = list(payments = fixed_payments))
 
 # Only after business review: approval is your explicit declaration.
-metrics <- metric_set(
+metrics <- tw_metric_set(
   "payments",
   total = sum(amount, na.rm = TRUE),
   dimensions = "company",
@@ -67,42 +67,42 @@ metrics <- metric_set(
   approved = TRUE,
   code_version = "payment-totals-v1"
 )
-values <- measure(first, metrics = metrics, by = "company")
-report_release(values, "august-v1", code_version = "report-v1")
+values <- tw_measure(first, metrics = metrics, by = "company")
+tw_report_release(values, "august-v1", code_version = "report-v1")
 
 corrected_payments <- fixed_payments
 corrected_payments$amount[corrected_payments$payment_id == "T3"] <- 80
-second <- publish(payments, sources = list(payments = corrected_payments))
-difference <- compare(first, second)
+second <- tw_publish(payments, sources = list(payments = corrected_payments))
+difference <- tw_compare(first, second)
 difference
 difference$changed
 
-corrected_values <- measure(second, metrics = metrics, by = "company")
+corrected_values <- tw_measure(second, metrics = metrics, by = "company")
 corrected_values
-report_release(corrected_values, "august-v2", code_version = "report-v1")
+tw_report_release(corrected_values, "august-v2", code_version = "report-v1")
 
 corrected_contracts <- contract_data
 corrected_contracts$company[corrected_contracts$policy_id == "P3"] <- "North"
-third <- publish(
+third <- tw_publish(
   payments,
   sources = list(
     payments = corrected_payments,
     contracts = corrected_contracts
   )
 )
-reference_values <- measure(third, metrics = metrics, by = "company")
+reference_values <- tw_measure(third, metrics = metrics, by = "company")
 reference_values
-stopifnot(identical(collect(reference_values)$value, 380))
+stopifnot(identical(tw_collect(reference_values)$value, 380))
 
-original_report <- report_read(root, "august-v1", values_only = TRUE)
-corrected_report <- report_read(root, "august-v2", values_only = TRUE)
+original_report <- tw_report_read(root, "august-v1", values_only = TRUE)
+corrected_report <- tw_report_read(root, "august-v2", values_only = TRUE)
 original_report
 corrected_report
 stopifnot(
   identical(as.numeric(original_report$value), c(300, 50)),
   identical(as.numeric(corrected_report$value), c(300, 80)),
-  sum(collect(first)$amount) == 350,
-  sum(collect(second)$amount) == 380,
+  sum(tw_collect(first)$amount) == 350,
+  sum(tw_collect(second)$amount) == 380,
   difference$counts[["changed"]] == 1
 )
 

@@ -11,7 +11,7 @@ readRDS("output.rds")
 ```
 
 Edit `definitions.R` to replace the input, transformations or checks. Add
-`set_target()` for a database, Parquet file, pins board or governed lake.
+`tw_set_target()` for a database, Parquet file, pins board or governed lake.
 The runner records execution evidence in `.tidyweave/evidence`. Set the
 `TIDYWEAVE_EVIDENCE` environment variable to use another persistent directory.
 

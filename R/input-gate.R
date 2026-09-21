@@ -7,20 +7,20 @@
 #' composition. A failed input gate is persisted with stage `"ingest"`.
 #' @param pipeline Pipeline after `tw_step_extract()`.
 #' @param contract Contract for the extracted input, possibly containing
-#'   [pointblank_checks()] rules. It can differ from the final product contract.
+#'   [tw_pointblank_checks()] rules. It can differ from the final product contract.
 #' @returns The updated pipeline specification; no IO is performed.
-#' @seealso `tw_ingest()`, [validate()]
+#' @seealso `pipeline_ingest()`, [tw_validate()]
 #' @examples
-#' contract <- contract("orders", "1", "Analytics", "Orders", "One order",
+#' contract <- tw_contract("orders", "1", "Analytics", "Orders", "One order",
 #'   c(id = "integer"), key = "id")
-#' pipeline <- tw_pipeline("orders.import", lake_config(backend = "duckdb"),
+#' pipeline <- tw_pipeline("orders.import", tw_lake_config(backend = "duckdb"),
 #'   code_version = "v1") |>
-#'   tw_step_land(source_file("orders.file", "orders.csv", utils::read.csv)) |>
+#'   tw_step_land(tw_source_file("orders.file", "orders.csv", utils::read.csv)) |>
 #'   tw_step_extract() |>
 #'   tw_step_precheck(contract) |>
 #'   tw_step_validate(contract) |>
 #'   tw_step_publish("orders")
-#' plan(pipeline)
+#' tw_plan(pipeline)
 #' @noRd
 tw_step_precheck <- function(pipeline, contract) {
   if (

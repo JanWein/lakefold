@@ -55,16 +55,16 @@ catalog_fixture <- function(env = parent.frame()) {
 
 test_that("OpenLineage sends authenticated START and COMPLETE with stable identity", {
   server <- catalog_fixture()
-  adapter <- catalog_openlineage(
+  adapter <- tw_catalog_openlineage(
     paste0(server$url, "/api/v1/lineage"),
     request = function(request) {
       httr2::req_auth_bearer_token(request, "test-token")
     }
   )
-  result <- product("orders") |>
-    add_source(data.frame(id = 1:2)) |>
-    add_catalog(adapter) |>
-    run()
+  result <- tw_product("orders") |>
+    tw_add_source(data.frame(id = 1:2)) |>
+    tw_add_catalog(adapter) |>
+    tw_run()
   calls <- server$calls()
   expect_length(calls, 2L)
   expect_equal(vapply(calls, `[[`, character(1), "method"), rep("POST", 2))
@@ -83,31 +83,31 @@ test_that("OpenLineage sends authenticated START and COMPLETE with stable identi
     "id"
   )
   expect_equal(calls[[1]]$body$eventTime, result$started_at)
-  expect_false(grepl("test-token", jsonlite::toJSON(inspect(adapter))))
+  expect_false(grepl("test-token", jsonlite::toJSON(tw_inspect(adapter))))
 })
 
 test_that("catalog outages preserve data and retry the same lineage identity", {
   server <- catalog_fixture()
   evidence <- withr::local_tempdir()
   writeLines("fail", file.path(server$path, "fail"))
-  adapter <- catalog_openlineage(paste0(server$url, "/api/v1/lineage"))
+  adapter <- tw_catalog_openlineage(paste0(server$url, "/api/v1/lineage"))
   expect_warning(
-    result <- product("orders") |>
-      add_source(data.frame(id = 1L)) |>
-      add_catalog(adapter) |>
-      run(evidence = evidence),
+    result <- tw_product("orders") |>
+      tw_add_source(data.frame(id = 1L)) |>
+      tw_add_catalog(adapter) |>
+      tw_run(evidence = evidence),
     "delivery failed"
   )
   expect_equal(result$status, "completed")
   first_id <- server$calls()[[1]]$body$run$runId
-  expect_equal(run_history(evidence)$pending_catalogs, 1)
+  expect_equal(tw_run_history(evidence)$pending_catalogs, 1)
   unlink(file.path(server$path, "fail"))
-  retry_catalogs(evidence, adapter)
+  tw_retry_catalogs(evidence, adapter)
   calls <- server$calls()
   expect_length(calls, 3L)
   expect_equal(calls[[3]]$body$run$runId, first_id)
-  expect_equal(run_history(evidence)$pending_catalogs, 0)
-  retry_catalogs(evidence, adapter)
+  expect_equal(tw_run_history(evidence)$pending_catalogs, 0)
+  tw_retry_catalogs(evidence, adapter)
   expect_length(server$calls(), 3L)
 })
 
@@ -116,11 +116,11 @@ test_that("a committed output stays published when metadata delivery fails", {
   writeLines("fail", file.path(server$path, "fail"))
   output <- file.path(server$path, "published.rds")
   methods <- list(
-    write_target = function(target, data, context, ...) {
+    tw_write_target = function(target, data, context, ...) {
       saveRDS(data, target$path)
       list(type = "fixture", path = target$path)
     },
-    check_component = function(x, ...) invisible(x)
+    tw_check_component = function(x, ...) invisible(x)
   )
   namespace <- asNamespace("tidyweave")
   table <- get(".__S3MethodsTable__.", envir = namespace)
@@ -138,25 +138,31 @@ test_that("a committed output stays published when metadata delivery fails", {
   ))
   target <- structure(list(path = output), class = "catalog_fixture_target")
   expect_warning(
-    result <- product("orders") |>
-      add_source(data.frame(id = 1L)) |>
-      set_target(target) |>
-      add_catalog(catalog_openlineage(paste0(server$url, "/api/v1/lineage"))) |>
-      run(),
+    result <- tw_product("orders") |>
+      tw_add_source(data.frame(id = 1L)) |>
+      tw_set_target(target) |>
+      tw_add_catalog(tw_catalog_openlineage(paste0(
+        server$url,
+        "/api/v1/lineage"
+      ))) |>
+      tw_run(),
     "delivery failed"
   )
   expect_equal(result$status, "published")
   expect_equal(readRDS(output)$id, 1L)
-  expect_equal(collect(result)$id, 1L)
+  expect_equal(tw_collect(result)$id, 1L)
 })
 
 test_that("blocked runs emit FAIL and never claim output datasets", {
   server <- catalog_fixture()
-  result <- product("orders") |>
-    add_source(data.frame(id = 1L)) |>
-    add_quality(~ id < 0) |>
-    add_catalog(catalog_openlineage(paste0(server$url, "/api/v1/lineage"))) |>
-    run(stop_on_failure = FALSE)
+  result <- tw_product("orders") |>
+    tw_add_source(data.frame(id = 1L)) |>
+    tw_add_quality(~ id < 0) |>
+    tw_add_catalog(tw_catalog_openlineage(paste0(
+      server$url,
+      "/api/v1/lineage"
+    ))) |>
+    tw_run(stop_on_failure = FALSE)
   calls <- server$calls()
   expect_equal(result$status, "blocked")
   expect_equal(calls[[2]]$body$eventType, "FAIL")
@@ -165,13 +171,13 @@ test_that("blocked runs emit FAIL and never claim output datasets", {
 
 test_that("OpenMetadata upserts typed schemas and resolves optional lineage", {
   server <- catalog_fixture()
-  adapter <- catalog_openmetadata(
+  adapter <- tw_catalog_openmetadata(
     server$url,
     "warehouse.analytics.public",
     source_tables = c(raw = "warehouse.raw.orders")
   )
-  result <- product("orders") |>
-    add_source(
+  result <- tw_product("orders") |>
+    tw_add_source(
       data.frame(
         id = 1L,
         amount = 1.5,
@@ -181,8 +187,8 @@ test_that("OpenMetadata upserts typed schemas and resolves optional lineage", {
       ),
       name = "raw"
     ) |>
-    add_catalog(adapter) |>
-    run()
+    tw_add_catalog(adapter) |>
+    tw_run()
   calls <- server$calls()
   expect_length(calls, 3L)
   expect_equal(calls[[1]]$method, "PUT")
@@ -205,18 +211,18 @@ test_that("OpenMetadata upserts typed schemas and resolves optional lineage", {
 
 test_that("catalog specifications reject unsafe endpoints and unsupported types", {
   expect_error(
-    catalog_openlineage("https://user:secret@example.test"),
+    tw_catalog_openlineage("https://user:secret@example.test"),
     "without credentials"
   )
   expect_error(
-    catalog_openmetadata("https://example.test?token=secret", "schema"),
+    tw_catalog_openmetadata("https://example.test?token=secret", "schema"),
     "without credentials"
   )
   expect_error(
-    catalog_openmetadata("https://example.test", "schema", request = 1),
+    tw_catalog_openmetadata("https://example.test", "schema", request = 1),
     "request must"
   )
-  adapter <- catalog_openmetadata("https://example.test", "schema")
+  adapter <- tw_catalog_openmetadata("https://example.test", "schema")
   expect_error(
     openmetadata_table(
       adapter,

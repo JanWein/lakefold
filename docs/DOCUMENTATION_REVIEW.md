@@ -1,5 +1,10 @@
 # Documentation review
 
+> Historical review of the previous five-lesson documentation. The current
+> structure follows product specifications, preparation recipes and workflows.
+> See [Get started](https://janwein.github.io/tidyweave/articles/get-started.html)
+> and [Articles](https://janwein.github.io/tidyweave/articles/learn.html).
+
 ## Findings and changes
 
 | Finding | Why it obstructed learning | Change |

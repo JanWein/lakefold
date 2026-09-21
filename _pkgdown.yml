@@ -1,8 +1,8 @@
 url: https://janwein.github.io/tidyweave/
 destination: site
 home:
-  title: Checked data and reproducible reports
-  description: Prepare recurring deliveries, catch data errors and retain the values behind earlier reports.
+  title: Modular checked data products
+  description: Compose reusable product specifications, preparation recipes and execution workflows.
 template:
   bootstrap: 5
   bslib:
@@ -18,8 +18,20 @@ navbar:
       text: Get started
       href: articles/get-started.html
     learn:
-      text: Learn
-      href: articles/learn.html
+      text: Guides
+      menu:
+        - text: Product specifications
+          href: articles/first-product.html
+        - text: Preparation recipes
+          href: articles/preparation-recipes.html
+        - text: Workflows
+          href: articles/modular-workflows.html
+        - text: Operation engines
+          href: articles/engines.html
+        - text: All articles
+          href: articles/learn.html
+        - text: API migration
+          href: articles/api-migration.html
     help:
       text: Help
       menu:
@@ -30,47 +42,42 @@ navbar:
         - text: Why tidyweave?
           href: articles/why-tidyweave.html
 reference:
-  - title: Compose specifications, recipes and workflows
-    desc: Define reusable components, assemble them, and choose operation engines.
-    contents: [recipe, step_transform, step_lookup, lookup_spec, set_engine, workflow-components]
-  - title: Define, try and collect
-    desc: Start here. For a guided introduction, follow [Get started](../articles/get-started.html).
-    contents: [tidyweave-package, product, product-dplyr, trial, collect]
-  - title: Check and explain a result
-    desc: State table requirements, inspect failed checks and find affected rows.
-    contents: [contract, status, quality, quality_report, quality_rows, lineage]
-  - title: Save data and keep reports
-    desc: Publish a checked table, define calculations and read saved report values.
-    contents: [publish, open_lake, compare, metric_set, metric, measure, report_release, report_read]
-  - title: Combine and repeat work
-    desc: Reuse inputs and definitions. run() executes configured writers as well as transformations.
-    contents: [add_lookup, add_source, replace_sources, execution_config, run, workflow, inspect, plan, validate, contract_update]
-  - title: Detailed quality rules
-    contents: [contract_from, contract_confirm, contract_diff, quality_rule, quality_reference, expect_quality, profile_data, quality_errors, pointblank_report, contract_yaml, model, commons_yaml]
-  - title: Connect sources and destinations
-    desc: Optional integrations, each with its own resource and persistence guarantees.
-    contents: [source_file, source_database, source_release, source_parquet, source_api, source_pins, sql_transform, transform_dbt, target_lake, target_database, target_parquet, target_pins]
-  - title: Operate a lake
-    desc: Advanced configuration, receipt ingestion, release history and deliberate recovery.
-    contents: [ingest, lake_config, registry_duckdb, setup_lake, disconnect_lake, write_data, read_release, tbl, releases, register, registry, freshness, check_delivery, interrupted, recover, cleanup]
-  - title: Run dbt models
-    contents: [dbt_init, dbt_project, dbt_sources, dbt_contract, dbt_build, dbt_status, dbt_lineage, dbt_model, dbt_publish]
-  - title: Integrate evidence, catalogs and scheduling
-    contents: [run_history, retry_catalogs, catalog_openlineage, catalog_openmetadata, catalog_openmetadata_dbt, catalog_export, catalog_app, init_project, as_targets]
-  - title: Extend the framework
-    desc: S3 interfaces for adapter authors.
-    contents: [capabilities, check_component, read_source, execute_transform, run_quality, write_target, publish_metadata]
+  - title: Product specifications
+    desc: Define output identity and requirements independently of preparation.
+    contents: [tidyweave-package, tw_product, tw_add_contract, tw_contract, tw_contract_update, tw_model]
+  - title: Preparation recipes
+    desc: Compose ordered steps and choose implementations for reusable operations.
+    contents: [tw_recipe, tw_step_transform, tw_step_lookup, tw_lookup_spec, tw_set_engine, tw_add_transform, product-dplyr]
+  - title: Workflow assembly
+    desc: Add, update, remove and extract independent components without executing them.
+    contents: [tw_workflow, workflow-components, tw_add_source, tw_add_lookup, tw_set_target, tw_replace_sources, tw_execution_config, tw_inspect, tw_plan, tw_validate]
+  - title: Execution and results
+    desc: Try a delivery, run configured destinations, publish checked output and collect results.
+    contents: [tw_trial, tw_run, tw_publish, tw_collect, tw_status, tw_lineage]
+  - title: Quality rules and diagnostics
+    contents: [tw_quality_rule, tw_quality_reference, tw_quality, tw_quality_report, tw_quality_rows, tw_quality_errors, tw_expect_quality, tw_profile_data, tw_pointblank_report, tw_contract_from, tw_contract_confirm, tw_contract_diff, tw_contract_yaml]
+  - title: Metrics and report evidence
+    contents: [tw_metric_set, tw_metric, tw_measure, tw_compare, tw_report_release, tw_report_read, tw_commons_yaml]
+  - title: Source and target adapters
+    desc: Integrations retain their own resource ownership and persistence guarantees.
+    contents: [tw_source_file, tw_source_database, tw_source_release, tw_source_parquet, tw_source_api, tw_source_pins, tw_sql_transform, tw_transform_dbt, tw_target_lake, tw_target_database, tw_target_parquet, tw_target_pins]
+  - title: Lake configuration and operations
+    contents: [tw_open_lake, tw_ingest, tw_lake_config, tw_registry_duckdb, tw_setup_lake, tw_disconnect_lake, tw_write_data, tw_read_release, tw_tbl, tw_releases, tw_register, tw_registry, tw_freshness, tw_check_delivery, tw_interrupted, tw_recover, tw_cleanup]
+  - title: dbt integration
+    contents: [tw_dbt_init, tw_dbt_project, tw_dbt_sources, tw_dbt_contract, tw_dbt_build, tw_dbt_status, tw_dbt_lineage, tw_dbt_model, tw_dbt_publish]
+  - title: Run evidence, catalogs and orchestration
+    contents: [tw_add_catalog, tw_run_history, tw_retry_catalogs, tw_catalog_openlineage, tw_catalog_openmetadata, tw_catalog_openmetadata_dbt, tw_catalog_export, tw_catalog_app, tw_init_project, tw_as_targets]
+  - title: Developer interfaces
+    desc: Public S3 protocols for source, transformation, quality, target and catalog extensions.
+    contents: [tw_capabilities, tw_check_component, tw_read_source, tw_execute_transform, tw_run_quality, tw_write_target, tw_publish_metadata]
 articles:
-  - title: Get started
-    desc: Follow these five lessons in order. Each includes its own setup.
-    contents: [get-started, first-product, check-delivery, publish-data, save-report, getting-started]
-  - title: Prepare, check and repeat
-    contents: [learn, modular-workflows, composing-products, three-deliveries, quality-gates, quality-history, everyday-workflows]
-  - title: Store and calculate
-    contents: [create-ducklake, products-metrics, cancellation-report, shared-ducklake]
-  - title: Connect tools and work through larger examples
-    contents: [optional-integrations, dbt-workflows, layered-data-stack, relational-insurance]
-  - title: Help and background
-    contents: [troubleshooting, glossary, why-tidyweave]
-  - title: For developers
-    contents: [workflow-design, extending-tidyweave, design-review]
+  - title: Core guides
+    contents: [get-started, first-product, preparation-recipes, modular-workflows, engines, api-migration]
+  - title: Checks and publication
+    contents: [check-delivery, publish-data, save-report, quality-gates, quality-history]
+  - title: Composition and case studies
+    contents: [composing-products, three-deliveries, everyday-workflows, getting-started, cancellation-report, products-metrics, relational-insurance]
+  - title: Backends and integrations
+    contents: [optional-integrations, create-ducklake, shared-ducklake, dbt-workflows, layered-data-stack]
+  - title: Developers and help
+    contents: [learn, extending-tidyweave, workflow-design, troubleshooting, glossary, why-tidyweave, design-review]

@@ -19,7 +19,7 @@
 #' The export is deliberately a bounded schema bridge, not a replacement for
 #' the original contract or its quality engines.
 #'
-#' @param contract A [contract()] specification.
+#' @param contract A [tw_contract()] specification.
 #' @param name dbt model identifier.
 #' @param enforced Whether dbt should enforce the exact model schema.
 #' @param types Optional named character vector overriding SQL types by column.
@@ -29,13 +29,13 @@
 #'   `"error"` (default) or `"report"` with a warning and metadata.
 #' @returns A regular list with `version = 2` and one `models` entry, suitable
 #'   for `yaml::write_yaml()` or composition into dbt model properties.
-#' @seealso [dbt_sources()], [dbt_init()]
+#' @seealso [tw_dbt_sources()], [tw_dbt_init()]
 #' @examples
-#' schema <- contract(columns = c(id = "integer", amount = "numeric"), key = "id")
-#' properties <- dbt_contract(schema, "orders")
+#' schema <- tw_contract(columns = c(id = "integer", amount = "numeric"), key = "id")
+#' properties <- tw_dbt_contract(schema, "orders")
 #' properties$models[[1]]$columns
 #' @export
-dbt_contract <- function(
+tw_dbt_contract <- function(
   contract,
   name,
   enforced = TRUE,
@@ -43,7 +43,7 @@ dbt_contract <- function(
   unsupported = c("error", "report")
 ) {
   if (!inherits(contract, "tw_contract")) {
-    abort("Use contract() to define the R schema first.", "tw_dbt_invalid")
+    abort("Use tw_contract() to define the R schema first.", "tw_dbt_invalid")
   }
   ident(name)
   flag(enforced, "enforced")

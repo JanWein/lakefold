@@ -42,8 +42,8 @@ measure_set <- function(
       inherits(source, "tw_release_source") &&
         inherits(source$lake, "tw_config")
     ) {
-      owned <- connect_lake(source$lake, read_only = TRUE)
-      on.exit(disconnect_lake(owned), add = TRUE)
+      owned <- tw_connect_lake(source$lake, read_only = TRUE)
+      on.exit(tw_disconnect_lake(owned), add = TRUE)
       x$output_lake <- owned
     }
   }
@@ -51,7 +51,7 @@ measure_set <- function(
   metadata <- list()
   for (i in seq_along(metrics)) {
     for (j in seq_along(periods)) {
-      value <- measure(
+      value <- tw_measure(
         x,
         metrics[[i]],
         by = by,
@@ -102,7 +102,7 @@ validate_measurement_set <- function(x) {
   invisible(x)
 }
 
-#' @rdname measure
+#' @rdname tw_measure
 #' @param ... Reserved for future extensions.
 #' @export
 collect.tw_measurement_set <- function(x, ...) {
@@ -151,7 +151,7 @@ measurement_set_table <- function(x, metadata) {
   dplyr::bind_rows(rows)
 }
 
-#' @rdname measure
+#' @rdname tw_measure
 #' @export
 print.tw_measurement_set <- function(x, ...) {
   validate_measurement_set(x)
@@ -174,13 +174,13 @@ report_connection <- function(lake, read_only) {
     if (!read_only && isTRUE(lake$read_only)) {
       abort("This lake configuration is read-only.")
     }
-    return(connect_lake(lake, read_only = read_only))
+    return(tw_connect_lake(lake, read_only = read_only))
   }
   if (is.character(lake) && length(lake) == 1L && !is.na(lake)) {
     if (!file.exists(file.path(lake, "tidyweave.json"))) {
       abort("Reports require an existing local lake folder.")
     }
-    return(open_lake(lake, read_only = read_only))
+    return(tw_open_lake(lake, read_only = read_only))
   }
   abort(
     "lake must be a connected lake, lake configuration or local lake folder."

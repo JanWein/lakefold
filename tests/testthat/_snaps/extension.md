@@ -1,8 +1,8 @@
 # unsupported or invalid adapters fail before invoking source callbacks
 
     Code
-      validate(product)
+      tw_validate(product)
     Condition
       Error in `abort()`:
-      ! This component needs a check_component() preflight method.
+      ! This component needs a tw_check_component() preflight method.
 

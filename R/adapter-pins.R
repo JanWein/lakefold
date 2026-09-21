@@ -11,13 +11,13 @@
 #' @param board Configured pins board.
 #' @param name Pin name.
 #' @param version Optional pin version.
-#' @returns A source specification for [add_source()].
+#' @returns A source specification for [tw_add_source()].
 #' @export
 #' @examplesIf requireNamespace("pins", quietly = TRUE)
 #' board <- pins::board_temp(versioned = TRUE)
 #' pins::pin_write(board, data.frame(id = 1:2), "orders", type = "rds")
-#' read_source(source_pins(board, "orders"))
-source_pins <- function(board, name, version = NULL) {
+#' tw_read_source(tw_source_pins(board, "orders"))
+tw_source_pins <- function(board, name, version = NULL) {
   scalar(name, "name")
   if (!is.null(version)) {
     scalar(version, "version")
@@ -29,7 +29,7 @@ source_pins <- function(board, name, version = NULL) {
 }
 
 #' @export
-check_component.tw_pins_source <- function(x, ...) {
+tw_check_component.tw_pins_source <- function(x, ...) {
   need("pins")
   if (utils::packageVersion("pins") < "1.2.0") {
     abort("Install optional package pins version 1.2.0 or newer.")
@@ -41,8 +41,8 @@ check_component.tw_pins_source <- function(x, ...) {
 }
 
 #' @export
-read_source.tw_pins_source <- function(source, ...) {
-  check_component(source)
+tw_read_source.tw_pins_source <- function(source, ...) {
+  tw_check_component(source)
   version <- source$version
   if (is.null(version)) {
     version <- pins_metadata_version(pins_current_metadata(
@@ -57,13 +57,13 @@ read_source.tw_pins_source <- function(source, ...) {
 }
 
 #' @export
-inspect.tw_pins_source <- function(x, ...) {
+tw_inspect.tw_pins_source <- function(x, ...) {
   list(type = "pins", name = x$name, version = x$version)
 }
 
 #' @export
-capabilities.tw_pins_source <- function(x, ...) {
-  component_capabilities(
+tw_capabilities.tw_pins_source <- function(x, ...) {
+  tw_component_capabilities(
     read = TRUE,
     write = FALSE,
     lazy = FALSE,
@@ -82,7 +82,7 @@ capabilities.tw_pins_source <- function(x, ...) {
 #' does not promise atomic or immutable publication. A return to older tied
 #' content can trigger pins' unchanged-content shortcut and is rejected if it
 #' cannot be confirmed. After the board timestamp advances, use
-#' `target_pins(board, name, force_identical_write = TRUE)` to publish that content,
+#' `tw_target_pins(board, name, force_identical_write = TRUE)` to publish that content,
 #' or choose a new pin name. Ordinary retries can keep hitting the same shortcut.
 #' Forcing an identical version identifier within the same timestamp can fail
 #' after pins updates its metadata; do not use it to bypass timestamp collisions.
@@ -92,15 +92,15 @@ capabilities.tw_pins_source <- function(x, ...) {
 #' @param name Pin name.
 #' @param type Storage format accepted by pins. Defaults to `"rds"`.
 #' @param ... Named arguments to [pins::pin_write()], such as `versioned = TRUE`.
-#' @returns A target specification for [set_target()].
+#' @returns A target specification for [tw_set_target()].
 #' @export
 #' @examplesIf requireNamespace("pins", quietly = TRUE)
 #' board <- pins::board_temp(versioned = TRUE)
-#' product("orders") |>
-#'   add_source(data.frame(id = 1:2)) |>
-#'   set_target(target_pins(board, "orders")) |>
-#'   run()
-target_pins <- function(board, name, type = "rds", ...) {
+#' tw_product("orders") |>
+#'   tw_add_source(data.frame(id = 1:2)) |>
+#'   tw_set_target(tw_target_pins(board, "orders")) |>
+#'   tw_run()
+tw_target_pins <- function(board, name, type = "rds", ...) {
   scalar(name, "name")
   scalar(type, "type")
   options <- list(...)
@@ -112,11 +112,11 @@ target_pins <- function(board, name, type = "rds", ...) {
 }
 
 #' @export
-check_component.tw_pins_target <- check_component.tw_pins_source
+tw_check_component.tw_pins_target <- tw_check_component.tw_pins_source
 
 #' @export
-write_target.tw_pins_target <- function(target, data, context, ...) {
-  check_component(target)
+tw_write_target.tw_pins_target <- function(target, data, context, ...) {
+  tw_check_component(target)
   data <- adapter_frame(data)
   native <- previous <- NULL
   if (pins::pin_exists(target$board, target$name)) {
@@ -173,7 +173,7 @@ write_target.tw_pins_target <- function(target, data, context, ...) {
         "pins did not confirm this publication as current. ",
         "A same-timestamp version may have triggered its unchanged-content ",
         "shortcut. After the board's timestamp advances, use ",
-        "target_pins(..., force_identical_write = TRUE), or use a different pin name."
+        "tw_target_pins(..., force_identical_write = TRUE), or use a different pin name."
       ),
       "tw_pin_unconfirmed"
     )
@@ -253,7 +253,7 @@ pins_current_metadata <- function(
       paste0(
         "Several pin versions share a timestamp without an unambiguous ",
         "tidyweave publication order. Supply version explicitly in ",
-        "source_pins(); external writes are not assumed to be older."
+        "tw_source_pins(); external writes are not assumed to be older."
       ),
       "tw_pin_ambiguous"
     )
@@ -262,13 +262,13 @@ pins_current_metadata <- function(
 }
 
 #' @export
-inspect.tw_pins_target <- function(x, ...) {
+tw_inspect.tw_pins_target <- function(x, ...) {
   list(type = "pins target", name = x$name, format = x$type)
 }
 
 #' @export
-capabilities.tw_pins_target <- function(x, ...) {
-  component_capabilities(
+tw_capabilities.tw_pins_target <- function(x, ...) {
+  tw_component_capabilities(
     read = FALSE,
     write = TRUE,
     lazy = FALSE,

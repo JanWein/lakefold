@@ -1,40 +1,40 @@
 # invalid or conflicting slots explain how to repair them
 
     Code
-      add_product(workflow(), 1)
+      tw_add_product(tw_workflow(), 1)
     Condition
       Error in `abort()`:
-      ! Supply a product() specification.
+      ! Supply a tw_product() specification.
 
 # adding an occupied product slot requires update
 
     Code
-      add_product(add_product(workflow(), product("a")), product("b"))
+      tw_add_product(tw_add_product(tw_workflow(), tw_product("a")), tw_product("b"))
     Condition
       Error in `abort()`:
-      ! This workflow already has a product. Use update_product().
+      ! This workflow already has a product. Use tw_update_product().
 
 # adding an occupied recipe slot requires update
 
     Code
-      add_recipe(add_recipe(workflow(), recipe()), recipe())
+      tw_add_recipe(tw_add_recipe(tw_workflow(), tw_recipe()), tw_recipe())
     Condition
       Error in `abort()`:
-      ! This workflow already has a recipe. Use update_recipe().
+      ! This workflow already has a recipe. Use tw_update_recipe().
 
 # preparation stays in a dedicated workflow slot
 
     Code
-      add_product(workflow(), dplyr::mutate(product("a"), amount = 1))
+      tw_add_product(tw_workflow(), dplyr::mutate(tw_product("a"), amount = 1))
     Condition
       Error in `abort()`:
-      ! Keep preparation in a recipe when using add_product().
+      ! Keep preparation in a recipe when using tw_add_product().
 
 # sources cannot silently shadow product inputs
 
     Code
-      add_product(add_source(workflow(), data.frame(id = 1L)), product("a",
-        data.frame(id = 2L)))
+      tw_add_product(tw_add_source(tw_workflow(), data.frame(id = 1L)), tw_product(
+        "a", data.frame(id = 2L)))
     Condition
       Error in `abort()`:
       ! Sources are already set on the product. Supply sources in one place.
@@ -42,8 +42,8 @@
 # incomplete workflows explain the missing product
 
     Code
-      trial(workflow(), data = data.frame(id = 1L))
+      tw_trial(tw_workflow(), data = data.frame(id = 1L))
     Condition
       Error in `abort()`:
-      ! This workflow has no product. Use add_product().
+      ! This workflow has no product. Use tw_add_product().
 

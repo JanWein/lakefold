@@ -1,0 +1,73 @@
+---
+title: "Operation engines"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Operation engines}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE, purl=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", message = FALSE)
+```
+
+An engine chooses the implementation of one operation. The specification keeps
+its predicate or relationship. This guide's executed examples need only the
+native implementation; alternatives need the named optional package at execution.
+
+## Quality engines
+
+```{r}
+library(tidyweave)
+positive <- tw_quality_rule("positive", ~ amount > 0)
+native <- positive |> tw_set_engine("native")
+alternative <- positive |> tw_set_engine("pointblank")
+native
+alternative
+
+tw_run_quality(native, data.frame(amount = c(10, -1, NA)))
+```
+
+The predicate fails for the negative and missing values. The native engine
+records **two failures**. Selecting pointblank stores the choice without loading
+the package or reading data. Its dependency and supported operation are checked
+before execution. Engine switching supports formula rules; arbitrary R functions
+cannot silently become pointblank agent builders.
+
+```{r eval=FALSE}
+# install.packages("pointblank")
+tw_run_quality(alternative, data.frame(amount = c(10, -1, NA)))
+```
+
+## Relationship engines
+
+```{r}
+customers <- data.frame(customer_id = 1:2, region = c("North", "South"))
+relationship <- tw_lookup_spec(customers, by = "customer_id", name = "customers")
+native_lookup <- relationship |> tw_set_engine("native")
+dm_lookup <- relationship |> tw_set_engine("dm")
+
+flow <- tw_workflow() |>
+  tw_add_product(tw_product("orders")) |>
+  tw_add_recipe(tw_recipe() |> tw_step_transform(native_lookup))
+tw_collect(tw_trial(flow, data = data.frame(customer_id = c(1L, 2L, 1L))))
+```
+
+Both choices describe a checked lookup with unique reference keys. The dm engine
+uses dm's relationship checking and requires dm at execution. The native engine
+requires no optional relationship package.
+
+## Supported choices
+
+| Specification | Engines | Attach with |
+|---|---|---|
+| Formula `tw_quality_rule()` | `"native"`, `"pointblank"` | `tw_add_quality()` |
+| `tw_lookup_spec()` | `"native"`, `"dm"` | `tw_step_transform()` |
+
+`tw_execution_config()` can supply defaults for an assembled workflow. Explicit
+component engine choices take precedence. These are operation engines; storage
+is chosen separately with `tw_set_target()` or `tw_publish(to = ...)`.
+
+See [Quality rules](quality-gates.html) for severity and tolerances,
+[Integrations](optional-integrations.html) for storage capabilities, and
+[Write an adapter](extending-tidyweave.html) for custom implementations.

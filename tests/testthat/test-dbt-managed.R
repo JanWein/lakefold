@@ -1,7 +1,7 @@
 managed_dbt_fixture <- function(root) {
-  config <- lake_config(
-    registry_duckdb(file.path(root, "lake.db")),
-    storage_local(file.path(root, "data")),
+  config <- tw_lake_config(
+    tw_registry_duckdb(file.path(root, "lake.db")),
+    tw_storage_local(file.path(root, "data")),
     landing = file.path(root, "landing"),
     backend = "duckdb",
     layers = c("raw", "staging", "core", "marts")
@@ -27,9 +27,9 @@ managed_dbt_process <- function(command, args, ...) {
 
 test_that("managed project creation, updates and inspection are deferred", {
   root <- withr::local_tempdir()
-  config <- lake_config(
-    registry_duckdb(file.path(root, "missing.db")),
-    storage_local(file.path(root, "data")),
+  config <- tw_lake_config(
+    tw_registry_duckdb(file.path(root, "missing.db")),
+    tw_storage_local(file.path(root, "data")),
     backend = "duckdb"
   )
   ref <- structure(
@@ -43,10 +43,10 @@ test_that("managed project creation, updates and inspection are deferred", {
     ),
     class = "tw_run_result"
   )
-  testthat::local_mocked_bindings(connect_lake = function(...) {
+  testthat::local_mocked_bindings(tw_connect_lake = function(...) {
     stop("Unexpected connection")
   })
-  project <- dbt_project(
+  project <- tw_dbt_project(
     file.path(root, "not-created"),
     lake = config,
     sources = list(orders = ref)
@@ -55,13 +55,13 @@ test_that("managed project creation, updates and inspection are deferred", {
   expect_false(file.exists(config$catalog$path))
   expect_identical(names(project$source_groups), "inputs")
   expect_null(project$source_groups$inputs$orders$data)
-  updated <- dbt_sources(project, list(customers = ref), name = "inputs")
+  updated <- tw_dbt_sources(project, list(customers = ref), name = "inputs")
   expect_named(updated$source_groups$inputs, c("orders", "customers"))
   expect_named(project$source_groups$inputs, "orders")
-  expect_identical(inspect(updated)$status, "defined")
+  expect_identical(tw_inspect(updated)$status, "defined")
   expect_output(print(project), "managed duckdb")
   expect_error(
-    dbt_project(root, lake = config, profiles_dir = root),
+    tw_dbt_project(root, lake = config, profiles_dir = root),
     "Choose lake"
   )
 })
@@ -69,8 +69,8 @@ test_that("managed project creation, updates and inspection are deferred", {
 test_that("managed execution resolves any layer, owns files and closes its handle", {
   root <- withr::local_tempdir()
   f <- managed_dbt_fixture(root)
-  accepted <- ingest(data.frame(id = 1L), to = f$config, name = "orders")
-  enriched <- publish(
+  accepted <- tw_ingest(data.frame(id = 1L), to = f$config, name = "orders")
+  enriched <- tw_publish(
     data.frame(id = 1L),
     "enriched",
     to = f$config,
@@ -82,23 +82,23 @@ test_that("managed execution resolves any layer, owns files and closes its handl
     schema = "fake",
     table = "fake"
   )
-  project <- dbt_project(
+  project <- tw_dbt_project(
     f$path,
     lake = f$config,
     sources = list(enriched = enriched),
     executable = file.path(R.home("bin"), "R")
   ) |>
-    dbt_sources(list(orders = accepted), name = "raw")
+    tw_dbt_sources(list(orders = accepted), name = "raw")
   before <- readLines(file.path(f$path, "dbt_project.yml"))
   captured <- NULL
   testthat::local_mocked_bindings(dbt_process = function(command, args, ...) {
     # A writable connection can open only after the registry reader is closed.
-    connection <- connect_lake(f$config)
-    close_lake(connection)
+    connection <- tw_connect_lake(f$config)
+    tw_close_lake(connection)
     captured <<- args
     managed_dbt_process(command, args, ...)
   })
-  result <- run(project, echo = FALSE)
+  result <- tw_run(project, echo = FALSE)
   expect_true(result$success)
   expect_identical(result$project, project)
   expect_identical(result$source_bindings$inputs$enriched$schema, "staging")
@@ -134,27 +134,27 @@ test_that("managed execution resolves any layer, owns files and closes its handl
     "select 1 as untouched"
   )
   # Reconstructed definitions remove undeclared groups instead of inheriting them.
-  smaller <- dbt_project(
+  smaller <- tw_dbt_project(
     f$path,
     lake = f$config,
     sources = list(enriched = enriched),
     executable = file.path(R.home("bin"), "R")
   )
-  run(smaller, echo = FALSE)
+  tw_run(smaller, echo = FALSE)
   expect_length(yaml::read_yaml(yaml_path)$sources, 1L)
 })
 
 test_that("managed preflight validates all groups before touching files", {
   root <- withr::local_tempdir()
   f <- managed_dbt_fixture(root)
-  accepted <- ingest(data.frame(id = 1L), to = f$config, name = "orders")
-  enriched <- publish(
+  accepted <- tw_ingest(data.frame(id = 1L), to = f$config, name = "orders")
+  enriched <- tw_publish(
     data.frame(id = 1L),
     "enriched",
     to = f$config,
     layer = "staging"
   )
-  project <- dbt_project(
+  project <- tw_dbt_project(
     f$path,
     lake = f$config,
     sources = list(raw = accepted, enriched = enriched),
@@ -163,24 +163,24 @@ test_that("managed preflight validates all groups before touching files", {
   testthat::local_mocked_bindings(dbt_process = function(...) {
     stop("must not execute")
   })
-  expect_error(run(project), "one physical schema")
+  expect_error(tw_run(project), "one physical schema")
   expect_false(dir.exists(file.path(f$path, ".tidyweave")))
   path <- file.path(f$path, "sql", "tidyweave_managed_sources.yml")
   expect_false(file.exists(path))
-  project <- dbt_project(
+  project <- tw_dbt_project(
     f$path,
     lake = f$config,
     sources = list(orders = accepted),
     executable = file.path(R.home("bin"), "R")
   )
   writeLines("# Handwritten sources", path)
-  expect_error(run(project), "not package-owned")
+  expect_error(tw_run(project), "not package-owned")
   expect_identical(readLines(path), "# Handwritten sources")
   expect_false(dir.exists(file.path(f$path, ".tidyweave")))
   missing <- accepted
   missing$release_id <- "not-in-registry"
   expect_error(
-    run(dbt_sources(project, list(orders = missing), name = "inputs")),
+    tw_run(tw_dbt_sources(project, list(orders = missing), name = "inputs")),
     "exact release"
   )
   expect_identical(readLines(path), "# Handwritten sources")
@@ -202,7 +202,7 @@ test_that("managed source groups reject another catalog without IO", {
     class = "tw_run_result"
   )
   expect_error(
-    dbt_project(f$path, lake = f$config, sources = list(orders = fake)),
+    tw_dbt_project(f$path, lake = f$config, sources = list(orders = fake)),
     "different project catalog"
   )
   expect_false(file.exists(config$catalog$path))
@@ -211,16 +211,16 @@ test_that("managed source groups reject another catalog without IO", {
 test_that("managed publication infers the lake and verifies artifact provenance", {
   root <- withr::local_tempdir()
   f <- managed_dbt_fixture(root)
-  accepted <- ingest(data.frame(id = 1L), to = f$config, name = "orders")
-  project <- dbt_project(
+  accepted <- tw_ingest(data.frame(id = 1L), to = f$config, name = "orders")
+  project <- tw_dbt_project(
     f$path,
     lake = f$config,
     sources = list(orders = accepted),
     executable = file.path(R.home("bin"), "R")
   )
   testthat::local_mocked_bindings(dbt_process = function(command, args, ...) {
-    lake <- connect_lake(f$config)
-    on.exit(close_lake(lake))
+    lake <- tw_connect_lake(f$config)
+    on.exit(tw_close_lake(lake))
     DBI::dbExecute(
       lake$con,
       paste(
@@ -230,38 +230,38 @@ test_that("managed publication infers the lake and verifies artifact provenance"
     )
     managed_dbt_process(command, args, ...)
   })
-  built <- run(project, echo = FALSE)
-  release <- publish(built, "customer_revenue", asset = "shop.revenue")
+  built <- tw_run(project, echo = FALSE)
+  release <- tw_publish(built, "customer_revenue", asset = "shop.revenue")
   expect_identical(release$status, "published")
   expect_identical(release$outputs$schema, "marts")
   expect_identical(release$asset, "shop.revenue")
-  expect_equal(collect(release)$revenue, 100)
+  expect_equal(tw_collect(release)$revenue, 100)
   other <- f$config
   other$catalog$path <- file.path(root, "another.db")
   expect_error(
-    publish(built, "customer_revenue", to = other),
+    tw_publish(built, "customer_revenue", to = other),
     "same lake catalog"
   )
   expect_false(file.exists(other$catalog$path))
   modified <- built
   modified$manifest$nodes[["model.shop.customer_revenue"]]$alias <- "different"
-  expect_error(publish(modified, "customer_revenue"), "result changed")
+  expect_error(tw_publish(modified, "customer_revenue"), "result changed")
   failed <- built
   failed$success <- FALSE
-  expect_error(publish(failed, "customer_revenue"), "successful dbt build")
+  expect_error(tw_publish(failed, "customer_revenue"), "successful dbt build")
   writeLines("{}", file.path(built$artifacts_dir, "manifest.json"))
   expect_error(
-    publish(built, "customer_revenue"),
+    tw_publish(built, "customer_revenue"),
     class = "tw_dbt_artifact_invalid"
   )
-  expect_equal(collect(release)$revenue, 100)
+  expect_equal(tw_collect(release)$revenue, 100)
 })
 
 test_that("source-free managed projects initialize their lake before dbt", {
   root <- withr::local_tempdir()
   f <- managed_dbt_fixture(root)
-  config <- lake_config(path = file.path(root, "fresh"), backend = "duckdb")
-  project <- dbt_project(
+  config <- tw_lake_config(path = file.path(root, "fresh"), backend = "duckdb")
+  project <- tw_dbt_project(
     f$path,
     lake = config,
     executable = file.path(R.home("bin"), "R")
@@ -269,15 +269,15 @@ test_that("source-free managed projects initialize their lake before dbt", {
   expect_false(dir.exists(file.path(root, "fresh")))
   testthat::local_mocked_bindings(dbt_process = function(command, args, ...) {
     expect_true(file.exists(file.path(root, "fresh", "tidyweave.json")))
-    lake <- connect_lake(config)
-    on.exit(close_lake(lake))
+    lake <- tw_connect_lake(config)
+    on.exit(tw_close_lake(lake))
     expect_true(DBI::dbExistsTable(
       lake$con,
       DBI::Id(catalog = "lake", schema = "_dl", table = "runs")
     ))
     managed_dbt_process(command, args, ...)
   })
-  expect_true(run(project, echo = FALSE)$success)
+  expect_true(tw_run(project, echo = FALSE)$success)
 })
 
 test_that("failed managed source replacement retains the previous file", {

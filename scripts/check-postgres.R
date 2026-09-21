@@ -5,14 +5,14 @@ stopifnot(nzchar(Sys.getenv("TIDYWEAVE_TEST_PG_CONNECTION")))
 root <- normalizePath("check", mustWork = FALSE)
 root <- file.path(root, "postgres")
 dir.create(root, recursive = TRUE, showWarnings = FALSE)
-config <- lake_config(
-  registry_postgres("TIDYWEAVE_TEST_PG_CONNECTION", lock_timeout = 30),
-  storage_local(file.path(root, "data")),
+config <- tw_lake_config(
+  tw_registry_postgres("TIDYWEAVE_TEST_PG_CONNECTION", lock_timeout = 30),
+  tw_storage_local(file.path(root, "data")),
   landing = file.path(root, "landing"),
   backend = "ducklake"
 )
-lake <- connect_lake(config)
-close_lake(lake)
+lake <- tw_connect_lake(config)
+tw_close_lake(lake)
 worker <- normalizePath("scripts/postgres-worker.R")
 launch <- function(job, number) {
   input <- file.path(root, paste0("job-", number, ".rds"))
@@ -42,11 +42,12 @@ a <- launch(list(action = "publish", asset = "left", value = 1L), 1)
 b <- launch(list(action = "publish", asset = "right", value = 2L), 2)
 stopifnot(finish(a)$status == "published", finish(b)$status == "published")
 # Nested publication reuses the process coordinator instead of waiting on itself.
-upstream <- product("upstream", data.frame(id = 1L)) |> set_target(config)
+upstream <- tw_product("upstream", data.frame(id = 1L)) |> tw_set_target(config)
 stopifnot(
-  publish(product("downstream", upstream), to = config)$status == "published"
+  tw_publish(tw_product("downstream", upstream), to = config)$status ==
+    "published"
 )
-first <- publish(product("shared", data.frame(id = 1L)), to = config)
+first <- tw_publish(tw_product("shared", data.frame(id = 1L)), to = config)
 a <- launch(
   list(action = "publish", asset = "shared", value = 2L, previous = first),
   3
@@ -80,24 +81,27 @@ stopifnot(file.exists(ready))
 short_wait <- config
 short_wait$catalog$lock_timeout <- 0
 busy <- tryCatch(
-  publish(product("busy", data.frame(id = 1L)), to = short_wait),
+  tw_publish(tw_product("busy", data.frame(id = 1L)), to = short_wait),
   error = identity
 )
 stopifnot(inherits(busy$result$error, "tw_writer_busy"))
-reader <- connect_lake(config, read_only = TRUE)
-stopifnot(read_release(reader, "shared", first$release_id)$id == 1L)
-close_lake(reader)
+reader <- tw_connect_lake(config, read_only = TRUE)
+stopifnot(tw_read_release(reader, "shared", first$release_id)$id == 1L)
+tw_close_lake(reader)
 holder$process$kill()
 holder$process$wait(timeout = 10000)
 stopifnot(
-  publish(product("after_crash", data.frame(id = 1L)), to = config)$status ==
+  tw_publish(
+    tw_product("after_crash", data.frame(id = 1L)),
+    to = config
+  )$status ==
     "published"
 )
-lake <- connect_lake(config)
+lake <- tw_connect_lake(config)
 stopifnot(
-  nrow(releases(lake, "shared")) == 2L,
-  sum(registry(lake, "reports")$id == "same-report") == 1L,
-  identical(collect(first)$id, 1L)
+  nrow(tw_releases(lake, "shared")) == 2L,
+  sum(tw_registry(lake, "reports")$id == "same-report") == 1L,
+  identical(tw_collect(first)$id, 1L)
 )
 model <- dm::dm(
   customers = data.frame(id = 1:2),
@@ -105,19 +109,19 @@ model <- dm::dm(
 ) |>
   dm::dm_add_pk(customers, id) |>
   dm::dm_add_fk(policies, id, customers)
-original <- publish(product("portfolio", model), to = lake)
-blocked <- publish(
-  product("portfolio", model),
+original <- tw_publish(tw_product("portfolio", model), to = lake)
+blocked <- tw_publish(
+  tw_product("portfolio", model),
   to = lake,
   sources = list(customers = data.frame(id = 1L)),
   stop_on_failure = FALSE
 )
 stopifnot(
   blocked$status == "blocked",
-  nrow(releases(lake, "portfolio")) == 1L,
-  identical(collect(original)$policies$id, 1:2)
+  nrow(tw_releases(lake, "portfolio")) == 1L,
+  identical(tw_collect(original)$policies$id, 1:2)
 )
-close_lake(lake)
+tw_close_lake(lake)
 cat(
   "PostgreSQL/DuckLake: parallel clients, stale correction, report identity and model gate passed.\n"
 )

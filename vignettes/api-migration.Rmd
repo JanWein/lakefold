@@ -1,0 +1,67 @@
+---
+title: "Migrate to the tw_ API"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Migrate to the tw_ API}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE, purl=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", message = FALSE)
+```
+
+All tidyweave exports now start with `tw_`. The development API intentionally
+has no unprefixed compatibility aliases. This avoids masking parsnip, recipes,
+workflows and common R functions when packages are attached together.
+
+## Update calls
+
+For tidyweave-owned functions, add `tw_` to the previous name. For example:
+
+| Previous call | Current call |
+|---|---|
+| `product()` | `tw_product()` |
+| `recipe()` / `step_mutate()` | `tw_recipe()` / `tw_step_mutate()` |
+| `workflow()` / `add_recipe()` | `tw_workflow()` / `tw_add_recipe()` |
+| `set_engine()` | `tw_set_engine()` |
+| `trial()` / `run()` / `publish()` | `tw_trial()` / `tw_run()` / `tw_publish()` |
+| `collect()` / `explain()` | `tw_collect()` / `tw_explain()` |
+| `source_database()` / `target_database()` | `tw_source_database()` / `tw_target_database()` |
+
+Apply this only to tidyweave functions. Keep `recipes::recipe()`,
+`parsnip::set_engine()` and `workflows::workflow()` unchanged. Keep argument names,
+column names and result fields unchanged: `data =`, `product =`, `recipe =`,
+`result$status` and `result$quality` still have their existing meanings.
+
+`dplyr::collect()`, `dplyr::explain()` and dplyr transformation methods remain
+supported. tidyweave no longer re-exports `filter()`: call `dplyr::filter()`
+explicitly or attach dplyr. `tw_collect()` and `tw_explain()` delegate to the dplyr
+generics, preserving backend dispatch.
+
+## Separate an existing definition
+
+Direct product pipelines still work under the new names. For modular reuse,
+move preparation into a recipe and bind data at execution:
+
+```{r}
+library(tidyweave)
+spec <- tw_product("orders") |> tw_add_quality(~ amount >= 0)
+preparation <- tw_recipe() |> tw_step_mutate(amount = round(amount, 2))
+flow <- tw_workflow() |> tw_add_product(spec) |> tw_add_recipe(preparation)
+tw_collect(tw_trial(flow, data = data.frame(amount = c(10.123, 20))))
+```
+
+Do not pass a product with embedded transformations to `tw_add_product()`.
+Rebuild its preparation in the recipe. Existing release identifiers and stored
+table data do not need renaming. Recreate saved executable definitions from
+their source code so their function references use the current API.
+
+## Update extension methods
+
+The S3 generics themselves have been renamed, not just their exported aliases.
+Rename methods such as `read_source.my_source` to `tw_read_source.my_source` and
+regenerate your extension package's NAMESPACE. Explicit registrations must use
+the new generic string, for example `"tw_read_source"`. Class names, method
+arguments and return contracts remain unchanged. See
+[Write an adapter](extending-tidyweave.html) for the complete runnable protocol.

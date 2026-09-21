@@ -1,6 +1,6 @@
 #' Execute a product using a target adapter
 #'
-#' Most extensions only need [write_target()]: the default executor reads the
+#' Most extensions only need [tw_write_target()]: the default executor reads the
 #' source, applies transforms, checks the candidate, then calls the writer.
 #' Implement this generic only when execution needs different resource or
 #' transaction semantics. The lake adapter compiles the product into the
@@ -10,8 +10,8 @@
 #' @param ... Execution options. Target adapters must reject unsupported options.
 #' @returns A run result containing execution evidence and an output reference.
 #' @examples
-#' product <- product("orders") |> add_source(data.frame(id = 1:2))
-#' tw_execute_target(NULL, validate(product))
+#' product <- tw_product("orders") |> tw_add_source(data.frame(id = 1:2))
+#' tw_execute_target(NULL, tw_validate(product))
 #' @noRd
 tw_execute_target <- function(target, product, ...) {
   UseMethod("tw_execute_target")
@@ -32,17 +32,17 @@ tw_execute_target <- function(target, product, ...) {
 #' @returns A list describing the written output.
 #' @export
 #' @examples
-#' write_target(NULL, data.frame(id = 1L), list(product = "orders"))
-write_target <- function(target, data, context, ...) {
-  UseMethod("write_target")
+#' tw_write_target(NULL, data.frame(id = 1L), list(product = "orders"))
+tw_write_target <- function(target, data, context, ...) {
+  UseMethod("tw_write_target")
 }
 #' @export
-write_target.NULL <- function(target, data, context, ...) {
+tw_write_target.NULL <- function(target, data, context, ...) {
   list(type = "memory", rows = count_rows(data))
 }
 #' @export
-write_target.default <- function(target, data, context, ...) {
-  abort("This target needs a write_target() method.")
+tw_write_target.default <- function(target, data, context, ...) {
+  abort("This target needs a tw_write_target() method.")
 }
 
 #' Publish automatically generated metadata
@@ -53,13 +53,13 @@ write_target.default <- function(target, data, context, ...) {
 #' delivery is separate from data publication: a catalog failure is recorded
 #' as a warning and does not pretend that a committed data release was undone.
 #'
-#' [dbt_build()] and [dbt_test()] also accept a catalog function, or an S3
-#' adapter with `capabilities(x)$metadata_inputs = "tw_dbt_result"`. These
+#' [tw_dbt_build()] and [tw_dbt_test()] also accept a catalog function, or an S3
+#' adapter with `tw_capabilities(x)$metadata_inputs = "tw_dbt_result"`. These
 #' receive the full dbt result, including local artifact paths, the manifest,
 #' and dbt stdout/stderr. Callback authors control what is transmitted; these
 #' diagnostics can contain SQL or database messages. Valid artifacts from
 #' failed dbt tests can still be delivered without changing the dbt outcome.
-#' [catalog_openmetadata_dbt()] delegates to the existing OpenMetadata ingestion
+#' [tw_catalog_openmetadata_dbt()] delegates to the existing OpenMetadata ingestion
 #' engine and returns a retryable, credential-free delivery receipt.
 #' @param catalog Function or catalog adapter.
 #' @param metadata Descriptive product run metadata without input rows or
@@ -70,29 +70,29 @@ write_target.default <- function(target, data, context, ...) {
 #' @export
 #' @examples
 #' received <- NULL
-#' publish_metadata(function(metadata) received <<- metadata,
+#' tw_publish_metadata(function(metadata) received <<- metadata,
 #'   list(product = "orders", rows = 2L))
-publish_metadata <- function(catalog, metadata, ...) {
-  UseMethod("publish_metadata")
+tw_publish_metadata <- function(catalog, metadata, ...) {
+  UseMethod("tw_publish_metadata")
 }
 #' @export
-publish_metadata.function <- function(catalog, metadata, ...) {
+tw_publish_metadata.function <- function(catalog, metadata, ...) {
   invisible(catalog(metadata))
 }
 #' @export
-publish_metadata.default <- function(catalog, metadata, ...) {
-  abort("This catalog needs a publish_metadata() method.")
+tw_publish_metadata.default <- function(catalog, metadata, ...) {
+  abort("This catalog needs a tw_publish_metadata() method.")
 }
 
 #' Execute and publish a product with sensible local defaults
 #'
-#' Use [trial()] to try a product without configured framework writers.
-#' `run()` executes its full configuration, including targets and catalogs.
-#' `publish()` adds a local lake target when none was supplied. A new folder
-#' uses DuckDB; an existing folder retains its saved backend. [target_lake()]
+#' Use [tw_trial()] to try a product without configured framework writers.
+#' `tw_run()` executes its full configuration, including targets and catalogs.
+#' `tw_publish()` adds a local lake target when none was supplied. A new folder
+#' uses DuckDB; an existing folder retains its saved backend. [tw_target_lake()]
 #' accepts other lake configurations. Execution automatically validates the
 #' definition before source acquisition.
-#' Use [collect()] to obtain the output as an ordinary tibble.
+#' Use [tw_collect()] to obtain the output as an ordinary tibble.
 #' @param x Composed product, data frame, or successful dbt build.
 #' @param name Product name for a data frame, or an exact or unambiguous model
 #'   name for a dbt build. Omit it for an already named product.
@@ -100,36 +100,36 @@ publish_metadata.default <- function(catalog, metadata, ...) {
 #'   to the `tidyweave` folder in the working directory when the product has none.
 #'   For dbt builds it defaults to the project's configured lake.
 #' @param layer Optional publication layer for a lake target.
-#' @param execution Optional [execution_config()] defaults for products,
-#'   overriding defaults stored by `product(execution = )`.
+#' @param execution Optional [tw_execution_config()] defaults for products,
+#'   overriding defaults stored by `tw_product(execution = )`.
 #' @param ... Execution options, including `data` or `sources` for new deliveries
-#'   as described in [run()], `stop_on_failure` and, for lake
+#'   as described in [tw_run()], `stop_on_failure` and, for lake
 #'   targets, `business_date`, `notify`, `cache` and `previous`. Supply a previous
 #'   publication to reject stale corrections if the destination has changed. dbt builds accept
-#'   [dbt_publish()] options such as `contract`, `asset` and `layer`.
+#'   [tw_dbt_publish()] options such as `contract`, `asset` and `layer`.
 #' @returns A run result. An exception on failure includes `condition$result`.
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("tidyweave-")
-#' result <- product("orders") |>
-#'   add_source(data.frame(id = 1:2)) |>
-#'   publish(to = root)
-#' collect(result)
+#' result <- tw_product("orders") |>
+#'   tw_add_source(data.frame(id = 1:2)) |>
+#'   tw_publish(to = root)
+#' tw_collect(result)
 #' unlink(root, recursive = TRUE)
-publish <- function(x, name = NULL, to = NULL, ...) {
-  UseMethod("publish")
+tw_publish <- function(x, name = NULL, to = NULL, ...) {
+  UseMethod("tw_publish")
 }
-#' @rdname publish
+#' @rdname tw_publish
 #' @export
-publish.data.frame <- function(x, name = NULL, to = NULL, ...) {
+tw_publish.data.frame <- function(x, name = NULL, to = NULL, ...) {
   if (is.null(name)) {
     abort("Supply name when publishing a data frame, for example 'orders'.")
   }
-  publish(product(name, x), to = to, ...)
+  tw_publish(tw_product(name, x), to = to, ...)
 }
-#' @rdname publish
+#' @rdname tw_publish
 #' @export
-publish.tw_product <- function(
+tw_publish.tw_product <- function(
   x,
   name = NULL,
   to = NULL,
@@ -139,13 +139,13 @@ publish.tw_product <- function(
 ) {
   if (!is.null(name)) {
     abort(
-      "The product already has a name. Omit name or create product(name)."
+      "The product already has a name. Omit name or create tw_product(name)."
     )
   }
   execution <- product_execution(x, execution)
   x <- editable_product(x)
   if (!is.null(to)) {
-    x <- set_target(x, to)
+    x <- tw_set_target(x, to)
     if (
       is.null(layer) &&
         !is.null(execution$layer) &&
@@ -155,7 +155,7 @@ publish.tw_product <- function(
     }
   }
   if (is.null(x$target)) {
-    x <- set_target(x, execution$to %||% "tidyweave")
+    x <- tw_set_target(x, execution$to %||% "tidyweave")
     layer <- layer %||% execution$layer
   }
   if (!is.null(layer)) {
@@ -164,10 +164,10 @@ publish.tw_product <- function(
     }
     x$target$layer <- ident(layer)
   }
-  run(x, execution = execution, ...)
+  tw_run(x, execution = execution, ...)
 }
 #' @export
-publish.default <- function(x, name = NULL, to = NULL, ...) {
+tw_publish.default <- function(x, name = NULL, to = NULL, ...) {
   abort("Publish a product, data frame or successful dbt build.")
 }
 
@@ -185,22 +185,22 @@ publish.default <- function(x, name = NULL, to = NULL, ...) {
 #'   results collect the complete pinned release and accept no extra arguments.
 #' @returns An ordinary tibble for a table product, or a dm for a model
 #'   product. Failed or blocked runs cannot be collected.
-#' @name collect
+#' @name tw_collect
 #' @importFrom dplyr collect
 #' @export
 #' @examples
-#' product("orders") |> add_source(data.frame(id = 1:2)) |>
-#'   run() |> collect()
-dplyr::collect
+#' tw_product("orders") |> tw_add_source(data.frame(id = 1:2)) |>
+#'   tw_run() |> tw_collect()
+tw_collect <- function(x, ...) dplyr::collect(x, ...)
 
-#' @rdname collect
+#' @rdname tw_collect
 #' @export
 collect.tw_run_result <- function(x, ...) {
   if (!x$status %in% c("completed", "published", "cached")) {
     abort(
       paste(
         run_result_message(x),
-        "Inspect quality_report(result) for checks and quality_rows(result) for affected rows."
+        "Inspect tw_quality_report(result) for checks and tw_quality_rows(result) for affected rows."
       )
     )
   }
@@ -209,22 +209,22 @@ collect.tw_run_result <- function(x, ...) {
   }
   rlang::check_dots_empty()
   if (!is.null(x$output_lake) && DBI::dbIsValid(x$output_lake$con)) {
-    return(read_release(x$output_lake, x$asset, x$release_id))
+    return(tw_read_release(x$output_lake, x$asset, x$release_id))
   }
   if (!is.null(x$output_config)) {
     config <- x$output_config
     config$read_only <- TRUE
-    lake <- connect_lake(config)
-    on.exit(close_lake(lake), add = TRUE)
-    return(read_release(lake, x$asset, x$release_id))
+    lake <- tw_connect_lake(config)
+    on.exit(tw_close_lake(lake), add = TRUE)
+    return(tw_read_release(lake, x$asset, x$release_id))
   }
   abort(
-    "This result has no output reference. Use read_release(lake, name, release_id) for older run results."
+    "This result has no output reference. Use tw_read_release(lake, name, release_id) for older run results."
   )
 }
 
 #' @export
-run.tw_product <- function(
+tw_run.tw_product <- function(
   pipeline,
   lake = NULL,
   stop_on_failure = TRUE,
@@ -246,10 +246,10 @@ run.tw_product <- function(
   }
   flag(stop_on_failure, "stop_on_failure")
   if (!is.null(lake)) {
-    object <- set_target(object, lake)
+    object <- tw_set_target(object, lake)
   }
   object <- apply_execution_defaults(object, execution)
-  object <- validate(object)
+  object <- tw_validate(object)
   context <- .context %||% new_product_context(evidence)
   if (exists(object$id, context$results, inherits = FALSE)) {
     return(get(object$id, context$results, inherits = FALSE))
@@ -296,7 +296,7 @@ run.tw_product <- function(
   result$asset <- object$id
   result$started_at <- result$started_at %||% started
   result$finished_at <- result$finished_at %||% now()
-  result$backend <- result$backend %||% inspect(object$target)$type
+  result$backend <- result$backend %||% tw_inspect(object$target)$type
   result$warnings <- result$warnings %||% character()
   result$warning_conditions <- warnings
   if (length(warnings)) {
@@ -314,7 +314,7 @@ run.tw_product <- function(
     list(
       run_id = result$run_id,
       product = object$id,
-      definition = inspect(object),
+      definition = tw_inspect(object),
       code_version = object$code_version,
       started_at = result$started_at,
       finished_at = result$finished_at,
@@ -353,7 +353,7 @@ run.tw_product <- function(
     abort(
       paste(
         run_result_message(result),
-        "For diagnosis, rerun with stop_on_failure = FALSE and save the result. Inspect quality_report(result) and quality_rows(result)."
+        "For diagnosis, rerun with stop_on_failure = FALSE and save the result. Inspect tw_quality_report(result) and tw_quality_rows(result)."
       ),
       "tw_run_failed",
       result = result,
@@ -392,7 +392,7 @@ tw_execute_target.default <- function(target, product, ...) {
       }
       data <- table_result(data, "The final transformation")
       contract <- product_contract(product, data)
-      quality <- validate(data, contract, keep_errors = TRUE)
+      quality <- tw_validate(data, contract, keep_errors = TRUE)
       if (!quality_ok(quality)) {
         blocked <- run_result(run, "blocked", quality = quality)
         blocked$diagnostic <- list(data = data, contract = contract)
@@ -409,7 +409,7 @@ tw_execute_target.default <- function(target, product, ...) {
             to = product$id
           )
         )
-        output <- write_target(
+        output <- tw_write_target(
           target,
           data,
           list(
@@ -470,7 +470,7 @@ tw_execute_target.default <- function(target, product, ...) {
 apply_product_transform <- function(transform, data, name, sources = list()) {
   tryCatch(
     table_result(
-      execute_transform(transform, data, sources = sources),
+      tw_execute_transform(transform, data, sources = sources),
       paste0("Transformation `", name, "`")
     ),
     error = function(e) {
@@ -535,7 +535,7 @@ result_data <- function(result) {
       result = result
     )
   }
-  result$data %||% collect(result)
+  result$data %||% tw_collect(result)
 }
 
 read_product_sources <- function(product, lake = NULL, on_input = NULL) {
@@ -556,7 +556,7 @@ read_product_sources <- function(product, lake = NULL, on_input = NULL) {
     reference <- NULL
     reported <- FALSE
     if (inherits(source, "tw_product")) {
-      upstream <- run(
+      upstream <- tw_run(
         source,
         .context = context,
         evidence = context$evidence,
@@ -622,7 +622,7 @@ read_product_sources <- function(product, lake = NULL, on_input = NULL) {
           data <- if (identical(class(source), "tw_release_source")) {
             read_release_source(source, lake %||% context$read_lake)
           } else {
-            read_source(source)
+            tw_read_source(source)
           }
         }
         context$sources[[length(context$sources) + 1L]] <-
@@ -633,7 +633,7 @@ read_product_sources <- function(product, lake = NULL, on_input = NULL) {
         archives[[name]] <- archive
         if (!reported && !is.null(on_input)) on_input(name, archive)
       }
-      description <- inspect(source)
+      description <- tw_inspect(source)
       provenance <- attr(data, "tw_source_metadata")
       if (!is.null(provenance)) description$provenance <- provenance
     }

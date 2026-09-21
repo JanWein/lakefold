@@ -1,6 +1,6 @@
 #' Define a data contract
 #' @param id Optional contract identifier. An unnamed contract is scoped to
-#'   the product when added with [add_contract()].
+#'   the product when added with [tw_add_contract()].
 #' @param version Immutable definition version.
 #' @param owner Optional business owner.
 #' @param description Optional business description.
@@ -17,7 +17,7 @@
 #' @param required Non-null columns.
 #' @param key Unique key columns.
 #' @param rules A quality rule, one-sided formula, or list of rules/formulas.
-#'   List names label rules, with the same grammar as [add_quality()].
+#'   List names label rules, with the same grammar as [tw_add_quality()].
 #' @param producer Contact for failed deliveries.
 #' @param max_age_hours Maximum release age, or `NULL` to leave freshness
 #'   unmonitored.
@@ -30,12 +30,12 @@
 #' @return A serializable contract specification.
 #' @export
 #' @examples
-#' contract <- contract(
+#' contract <- tw_contract(
 #'   "orders", "1.0.0", "Analytics", "Order amounts", "One order",
 #'   c(order_id = "integer", amount = "numeric"), key = "order_id"
 #' )
 #' contract
-contract <- function(
+tw_contract <- function(
   id = "contract",
   version = "1.0.0",
   owner = "",
@@ -160,7 +160,7 @@ contract <- function(
 #' Define a quality rule
 #' @param name Rule name.
 #' @param check Function taking a table and returning a logical vector or
-#'   quality_counts(), or a one-sided row predicate such as `~ amount >= 0`.
+#'   tw_quality_counts(), or a one-sided row predicate such as `~ amount >= 0`.
 #'   A scalar function result is one aggregate test; a longer vector must have
 #'   one value per row. Formula results are evaluated per row, including scalar
 #'   predicates repeated for each row. Missing logical values count as failures.
@@ -173,7 +173,7 @@ contract <- function(
 #'   `"pointblank"`. Both require logical row predicates and count missing
 #'   values as failures. Pointblank interrogates a real agent against the
 #'   normalized predicate, retaining its reports and check evidence. Ordinary
-#'   functions use the native engine; use [pointblank_checks()] for custom agents.
+#'   functions use the native engine; use [tw_pointblank_checks()] for custom agents.
 #' @param build Function creating a pointblank agent from a lazy table.
 #' @param policy `"rule"` preserves the explicit `severity` / `max_failure`
 #'   gate. `"agent"` uses pointblank's per-step action levels: warnings permit
@@ -184,13 +184,13 @@ contract <- function(
 #' @return A rule specification or counts object.
 #' @export
 #' @examples
-#' rule <- quality_rule("positive", function(data) {
+#' rule <- tw_quality_rule("positive", function(data) {
 #'   counts <- dplyr::summarise(data, failed = sum(amount <= 0), total = dplyr::n())
 #'   if (inherits(counts, "tbl_sql")) counts <- dplyr::collect(counts)
-#'   quality_counts(counts$failed, counts$total)
+#'   tw_quality_counts(counts$failed, counts$total)
 #' })
 #' rule$name
-quality_rule <- function(
+tw_quality_rule <- function(
   name,
   check,
   severity = c("error", "warning"),
@@ -209,7 +209,7 @@ quality_rule <- function(
   engine <- normalize_quality_engine(match.arg(engine))
   if (engine == "pointblank" && !inherits(check, "formula")) {
     abort(
-      "Pointblank formula rules need a one-sided formula. Use pointblank_checks() for an agent builder."
+      "Pointblank formula rules need a one-sided formula. Use tw_pointblank_checks() for an agent builder."
     )
   }
   if (
@@ -234,9 +234,9 @@ quality_rule <- function(
     class = "tw_rule"
   )
 }
-#' @rdname quality_rule
+#' @rdname tw_quality_rule
 #' @export
-quality_counts <- function(n_failed, n_total) {
+tw_quality_counts <- function(n_failed, n_total) {
   if (
     !is.numeric(n_failed) ||
       !is.numeric(n_total) ||
@@ -255,16 +255,16 @@ quality_counts <- function(n_failed, n_total) {
     class = "tw_quality_counts"
   )
 }
-#' @rdname quality_rule
+#' @rdname tw_quality_rule
 #' @export
-pointblank_checks <- function(
+tw_pointblank_checks <- function(
   name,
   build,
   severity = c("error", "warning"),
   max_failure = 0,
   policy = c("rule", "agent")
 ) {
-  rule <- quality_rule(name, build, severity, max_failure)
+  rule <- tw_quality_rule(name, build, severity, max_failure)
   rule$engine <- "pointblank"
   rule$engine_explicit <- TRUE
   policy <- match.arg(policy)
@@ -466,24 +466,24 @@ pointblank_results <- function(rule, data, keep_agent = FALSE) {
 #' @param stage Label stored with each check, such as `"ingest"` or
 #'   `"candidate"`.
 #' @param keep_agents Retain interrogated pointblank agents as an in-memory
-#'   attribute for [pointblank_report()]. Defaults to `FALSE`.
+#'   attribute for [tw_pointblank_report()]. Defaults to `FALSE`.
 #' @param keep_errors Retain original R conditions in an in-memory `tw_errors`
 #'   attribute. They can contain private data and are never persisted in the
-#'   registry. Inspect with [quality_errors()]. Defaults to `FALSE`.
+#'   registry. Inspect with [tw_quality_errors()]. Defaults to `FALSE`.
 #' @return For data, a tibble with one row per check; only passed and warning
 #'   permit publication. For a workflow, the validated definition.
 #' @export
 #' @examples
-#' contract <- contract(
+#' contract <- tw_contract(
 #'   "orders", "1.0.0", "Analytics", "Order amounts", "One order",
 #'   c(order_id = "integer", amount = "numeric"), key = "order_id"
 #' )
-#' validate(data.frame(order_id = 1:2, amount = c(25, 75)), contract)
-validate <- function(data, contract = NULL, ...) UseMethod("validate")
+#' tw_validate(data.frame(order_id = 1:2, amount = c(25, 75)), contract)
+tw_validate <- function(data, contract = NULL, ...) UseMethod("tw_validate")
 
-#' @rdname validate
+#' @rdname tw_validate
 #' @export
-validate.default <- function(
+tw_validate.default <- function(
   data,
   contract,
   stage = "candidate",
@@ -638,27 +638,27 @@ quality_ok <- function(results) {
 
 
 #' Inspect locally retained quality exceptions
-#' @param quality Results from `validate(..., keep_errors = TRUE)`.
+#' @param quality Results from `tw_validate(..., keep_errors = TRUE)`.
 #' @returns A named list of original R conditions, empty when none were retained.
 #' @export
 #' @examples
-#' contract <- contract("example", columns = c(id = "integer"),
-#'   rules = list(quality_rule("broken", function(data) stop("Check configuration"))))
-#' quality <- validate(data.frame(id = 1L), contract, keep_errors = TRUE)
-#' lapply(quality_errors(quality), conditionMessage)
-quality_errors <- function(quality) {
+#' contract <- tw_contract("example", columns = c(id = "integer"),
+#'   rules = list(tw_quality_rule("broken", function(data) stop("Check configuration"))))
+#' quality <- tw_validate(data.frame(id = 1L), contract, keep_errors = TRUE)
+#' lapply(tw_quality_errors(quality), conditionMessage)
+tw_quality_errors <- function(quality) {
   attr(quality, "tw_errors") %||% list()
 }
 
 #' @export
-validate.tw_pipeline <- function(data, contract = NULL, ...) {
+tw_validate.tw_pipeline <- function(data, contract = NULL, ...) {
   rlang::check_dots_empty()
   if (!is.null(contract)) {
     abort("A pipeline already contains its contract.")
   }
   check_pipeline(data)
   need("duckdb")
-  check_component(data$steps$land)
+  tw_check_component(data$steps$land)
   assert_contract_ready(data$steps$validate)
   attr(data, "tw_validated") <- TRUE
   data
@@ -687,7 +687,7 @@ normalize_quality_rules <- function(
     return(existing)
   }
   if (!inherits(quality, "tw_rule")) {
-    quality <- quality_rule(
+    quality <- tw_quality_rule(
       name %||% paste0("quality_", length(existing) + 1L),
       quality
     )
@@ -701,7 +701,7 @@ normalize_quality_rules <- function(
         !inherits(quality$check, "formula")
     ) {
       abort(
-        "Only formula rules can change engines. Keep custom functions native or use pointblank_checks() for an agent builder."
+        "Only formula rules can change engines. Keep custom functions native or use tw_pointblank_checks() for an agent builder."
       )
     }
     quality$engine <- selected

@@ -17,9 +17,9 @@ reaches a transform as a table; multiple sources reach the first transform as
 a named list. Duplicate source names require explicit replacement. Products
 can be sources of other products, with cycle detection before execution.
 
-The main grammar is product(), add_source(), add_transform(), add_contract(),
-add_quality(), set_target(), add_catalog(), validate(), run(), publish(),
-collect(), inspect() and explain(). No compatibility aliases for dl_* remain.
+The main grammar is tw_product(), tw_add_source(), tw_add_transform(), tw_add_contract(),
+tw_add_quality(), tw_set_target(), tw_add_catalog(), tw_validate(), tw_run(), tw_publish(),
+tw_collect(), tw_inspect() and tw_explain(). No compatibility aliases for dl_* remain.
 Optional adapters implement reading, transformations, quality, writing and
 metadata. Lazy DBI execution avoids forced collection. Capabilities expose
 materialization and storage guarantees. Run evidence and catalog delivery are

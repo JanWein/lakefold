@@ -1,216 +1,123 @@
 ---
-title: "Specifications, recipes and workflows"
+title: "Workflows"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Specifications, recipes and workflows}
+  %\VignetteIndexEntry{Workflows}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```{r setup, include=FALSE, purl=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", message = FALSE)
 ```
 
-## Goal and prerequisites
+A workflow brings one product specification and one optional recipe together
+with sources and a destination. Components remain independently reusable. This
+guide runs without optional packages; publication examples identify their needs.
 
-Create a reusable cancellation reporting workflow from synthetic policy,
-customer and broker deliveries. You need tidyweave and its ordinary R
-dependencies. The main example needs no database or optional package.
-Expected result: two cancellations among four policies in force at the start
-of the period, a cancellation rate of **0.5**.
-
-## Three independently reusable objects
-
-The design follows [parsnip](https://parsnip.tidymodels.org/),
-[recipes](https://recipes.tidymodels.org/) and
-[workflows](https://workflows.tidymodels.org/):
-
-| Pattern | tidyweave object | Responsibility |
-|---|---|---|
-| Specification | `product()`, `contract()`, `quality_rule()` | Identity, schema, grain and checks |
-| Preparation | `recipe() |> step_*()` | Ordered, deferred transformation instructions |
-| Composition | `workflow() |> add_product() |> add_recipe()` | Bind inputs and execute the assembled components |
-| Operation engine | `set_engine()` | Choose native/pointblank quality or native/dm relationship checking |
-
-The analogy is structural. These are data product workflows, not statistical
-model fits. There is no training phase, fitted preprocessing state, or implicit
-`prep()`/`bake()`. The explicit lifecycle is define, trial, publish, collect.
-Storage belongs in `publish(to = ...)` or `set_target()`; it is not a quality
-engine. Existing dplyr, pointblank and dm adapters do the actual work.
+## Assemble components
 
 ```{r}
 library(tidyweave)
-
-customers <- data.frame(
-  customer_id = 1:3,
-  region = c("North", "South", "North")
-)
-brokers <- data.frame(
-  broker_id = 1:2,
-  channel = c("Broker", "Direct")
-)
-policies <- data.frame(
-  policy_id = 1:5,
-  customer_id = c(1L, 1L, 2L, 3L, 3L),
-  broker_id = c(1L, 1L, 2L, 2L, 1L),
-  at_start = c(TRUE, TRUE, TRUE, TRUE, FALSE),
-  cancelled = c(TRUE, FALSE, FALSE, TRUE, FALSE)
-)
-```
-
-## 1. Specify meaning and requirements
-
-The input contract checks the delivery before filtering or enrichment. A
-cancellation must belong to the opening population for this particular metric.
-Other definitions, such as exposure-weighted rates, need a different contract
-and measure. Product and contract definitions can be authored by their users.
-
-```{r}
-delivery_contract <- contract(
-  columns = c(
-    policy_id = "integer", customer_id = "integer", broker_id = "integer",
-    at_start = "logical", cancelled = "logical"
-  ),
-  key = "policy_id",
-  grain = "One policy observed over the reporting period",
-  rules = list(valid_population = ~ !cancelled | at_start)
-)
-
-delivery <- product("policy_delivery", policies, contract = delivery_contract)
-
-report_contract <- contract(
-  columns = c(
-    policy_id = "integer", customer_id = "integer", broker_id = "integer",
-    at_start = "logical", cancelled = "logical",
-    region = "character", channel = "character"
-  ),
-  key = "policy_id",
-  grain = "One policy in force at the start of the reporting period"
-)
-
-report_spec <- product("cancellation_base", contract = report_contract)
-```
-
-## 2. Describe preparation once
-
-Lookups check unique reference keys and complete input matches. They remain
-explicit dependencies, so corrections and shared product execution work through
-the same core as direct product pipelines.
-
-```{r}
-preparation <- recipe() |>
-  step_filter(at_start) |>
-  step_lookup(customers, by = "customer_id", name = "customers") |>
-  step_lookup(brokers, by = "broker_id", name = "brokers") |>
-  step_arrange(policy_id)
-
-preparation
-```
-
-`step_mutate()`, `step_select()`, `step_rename()`, `step_distinct()` and
-`step_summarise()` use normal dplyr expressions. `step_transform()` accepts
-ordinary functions, formulas using `.x`, or existing transform adapters. Lazy
-inputs remain lazy when their steps support that backend. Unsupported operations
-do not silently collect data.
-
-## 3. Assemble and try
-
-```{r}
-flow <- workflow() |>
-  add_product(report_spec) |>
-  add_recipe(preparation) |>
-  add_source(delivery, name = "policies")
-
+spec <- tw_product("orders") |>
+  tw_add_contract(c(id = "integer", amount = "numeric")) |>
+  tw_add_quality(~ amount >= 0)
+preparation <- tw_recipe() |> tw_step_mutate(amount = round(amount, 2))
+flow <- tw_workflow() |> tw_add_product(spec) |> tw_add_recipe(preparation)
 flow
-plan(flow)
-result <- trial(flow)
-collect(result)
-
-rate <- metric(
-  "cancellation_rate", "cancellation_base",
-  expr = mean(cancelled), dimensions = c("region", "channel"), unit = "ratio"
-)
-measure(result, rate)
-stopifnot(nrow(collect(result)) == 4L, mean(collect(result)$cancelled) == 0.5)
 ```
 
-The workflow contains one product and one optional recipe. `add_product()`
-rejects products with embedded transformations so preparation has one clear
-home. Direct product pipelines still support dplyr verbs. A recipe can also be
-attached to a direct product with `add_recipe()`.
+An empty workflow can be inspected while it is being assembled. Execution needs
+a product and usable inputs. A recipe is optional when the input already has
+the required shape.
 
-## 4. Reuse, replace and correct
+## Manage slots
+
+| Operation | Product | Recipe |
+|---|---|---|
+| Fill an empty slot | `tw_add_product()` | `tw_add_recipe()` |
+| Replace an occupied slot | `tw_update_product()` | `tw_update_recipe()` |
+| Clear a slot | `tw_remove_product()` | `tw_remove_recipe()` |
+| Retrieve its definition | `tw_extract_product()` | `tw_extract_recipe()` |
+
+Add operations reject occupied slots. Updates require an existing component.
+Extraction returns the definition, not executed data. Edits return a new value.
 
 ```{r}
-extract_product(flow)
-extract_recipe(flow)
-
-compact <- preparation |> step_select(policy_id, cancelled)
-compact_spec <- product("compact_base") |>
-  add_contract(c(policy_id = "integer", cancelled = "logical"))
-
-compact_flow <- flow |>
-  update_recipe(compact) |>
-  update_product(compact_spec)
-
-collect(trial(compact_flow))
-stopifnot(identical(extract_recipe(flow), preparation))
-
-corrected <- policies
-corrected$cancelled[2] <- TRUE
-corrected_result <- trial(flow, data = corrected)
-stopifnot(mean(collect(corrected_result)$cancelled) == 0.75)
-stopifnot(mean(collect(result)$cancelled) == 0.5)
+whole_amounts <- tw_recipe() |> tw_step_mutate(amount = round(amount))
+alternate <- flow |> tw_update_recipe(whole_amounts)
+tw_extract_recipe(alternate)
+tw_extract_recipe(flow)
 ```
 
-`data =` follows the single primary-input chain and preserves the input contract.
-Named `sources = list(customers = new_customers)` replaces reference deliveries.
-Each execution returns a new result; the definition and earlier results stay
-unchanged. `remove_recipe()` removes preparation and `remove_product()` clears
-the specification slot. Duplicate additions and ambiguous inputs fail with
-repair instructions instead of silently overriding another component.
+## Bind deliveries
 
-## 5. Choose an engine for an operation
+Supply a primary delivery when executing a reusable definition:
 
 ```{r}
-opening_population <- quality_rule("opening_population", ~ at_start)
-pointblank_rule <- opening_population |> set_engine("pointblank")
-
-customer_relationship <- lookup_spec(customers, by = "customer_id", name = "customers")
-dm_relationship <- customer_relationship |> set_engine("dm")
-
-alternative_preparation <- recipe() |>
-  step_filter(at_start) |>
-  step_transform(dm_relationship) |>
-  step_lookup(brokers, by = "broker_id", name = "brokers")
+delivery <- data.frame(id = 1:2, amount = c(10.123, 20))
+result <- tw_trial(flow, data = delivery)
+tw_collect(result)
 ```
 
-These definitions need no optional engine installed. Executing the pointblank
-rule requires pointblank; executing the dm relationship requires dm. The
-predicate and relationship keys stay the same. Explicit engine choices override
-workflow `execution_config()` defaults. A missing engine fails at preflight.
-Functions used as quality checks are not silently reinterpreted as pointblank
-agent builders.
+Alternatively, add a named source. A table, a reader function or a source
+adapter can occupy the slot.
 
-## Publication and relational products
+```{r}
+bound <- flow |> tw_add_source(delivery, name = "orders")
+tw_plan(bound)
+tw_collect(tw_trial(bound))
+```
 
-Use `publish(flow, to = destination, data = next_delivery)` with an existing
-lake configuration or target adapter. Failed checks block publication.
-`trial(flow)` disables configured framework writers throughout the compiled
-product dependency graph. User-supplied callbacks remain ordinary R code and
-can perform their own side effects.
+Sources are configured in one place: a workflow rejects sources that conflict
+with sources already on its product. `data =` binds or replaces a single primary
+delivery. Use named `sources =` replacements for several input deliveries,
+including checked lookup dependencies. See [Compose products](composing-products.html).
 
-A model product keeps a dm model's tables and relationships. Prepare member
-table products with recipes, then assemble the model as in the
-[cancellation report](cancellation-report.html). Add the resulting model product
-to a workflow without a whole-model recipe. Model products retain their existing
-in-memory execution limit and consistent publication behavior.
+## Choose execution deliberately
 
-The function-based `workflow(step = function(input) ..., inputs = ...,
-code_version = ...)` API still describes a dependency graph across several
-operations. It is useful for sequencing receipts and dbt builds; each modular
-product workflow can be executed inside one of those functions. It does not
-provide a transaction across independently committed steps.
+| Call | Runs preparation and checks | Runs framework writers |
+|---|---|---|
+| `tw_trial()` | Yes | No |
+| `tw_run()` | Yes | Configured writers |
+| `tw_publish()` | Yes | Chosen or configured destination |
 
-Next: [publish checked data](publish-data.html) or
-[configure a shared DuckLake](shared-ducklake.html).
+`tw_trial()` also disables dependency writers. User callbacks can still have
+their own effects. `tw_run()` is useful for configured orchestration;
+`tw_publish()` makes saving an explicit action. All three produce execution
+results, separate from the workflow definition.
+
+```{r eval=FALSE}
+# Requires DuckDB >= 1.5.5. The folder uses the local DuckDB backend.
+saved <- tw_publish(flow, data = delivery, to = "data/orders")
+tw_collect(saved)
+```
+
+Output checks gate publication. Lake publication retains immutable releases;
+database, Parquet and pins targets retain their own documented guarantees.
+[Publish and correct data](publish-data.html) demonstrates a complete correction.
+
+## Inspect definitions and results
+
+Use `tw_inspect()` for component descriptions and `tw_plan()` for the execution
+plan without reading data. After execution, use `tw_status()`, `tw_quality()`
+and `tw_lineage()` for evidence, and `tw_collect()` for usable data.
+
+```{r}
+tw_inspect(flow)$recipe
+tw_status(result)
+```
+
+## How this relates to tidymodels
+
+[parsnip](https://parsnip.tidymodels.org/) separates a specification from its
+implementation; tidyweave applies that pattern to product requirements and
+operation engines. [recipes](https://recipes.tidymodels.org/) provides the
+ordered-step pattern. [workflows](https://workflows.tidymodels.org/) provides the
+assembly and component-management pattern. tidyweave executes data products,
+so it exposes trial and publication instead of model fitting and prediction.
+
+For sequential orchestration, `tw_workflow()` also accepts named functions whose
+arguments declare dependencies. That interface reuses unchanged branches after
+corrections; see [Repeat a workflow](everyday-workflows.html). It is a separate
+composition mode and does not accept product or recipe slots.

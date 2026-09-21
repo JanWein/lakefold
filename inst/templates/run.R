@@ -1,8 +1,8 @@
 source("definitions.R")
 
-result <- run(
+result <- tw_run(
   definition,
   evidence = Sys.getenv("TIDYWEAVE_EVIDENCE", ".tidyweave/evidence")
 )
-saveRDS(collect(result), "output.rds")
+saveRDS(tw_collect(result), "output.rds")
 print(result)

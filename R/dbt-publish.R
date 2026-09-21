@@ -14,14 +14,14 @@
 #' dbt invocation ID. This prevents changed tables reusing stale quality
 #' evidence.
 #' This publishes one relation, not an atomic bundle of all dbt models.
-#' @param lake Connected lake or [lake_config()] for the database used by dbt.
+#' @param lake Connected lake or [tw_lake_config()] for the database used by dbt.
 #'   Caller connections stay open; connections opened from a config are closed.
-#' @param result Successful result from [dbt_build()].
+#' @param result Successful result from [tw_dbt_build()].
 #' @param model Exact dbt unique ID, such as `"model.shop.customer_revenue"`, or
 #'   an unambiguous node name such as `"customer_revenue"`. Selection expressions
 #'   and ambiguous names are rejected.
 #' @param contract Optional contract for the copied candidate. An unnamed
-#'   contract is scoped to the asset, as with [add_contract()].
+#'   contract is scoped to the asset, as with [tw_add_contract()].
 #' @param asset Governed asset ID. Defaults to the selected node's name.
 #' @param code_version Optional explicit code/dependency version. By default,
 #'   hashes normalized manifest node, source and macro definitions and dbt version,
@@ -34,15 +34,15 @@
 #' @param business_date Business date, separate from build or publication time.
 #' @param notify Optional existing notification callback.
 #' @param stop_on_failure Signal failure after persisting quality evidence.
-#' @returns A `tw_run_result` accepted by [collect()]. `$outputs` identifies the
-#'   exact database, schema, immutable table, asset and release. Use [source_release()]
+#' @returns A `tw_run_result` accepted by [tw_collect()]. `$outputs` identifies the
+#'   exact database, schema, immutable table, asset and release. Use [tw_source_release()]
 #'   to compose a consumer workflow; a dbt model relation remains mutable.
 #' @export
 #' @examples
-#' # After dbt_build() and reopening the lake connection:
-#' # release <- dbt_publish(config, result, "customer_revenue")
-#' # collect(release)
-dbt_publish <- function(
+#' # After tw_dbt_build() and reopening the lake connection:
+#' # release <- tw_dbt_publish(config, result, "customer_revenue")
+#' # tw_collect(release)
+tw_dbt_publish <- function(
   lake,
   result,
   model,
@@ -123,8 +123,8 @@ dbt_publish <- function(
   }
   owned <- inherits(lake, "tw_config")
   if (owned) {
-    lake <- connect_lake(lake)
-    on.exit(close_lake(lake), add = TRUE)
+    lake <- tw_connect_lake(lake)
+    on.exit(tw_close_lake(lake), add = TRUE)
   }
   assert_writable(lake)
   assert_table_asset(lake, asset)
@@ -145,7 +145,7 @@ dbt_publish <- function(
   )
   if (is.null(contract)) {
     columns <- infer_column_types(dplyr::tbl(lake$con, relation))
-    contract <- tidyweave::contract(
+    contract <- tidyweave::tw_contract(
       paste0(asset, ".dbt_schema"),
       version = paste0(
         "auto-",
@@ -181,8 +181,8 @@ dbt_publish <- function(
   if (is.null(version)) {
     definition$version <- paste0("auto-", fingerprint(definition))
   }
-  register(lake, contract)
-  register(lake, definition)
+  tw_register(lake, contract)
+  tw_register(lake, definition)
   dh <- fingerprint(definition)
   run <- new_run(lake, paste0(asset, ".dbt_publish"), asset, dh, code_version)
   started <- now()
@@ -227,8 +227,8 @@ dbt_publish <- function(
         pub,
         run
       )
-      quality <- validate(candidate$data, contract)
-      dbt_quality <- quality(result)
+      quality <- tw_validate(candidate$data, contract)
+      dbt_quality <- tw_quality(result)
       dbt_quality$failure_rate <- NULL
       quality <- dplyr::bind_rows(dbt_quality, quality)
       persist_quality(lake, run, contract, quality)
@@ -390,20 +390,20 @@ dbt_publication_canonical <- function(x) {
   lapply(x, dbt_publication_canonical)
 }
 
-#' @rdname publish
+#' @rdname tw_publish
 #' @section Publishing a dbt model:
-#' Use `dbt_project(path, lake = config) |> run() |> publish("model")` to
+#' Use `tw_dbt_project(path, lake = config) |> tw_run() |> tw_publish("model")` to
 #' create an immutable, checked lake release. The destination is inferred from
 #' the managed project's configuration. A model name must identify exactly one
 #' materialized node that succeeded in this build. Artifact hashes and parsed
 #' objects are checked again before publication. Pass `contract`, `asset`,
-#' `layer` or other [dbt_publish()] options through `...`.
+#' `layer` or other [tw_dbt_publish()] options through `...`.
 #'
 #' Publication snapshots the current relation and checks that complete copy.
 #' Build provenance does not prove a mutable relation is unchanged since dbt
 #' finished. Coordinate writers between build and publication.
 #' @export
-publish.tw_dbt_result <- function(
+tw_publish.tw_dbt_result <- function(
   x,
   name = NULL,
   to = NULL,
@@ -426,7 +426,7 @@ publish.tw_dbt_result <- function(
   lake <- to %||% config
   if (is.null(lake)) {
     abort(
-      "An externally configured dbt project needs publish(..., to = lake_config(...)).",
+      "An externally configured dbt project needs tw_publish(..., to = tw_lake_config(...)).",
       "tw_dbt_invalid"
     )
   }
@@ -441,7 +441,7 @@ publish.tw_dbt_result <- function(
       "tw_dbt_invalid"
     )
   }
-  dbt_publish(lake, x, name, ...)
+  tw_dbt_publish(lake, x, name, ...)
 }
 
 # Hashes protect on-disk artifacts; the parsed objects must describe them too.

@@ -32,7 +32,7 @@ test_that("dbt releases preserve snapshots and revalidate mutable source relatio
     ),
     class = "tw_dbt_result"
   )
-  contract <- contract(
+  contract <- tw_contract(
     "revenue",
     "1",
     "Analytics",
@@ -40,12 +40,12 @@ test_that("dbt releases preserve snapshots and revalidate mutable source relatio
     "One customer",
     c(customer_id = "integer", revenue = "numeric"),
     key = "customer_id",
-    rules = list(quality_rule("positive", function(data) {
+    rules = list(tw_quality_rule("positive", function(data) {
       counts <- dplyr::collect(dplyr::summarise(data, n = sum(revenue < 0)))
       counts$n == 0
     }))
   )
-  first <- dbt_publish(
+  first <- tw_dbt_publish(
     f$lake,
     result,
     "model.shop.customer_revenue",
@@ -58,7 +58,7 @@ test_that("dbt releases preserve snapshots and revalidate mutable source relatio
     f$lake$con,
     "UPDATE lake.marts.customer_revenue SET revenue = -10"
   )
-  second <- dbt_publish(
+  second <- tw_dbt_publish(
     f$lake,
     result,
     "model.shop.customer_revenue",
@@ -68,16 +68,16 @@ test_that("dbt releases preserve snapshots and revalidate mutable source relatio
     stop_on_failure = FALSE
   )
   expect_equal(second$status, "blocked")
-  expect_equal(dplyr::collect(tbl(f$lake, "shop.revenue"))$revenue, 100)
-  expect_equal(releases(f$lake, "shop.revenue")$release_id, first$release_id)
-  expect_setequal(quality(first)$stage, c("model", "candidate"))
-  edges <- lineage(f$lake, "shop.revenue")
+  expect_equal(dplyr::collect(tw_tbl(f$lake, "shop.revenue"))$revenue, 100)
+  expect_equal(tw_releases(f$lake, "shop.revenue")$release_id, first$release_id)
+  expect_setequal(tw_quality(first)$stage, c("model", "candidate"))
+  edges <- tw_lineage(f$lake, "shop.revenue")
   expect_equal(edges$from_id, "model.shop.customer_revenue")
   expect_equal(edges$from_version, parsed$manifest$metadata$invocation_id)
   result$command <- "test"
   expect_snapshot(
     error = TRUE,
-    dbt_publish(
+    tw_dbt_publish(
       f$lake,
       result,
       "model.shop.customer_revenue",

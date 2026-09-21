@@ -25,10 +25,10 @@ its SQL graph. Choose the entry point that matches your work:
 
 | Your task | Entry point | Result |
 |---|---|---|
-| Run an existing dbt project | `dbt_project(...) |> run()` | dbt result and invocation artifacts |
-| Transform a product's incoming table with a dbt model | `transform_dbt()` | Staged input, selected dbt build and materialized output |
-| Inspect current dbt relations and declared keys | `dbt_model()` | Lazy `dm` model borrowing your lake connection |
-| Publish one successful dbt relation as an immutable release | `built |> publish("model")` | A quality-gated governed release |
+| Run an existing dbt project | `tw_dbt_project(...) |> tw_run()` | dbt result and invocation artifacts |
+| Transform a product's incoming table with a dbt model | `tw_transform_dbt()` | Staged input, selected dbt build and materialized output |
+| Inspect current dbt relations and declared keys | `tw_dbt_model()` | Lazy `dm` model borrowing your lake connection |
+| Publish one successful dbt relation as an immutable release | `built |> tw_publish("model")` | A quality-gated governed release |
 
 The first three operations do not make dbt tables immutable. A product can add a
 lake target for a governed snapshot of its final output. Data quality failures
@@ -54,9 +54,9 @@ catalog configuration. Their production behavior requires separate verification.
 ## Start with an existing project or generate an example
 
 ```{r existing-project}
-config <- lake_config(path = "reporting-lake", backend = "duckdb",
+config <- tw_lake_config(path = "reporting-lake", backend = "duckdb",
   layers = c("raw", "staging", "core", "marts"))
-existing <- dbt_project("analytics", lake = config)
+existing <- tw_dbt_project("analytics", lake = config)
 existing
 ```
 
@@ -67,14 +67,14 @@ DuckDB/DuckLake profile and managed source YAML. Existing SQL continues to use
 ordinary `source('inputs', 'orders')` expressions.
 
 For other adapters, or a profile managed by your deployment, use
-`dbt_project("analytics", profiles_dir = "analytics")` instead. The following
+`tw_dbt_project("analytics", profiles_dir = "analytics")` instead. The following
 optional starter creates example SQL and project files:
 
 ```{r scaffold, eval=requireNamespace("duckdb", quietly=TRUE) && requireNamespace("yaml", quietly=TRUE)}
-config <- lake_config(
+config <- tw_lake_config(
   path = file.path(root, "lake"), backend = "duckdb"
 )
-project <- dbt_init(file.path(root, "dbt"), config)
+project <- tw_dbt_init(file.path(root, "dbt"), config)
 list.files(project$path, recursive = TRUE)
 ```
 
@@ -83,17 +83,17 @@ tests. Its profile attaches the configured catalog as `lake`. Its schema macro
 uses exact schema names; keep development and production in separate catalogs.
 
 These CLI examples are displayed without execution during vignette builds.
-Set `executable` in `dbt_project()` when dbt is not on your `PATH`.
+Set `executable` in `tw_dbt_project()` when dbt is not on your `PATH`.
 
 ```{r build, eval=FALSE}
 # Initialize schemas, then release the local catalog lock before dbt starts.
-lake <- connect_lake(config)
-close_lake(lake)
+lake <- tw_connect_lake(config)
+tw_close_lake(lake)
 
-built <- project |> run(echo = FALSE)
-dbt_status(built)
-dbt_lineage(built)
-dbt_test(project, select = "customer_revenue", echo = FALSE)
+built <- project |> tw_run(echo = FALSE)
+tw_dbt_status(built)
+tw_dbt_lineage(built)
+tw_dbt_test(project, select = "customer_revenue", echo = FALSE)
 ```
 
 `select` and `exclude` use dbt selection expressions, such as
@@ -104,7 +104,7 @@ incremental logic.
 
 ## Put dbt inside a product
 
-`transform_dbt()` requires an explicit staging table. This makes its input
+`tw_transform_dbt()` requires an explicit staging table. This makes its input
 meaningful: incoming rows are written there before the selected model runs.
 The model must read that staging table. Use a dedicated table that no seed or dbt
 model overwrites, and coordinate writers to it.
@@ -140,22 +140,22 @@ connection <- function() {
 orders <- data.frame(order_id = 1:3, customer_id = c(101L, 101L, 102L),
   amount = c(25, 75, 50))
 
-revenue <- product("customer.revenue") |>
-  add_source(orders) |>
-  add_transform(transform_dbt(
+revenue <- tw_product("customer.revenue") |>
+  tw_add_source(orders) |>
+  tw_add_transform(tw_transform_dbt(
     project, model = "model.tidyweave_demo.staged_customer_revenue",
     connection = connection,
     input = DBI::Id(schema = "raw", table = "staged_orders")
   ), name = "dbt") |>
-  add_quality(~ revenue >= 0)
+  tw_add_quality(~ revenue >= 0)
 
-result <- run(revenue, evidence = file.path(root, "runs"))
-collect(result)
+result <- tw_run(revenue, evidence = file.path(root, "runs"))
+tw_collect(result)
 result$metadata$transformations$dbt
 ```
 
 The adapter currently accepts model IDs of the form `model.package.name`. Use
-`dbt_build()` directly for versioned-model selection and other specialized dbt
+`tw_dbt_build()` directly for versioned-model selection and other specialized dbt
 selectors. The requested materialized model must succeed in the current invocation.
 Failed selected models or tests fail the transform. The metadata
 records the model, invocation ID and artifacts directory, even if later R
@@ -163,7 +163,7 @@ transformations follow. `input` is replaced every run; dbt controls whether its
 output model uses an incremental strategy.
 
 Staging and dbt writes are external side effects. A later failed product contract
-cannot roll them back. Add `set_target(target_lake(config))` when the final checked
+cannot roll them back. Add `tw_set_target(tw_target_lake(config))` when the final checked
 result also needs an immutable release; do not interpret that as an atomic commit
 of the entire dbt project.
 
@@ -173,22 +173,22 @@ A governed release can be another product's source. The reference resolves to on
 specific release and is recorded in the input metadata.
 
 ```{r release-source, eval=requireNamespace("duckdb", quietly=TRUE) && requireNamespace("yaml", quietly=TRUE)}
-released <- product("orders") |>
-  add_source(data.frame(order_id = 1:3, amount = c(25, 75, 50))) |>
-  set_target(target_lake(config)) |>
-  run()
+released <- tw_product("orders") |>
+  tw_add_source(data.frame(order_id = 1:3, amount = c(25, 75, 50))) |>
+  tw_set_target(tw_target_lake(config)) |>
+  tw_run()
 
-prepared <- product("orders.prepared", released) |>
+prepared <- tw_product("orders.prepared", released) |>
   dplyr::filter(amount >= 50) |>
-  run()
-input_for_dbt <- collect(prepared)
+  tw_run()
+input_for_dbt <- tw_collect(prepared)
 prepared$inputs[, c("asset", "release_id")]
 ```
 
 The result supplies its exact release reference. Execution opens and closes its
 own read connection, so no manual connection is needed for this step.
 
-Pass `input_for_dbt` to a product with an appropriate `transform_dbt()` step.
+Pass `input_for_dbt` to a product with an appropriate `tw_transform_dbt()` step.
 Collect and close borrowed local catalog connections before dbt starts. For a managed dbt project, pass the successful result through
 `sources = list(orders = released)`. It binds the exact physical relation and
 records its release lineage. Rebuilding with a correction requires selecting
@@ -197,8 +197,8 @@ that new result explicitly; models keep their logical source names.
 ## Inspect current relations or publish a snapshot
 
 ```{r relational-model, eval=FALSE}
-lake <- connect_lake(config)
-relations <- dbt_model(lake, built,
+lake <- tw_connect_lake(config)
+relations <- tw_dbt_model(lake, built,
   tables = c(orders = "model.tidyweave_demo.stg_orders",
     customers = "model.tidyweave_demo.customer_revenue"),
   primary_keys = list(orders = "order_id", customers = "customer_id"),
@@ -207,26 +207,26 @@ relations <- dbt_model(lake, built,
 dm::dm_examine_constraints(relations)
 dplyr::collect(relations$customers)
 
-schema <- contract(columns = c(customer_id = "integer", revenue = "numeric"))
-release <- publish(built, "model.tidyweave_demo.customer_revenue",
+schema <- tw_contract(columns = c(customer_id = "integer", revenue = "numeric"))
+release <- tw_publish(built, "model.tidyweave_demo.customer_revenue",
   to = lake, contract = schema,
   asset = "revenue.snapshot", code_version = "reporting-v1")
-read_release(lake, "revenue.snapshot", release$release_id)
-close_lake(lake)
+tw_read_release(lake, "revenue.snapshot", release$release_id)
+tw_close_lake(lake)
 ```
 
 `dm` checks explicit relational keys; SQL dependencies alone do not establish
-primary or foreign keys. `dbt_model()` borrows the connection and reads current
-relations. `publish()` validates and snapshots one relation visible now,
+primary or foreign keys. `tw_dbt_model()` borrows the connection and reads current
+relations. `tw_publish()` validates and snapshots one relation visible now,
 using the dbt invocation as provenance. Coordinate writers between build and
-snapshot. `model()` provides relational access to pinned governed releases.
+snapshot. `tw_model()` provides relational access to pinned governed releases.
 
 ## Diagnose a failed invocation
 
 ```{r failure-inspection, eval=FALSE}
-built <- project |> run(stop_on_failure = FALSE)
+built <- project |> tw_run(stop_on_failure = FALSE)
 if (!built$success) {
-  dbt_status(built)
+  tw_dbt_status(built)
   built$stderr
   built$artifact_error
 }
@@ -243,8 +243,8 @@ The bundled synthetic artifacts work without installing dbt:
 
 ```{r artifacts}
 artifacts <- system.file("extdata", "dbt-artifacts", package = "tidyweave")
-dbt_status(artifacts)
-dbt_lineage(artifacts)
+tw_dbt_status(artifacts)
+tw_dbt_lineage(artifacts)
 ```
 
 For details, consult dbt's

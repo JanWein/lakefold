@@ -17,17 +17,17 @@
 #' @param layer Publication schema.
 #' @return A pipeline specification, with no open connection or loaded data.
 #' @examples
-#' contract <- contract(
+#' contract <- tw_contract(
 #'   "orders", "1.0.0", "Analytics", "Order amounts", "One order",
 #'   c(order_id = "integer", amount = "numeric"), key = "order_id"
 #' )
-#' pipeline <- tw_pipeline("orders.import", lake_config(backend = "duckdb"),
+#' pipeline <- tw_pipeline("orders.import", tw_lake_config(backend = "duckdb"),
 #'   code_version = "v1") |>
-#'   tw_step_land(source_file("orders.file", "orders.csv", utils::read.csv)) |>
+#'   tw_step_land(tw_source_file("orders.file", "orders.csv", utils::read.csv)) |>
 #'   tw_step_extract() |>
 #'   tw_step_validate(contract) |>
 #'   tw_step_publish("orders")
-#' plan(pipeline)
+#' tw_plan(pipeline)
 #' @noRd
 tw_pipeline <- function(
   id,
@@ -322,7 +322,7 @@ compose_candidate <- function(lake, raw, publish, run) {
       }
     }
     if (!is.null(old)) {
-      previous <- tbl(lake, publish$asset, parent)
+      previous <- tw_tbl(lake, publish$asset, parent)
       if (!setequal(colnames(previous), colnames(raw))) {
         abort(
           "Partition replacement requires the same columns as the prior release."
@@ -411,7 +411,7 @@ publish_candidate <- function(
 #' Sources are acquired once, transformations run in order, and contract and
 #' quality failures block publication. Shared upstream products run once within
 #' the same execution. Without a target, the result retains its checked table;
-#' [collect()] materializes lazy output when it is needed.
+#' [tw_collect()] materializes lazy output when it is needed.
 #'
 #' Product execution options passed through `...` include:
 #' * `data`: a new delivery replacing the sole primary input while retaining
@@ -419,12 +419,12 @@ publish_candidate <- function(
 #'   its single-primary-input chain is followed to the ordinary delivery,
 #'   retaining every intermediate product and gate. Ambiguous branches require
 #'   an explicit name through `sources`.
-#' * `sources`: a named list of replacements using [replace_sources()] names.
+#' * `sources`: a named list of replacements using [tw_replace_sources()] names.
 #'   Use either `data` or `sources`. The original definition and unselected
 #'   pinned results remain unchanged. Both options replace whole inputs, not
 #'   individual rows; partition replacement requires an explicit target policy.
-#' * `execution`: an optional [execution_config()] value, overriding defaults
-#'   stored by `product(execution = )`. Engine defaults
+#' * `execution`: an optional [tw_execution_config()] value, overriding defaults
+#'   stored by `tw_product(execution = )`. Engine defaults
 #'   propagate through dependencies; explicit step choices win. Destination and
 #'   layer defaults apply only to the root product. Untargeted dependencies stay
 #'   in memory, and existing dependency targets are preserved. Stored defaults
@@ -445,30 +445,30 @@ publish_candidate <- function(
 #' execution choices; a changed business promise needs a new contract version.
 #'
 #' Metrics and dbt project specifications also have execution methods; see
-#' [measure()] and [dbt_build()] for their operation-specific options/results.
+#' [tw_measure()] and [tw_dbt_build()] for their operation-specific options/results.
 #' Managed dbt projects also accept `sources`, a named list of successful lake
 #' releases. Bindings are validated before the dbt command runs.
 #' @param pipeline Product to execute.
 #' @param lake Optional connected lake or lake configuration, overriding the
-#'   product's target for this run. Prefer [set_target()] in reusable definitions.
+#'   product's target for this run. Prefer [tw_set_target()] in reusable definitions.
 #' @param ... Execution options described above or provided by an adapter.
 #' @returns For products, a run result containing status, timestamps, input and
 #'   output descriptors, quality, metadata and lifecycle. On failure an error
 #'   contains the same result in `condition$result`.
-#' @seealso [publish()], [collect()], [inspect()], [run_history()]
+#' @seealso [tw_publish()], [tw_collect()], [tw_inspect()], [tw_run_history()]
 #' @export
 #' @examples
-#' orders <- product("orders") |>
-#'   add_source(data.frame(id = 1:2, amount = c(25, 75))) |>
-#'   add_quality(~ amount >= 0)
-#' result <- run(orders)
-#' collect(result)
-#' inspect(result)
-run <- function(pipeline, lake = NULL, ...) UseMethod("run")
+#' orders <- tw_product("orders") |>
+#'   tw_add_source(data.frame(id = 1:2, amount = c(25, 75))) |>
+#'   tw_add_quality(~ amount >= 0)
+#' result <- tw_run(orders)
+#' tw_collect(result)
+#' tw_inspect(result)
+tw_run <- function(pipeline, lake = NULL, ...) UseMethod("tw_run")
 
 #' @export
 #' @noRd
-run.tw_pipeline <- function(
+tw_run.tw_pipeline <- function(
   pipeline,
   lake = NULL,
   business_date = NA_character_,
@@ -486,8 +486,8 @@ run.tw_pipeline <- function(
   check_pipeline(pipeline)
   own <- is.null(lake)
   if (own) {
-    lake <- connect_lake(pipeline$config)
-    on.exit(disconnect_lake(lake), add = TRUE)
+    lake <- tw_connect_lake(pipeline$config)
+    on.exit(tw_disconnect_lake(lake), add = TRUE)
   }
   assert_writable(lake)
   expected_config <- pipeline$config
@@ -500,14 +500,14 @@ run.tw_pipeline <- function(
   input_contract <- pipeline$steps$precheck
   pub <- pipeline$steps$publish
   assert_table_asset(lake, pub$asset)
-  register(lake, src)
+  tw_register(lake, src)
   if (!isTRUE(pipeline$infer_contract)) {
-    register(lake, contract)
+    tw_register(lake, contract)
   }
   if (!is.null(input_contract) && !isTRUE(pipeline$infer_input_contract)) {
-    register(lake, input_contract)
+    tw_register(lake, input_contract)
   }
-  register(lake, pipeline)
+  tw_register(lake, pipeline)
   definition <- pipeline
   definition$config <- NULL
   dh <- fingerprint(definition)
@@ -626,7 +626,7 @@ run.tw_pipeline <- function(
           }
           input_contract <- resolver(extracted)
           assert_contract_ready(input_contract)
-          register(lake, input_contract)
+          tw_register(lake, input_contract)
         }
         if (!is.null(input_contract)) {
           if (!is.data.frame(extracted)) {
@@ -634,7 +634,7 @@ run.tw_pipeline <- function(
               "An input gate requires a materialized data frame from the reader."
             )
           }
-          input_quality <- validate(
+          input_quality <- tw_validate(
             extracted,
             input_contract,
             stage = "ingest"
@@ -700,10 +700,10 @@ run.tw_pipeline <- function(
             )
           }
           contract <- resolver(candidate$data)
-          register(lake, contract)
+          tw_register(lake, contract)
         }
         quality_data <- if (!is.null(pipeline$composition)) {
-          collect(candidate$data)
+          tw_collect(candidate$data)
         } else {
           candidate$data
         }
@@ -711,7 +711,7 @@ run.tw_pipeline <- function(
         if (isTRUE(pipeline$input_rules_only)) {
           candidate_contract$rules <- list()
         }
-        quality <- validate(quality_data, candidate_contract)
+        quality <- tw_validate(quality_data, candidate_contract)
         persist_quality(lake, run, contract, quality)
         quality <- dplyr::bind_rows(input_quality, quality)
         if (!quality_ok(quality)) {
@@ -814,7 +814,7 @@ run.tw_pipeline <- function(
     abort(
       paste(
         run_result_message(result),
-        "For diagnosis, rerun with stop_on_failure = FALSE and save the result. Inspect quality_report(result) and quality_rows(result)."
+        "For diagnosis, rerun with stop_on_failure = FALSE and save the result. Inspect tw_quality_report(result) and tw_quality_rows(result)."
       ),
       "tw_run_failed",
       result = result,
@@ -828,7 +828,7 @@ print.tw_run_result <- function(x, ...) {
   cat(run_result_message(x), "\n")
   if (!x$status %in% c("completed", "published", "cached")) {
     cat(
-      "Inspect quality_report(result) for checks and quality_rows(result) for affected rows.\n"
+      "Inspect tw_quality_report(result) for checks and tw_quality_rows(result) for affected rows.\n"
     )
   }
   invisible(x)
@@ -841,17 +841,17 @@ print.tw_run_result <- function(x, ...) {
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("tidyweave-example-")
-#' config <- lake_config(
-#'   registry_duckdb(file.path(root, "lake.db")),
-#'   storage_local(file.path(root, "data")),
+#' config <- tw_lake_config(
+#'   tw_registry_duckdb(file.path(root, "lake.db")),
+#'   tw_storage_local(file.path(root, "data")),
 #'   landing = file.path(root, "landing"), backend = "duckdb"
 #' )
-#' lake <- connect_lake(config)
-#' interrupted(lake)
-#' disconnect_lake(lake)
+#' lake <- tw_connect_lake(config)
+#' tw_interrupted(lake)
+#' tw_disconnect_lake(lake)
 #' unlink(root, recursive = TRUE)
-interrupted <- function(lake, older_than_hours = 1) {
-  runs <- registry(lake, "runs")
+tw_interrupted <- function(lake, older_than_hours = 1) {
+  runs <- tw_registry(lake, "runs")
   started <- as.POSIXct(
     runs$started_at,
     format = "%Y-%m-%dT%H:%M:%OSZ",
@@ -865,6 +865,6 @@ interrupted <- function(lake, older_than_hours = 1) {
 }
 
 #' @export
-run.default <- function(pipeline, lake = NULL, ...) {
+tw_run.default <- function(pipeline, lake = NULL, ...) {
   tw_execute(pipeline, lake, ...)
 }

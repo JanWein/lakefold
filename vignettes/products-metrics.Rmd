@@ -30,9 +30,9 @@ multiplying rows; its parent key must be unique and non-missing.
 orders <- data.frame(id = 1:3, customer_id = c("a", "a", "b"),
   amount = c(10, 20, 30))
 customers <- data.frame(customer_id = c("a", "b"), region = c("EU", "US"))
-regional <- product("regional_orders", orders) |>
-  add_lookup(customers, by = dplyr::join_by(customer_id))
-collect(run(regional))
+regional <- tw_product("regional_orders", orders) |>
+  tw_add_lookup(customers, by = dplyr::join_by(customer_id))
+tw_collect(tw_run(regional))
 ```
 
 The native lookup rejects unmatched child keys by default. Select `engine = "dm"`
@@ -48,35 +48,35 @@ optional until you need a promise beyond the inferred structure:
 
 ```{r source-releases, eval=requireNamespace("duckdb", quietly = TRUE)}
 root <- tempfile("tidyweave-products-")
-lake <- open_lake(root)
-orders_release <- orders |> publish("orders", to = lake)
-customers_release <- customers |> publish("customers", to = lake)
-definition <- product("regional_orders", orders_release) |>
-  add_lookup(customers_release, by = dplyr::join_by(customer_id)) |>
-  add_contract(contract(columns = c(id = "integer", customer_id = "character",
+lake <- tw_open_lake(root)
+orders_release <- orders |> tw_publish("orders", to = lake)
+customers_release <- customers |> tw_publish("customers", to = lake)
+definition <- tw_product("regional_orders", orders_release) |>
+  tw_add_lookup(customers_release, by = dplyr::join_by(customer_id)) |>
+  tw_add_contract(tw_contract(columns = c(id = "integer", customer_id = "character",
     amount = "numeric", region = "character"), key = "id")) |>
-  set_target(lake)
-published <- run(definition)
-read_release(lake, "regional_orders")
-lineage(lake, "regional_orders")
+  tw_set_target(lake)
+published <- tw_run(definition)
+tw_read_release(lake, "regional_orders")
+tw_lineage(lake, "regional_orders")
 ```
 
 The inputs changed from ordinary R tables to pinned lake releases; the lookup
 stayed the same. Successful lake results preserve their exact release IDs.
 Their normalized configuration-based sources materialize the selected values.
 For lazy access through a caller-owned connection, use
-`source_release(lake, "orders", orders_release$release_id)` and keep the lake open.
+`tw_source_release(lake, "orders", orders_release$release_id)` and keep the lake open.
 Omitting the release ID selects the current release once during execution.
 Later publication does not automatically rerun this product; use your scheduler
 or the optional targets integration when you need that automation.
 
 ## Add relationship exploration with dm
 
-`quality_reference()` is sufficient for an individual foreign-key check. Use
+`tw_quality_reference()` is sufficient for an individual foreign-key check. Use
 optional `dm` when you also want a native relational model for several tables:
 
 ```{r relational-model, eval=requireNamespace("duckdb", quietly = TRUE) && requireNamespace("dm", quietly = TRUE)}
-relationships <- model(
+relationships <- tw_model(
   lake,
   tables = c(orders = "orders", customers = "customers"),
   primary_keys = list(orders = "id", customers = "customer_id"),
@@ -99,9 +99,9 @@ Approval and code identity are explicit because reports reuse this definition;
 owner, description and unit are optional:
 
 ```{r metric, eval=requireNamespace("duckdb", quietly = TRUE)}
-revenue <- metric("orders.revenue", "regional_orders", sum(amount, na.rm = TRUE),
+revenue <- tw_metric("orders.revenue", "regional_orders", sum(amount, na.rm = TRUE),
   dimensions = "region", approved = TRUE, code_version = "revenue-v1")
-values <- measure(published, revenue, by = "region")
+values <- tw_measure(published, revenue, by = "region")
 values
 ```
 
@@ -130,9 +130,9 @@ columns. Missing or non-finite numeric outputs and empty outputs are rejected.
 ## Save the values and their explanation together
 
 ```{r report, eval=requireNamespace("duckdb", quietly = TRUE)}
-report <- report_release(lake, "regional-report-v1", list(revenue = values),
+report <- tw_report_release(lake, "regional-report-v1", list(revenue = values),
   code_version = "report-v1")
-report_read(lake, "regional-report-v1", values_only = TRUE)
+tw_report_read(lake, "regional-report-v1", values_only = TRUE)
 ```
 
 The measurement's manifest records the formula, parameters, pinned input
@@ -142,15 +142,15 @@ preserve the first saved timestamps; changed data, definitions, parameters or
 values need a new report ID. A report ID identifies a published report, while a
 metric version identifies its definition.
 
-Use `measure(..., record = FALSE)` for an exploratory calculation without
+Use `tw_measure(..., record = FALSE)` for an exploratory calculation without
 registry writes, or open a read-only lake. PDF/Word rendering, authentication
 and scheduling belong to the surrounding tools. The calculation itself does
 not need an LLM or a BI server.
 
 ```{r cleanup, include=FALSE, eval=requireNamespace("duckdb", quietly = TRUE)}
 stopifnot(sum(values$value) == 60,
-  nrow(report_read(lake, "regional-report-v1", values_only = TRUE)$revenue) == 2)
-close_lake(lake)
+  nrow(tw_report_read(lake, "regional-report-v1", values_only = TRUE)$revenue) == 2)
+tw_close_lake(lake)
 unlink(root, recursive = TRUE)
 ```
 

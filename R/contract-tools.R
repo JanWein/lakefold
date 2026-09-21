@@ -7,17 +7,17 @@
 #' @param id Contract identifier.
 #' @param owner,description,grain Optional business metadata.
 #' @param version Contract definition version.
-#' @param ... Additional arguments to [contract()], such as `key`,
+#' @param ... Additional arguments to [tw_contract()], such as `key`,
 #'   `required`, `rules`, `operator` or `column_metadata`.
 #' @returns A printable `tw_contract_draft` inheriting from `contract`.
-#' @seealso [contract_confirm()], [contract_diff()]
+#' @seealso [tw_contract_confirm()], [tw_contract_diff()]
 #' @export
 #' @examples
-#' draft <- contract_from(data.frame(id = 1:2, amount = c(10, 20)),
+#' draft <- tw_contract_from(data.frame(id = 1:2, amount = c(10, 20)),
 #'   "orders", "Analytics", "Order amounts", "One order", key = "id")
-#' contract <- contract_confirm(draft)
-#' validate(data.frame(id = 1L, amount = 10), contract)
-contract_from <- function(
+#' contract <- tw_contract_confirm(draft)
+#' tw_validate(data.frame(id = 1L, amount = 10), contract)
+tw_contract_from <- function(
   data,
   id,
   owner = "",
@@ -32,7 +32,7 @@ contract_from <- function(
     args$required <- character()
   }
   contract <- do.call(
-    contract,
+    tw_contract,
     c(
       list(
         id = id,
@@ -135,27 +135,27 @@ contract_type_matches <- function(x, type) {
 #' Confirms that the caller has reviewed the inferred types and chosen the
 #' nullability, keys, rules and optional metadata. This is a local specification
 #' transition, not an approval workflow or a proof that any data passed.
-#' @param contract A draft from [contract_from()].
+#' @param contract A draft from [tw_contract_from()].
 #' @returns A `contract` ready for registration and validation.
 #' @export
 #' @examples
-#' draft <- contract_from(data.frame(id = 1L), "orders", "Analytics",
+#' draft <- tw_contract_from(data.frame(id = 1L), "orders", "Analytics",
 #'   "Order identifiers", "One order", key = "id")
-#' contract_confirm(draft)
-contract_confirm <- function(contract) {
+#' tw_contract_confirm(draft)
+tw_contract_confirm <- function(contract) {
   if (!inherits(contract, "tw_contract_draft")) {
-    abort("contract must be a draft from contract_from().")
+    abort("contract must be a draft from tw_contract_from().")
   }
   args <- unclass(contract)
   args[c("draft", "kind")] <- NULL
   args$columns <- unlist(args$columns, use.names = TRUE)
-  do.call(tidyweave::contract, args)
+  do.call(tidyweave::tw_contract, args)
 }
 
 assert_contract_ready <- function(contract) {
   if (inherits(contract, "tw_contract_draft") || isTRUE(contract$draft)) {
     abort(
-      "Review the contract draft and call contract_confirm() first.",
+      "Review the contract draft and call tw_contract_confirm() first.",
       "tw_contract_draft"
     )
   }
@@ -170,12 +170,12 @@ assert_contract_ready <- function(contract) {
 #' @returns A tibble with `field`, `before`, `after` and `breaking`.
 #' @export
 #' @examples
-#' old <- contract("orders", "1", "Analytics", "Orders", "One order",
+#' old <- tw_contract("orders", "1", "Analytics", "Orders", "One order",
 #'   c(id = "integer"), key = "id")
-#' new <- contract("orders", "2", "Analytics", "Orders", "One order",
+#' new <- tw_contract("orders", "2", "Analytics", "Orders", "One order",
 #'   c(id = "integer", amount = "numeric"), key = "id")
-#' contract_diff(old, new)
-contract_diff <- function(old, new) {
+#' tw_contract_diff(old, new)
+tw_contract_diff <- function(old, new) {
   if (!inherits(old, "tw_contract") || !inherits(new, "tw_contract")) {
     abort("old and new must be contract specifications.")
   }

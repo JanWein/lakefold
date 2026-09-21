@@ -23,15 +23,15 @@
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("tidyweave-")
-#' lake <- open_lake(root)
-#' write_data(lake, data.frame(id = c(1L, 2L), amount = c(10, 20)), "orders")
-#' write_data(lake, data.frame(id = c(1L, 3L), amount = c(12, 30)), "orders")
-#' difference <- compare(lake, "orders", key = "id")
+#' lake <- tw_open_lake(root)
+#' tw_write_data(lake, data.frame(id = c(1L, 2L), amount = c(10, 20)), "orders")
+#' tw_write_data(lake, data.frame(id = c(1L, 3L), amount = c(12, 30)), "orders")
+#' difference <- tw_compare(lake, "orders", key = "id")
 #' difference
 #' difference$changed
-#' close_lake(lake)
+#' tw_close_lake(lake)
 #' unlink(root, recursive = TRUE)
-compare <- function(
+tw_compare <- function(
   lake,
   name,
   from = NULL,
@@ -73,8 +73,8 @@ compare <- function(
     )
     lake <- if (length(connections)) connections[[1L]] else NULL
     if (!inherits(lake, "tw_lake") || !DBI::dbIsValid(lake$con)) {
-      lake <- connect_lake(config(a), read_only = TRUE)
-      on.exit(close_lake(lake), add = TRUE)
+      lake <- tw_connect_lake(config(a), read_only = TRUE)
+      on.exit(tw_close_lake(lake), add = TRUE)
     }
     name <- first$asset
     from <- first$release_id
@@ -91,7 +91,7 @@ compare <- function(
   ) {
     abort("limit must be a non-negative whole number or Inf.")
   }
-  history <- releases(lake, name)
+  history <- tw_releases(lake, name)
   if (!nrow(history)) {
     abort(paste("No published release for", name))
   }
@@ -124,8 +124,8 @@ compare <- function(
     abort("Supply key or define a unique key in the published contract.")
   }
   invisible(lapply(key, column_name))
-  old <- tbl(lake, name, from)
-  new <- tbl(lake, name, to)
+  old <- tw_tbl(lake, name, from)
+  new <- tw_tbl(lake, name, to)
   types_before <- infer_column_types(old)
   types_after <- infer_column_types(new)
   if (!all(key %in% intersect(names(types_before), names(types_after)))) {

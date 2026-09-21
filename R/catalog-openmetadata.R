@@ -16,17 +16,17 @@
 #' @param database_schema Fully qualified existing database schema, for example
 #'   `warehouse.analytics.public`.
 #' @param request Optional authenticated httr2 request or request factory,
-#'   as described in [catalog_openlineage()].
+#'   as described in [tw_catalog_openlineage()].
 #' @param source_tables Optional named character vector of source-name to
 #'   OpenMetadata table fully qualified name mappings.
-#' @returns A catalog adapter for [add_catalog()].
-#' @seealso [catalog_openlineage()], [retry_catalogs()]
+#' @returns A catalog adapter for [tw_add_catalog()].
+#' @seealso [tw_catalog_openlineage()], [tw_retry_catalogs()]
 #' @export
 #' @examples
-#' catalog <- catalog_openmetadata("https://metadata.example",
+#' catalog <- tw_catalog_openmetadata("https://metadata.example",
 #'   database_schema = "warehouse.analytics.public")
-#' inspect(catalog)
-catalog_openmetadata <- function(
+#' tw_inspect(catalog)
+tw_catalog_openmetadata <- function(
   endpoint,
   database_schema,
   request = NULL,
@@ -66,7 +66,7 @@ catalog_openmetadata <- function(
 }
 
 #' @export
-check_component.tw_openmetadata_catalog <- function(x, ...) {
+tw_check_component.tw_openmetadata_catalog <- function(x, ...) {
   need("httr2")
   catalog_endpoint(x$endpoint)
   scalar(x$database_schema, "database_schema")
@@ -75,7 +75,7 @@ check_component.tw_openmetadata_catalog <- function(x, ...) {
 }
 
 #' @export
-inspect.tw_openmetadata_catalog <- function(x, ...) {
+tw_inspect.tw_openmetadata_catalog <- function(x, ...) {
   list(
     type = "OpenMetadata",
     id = x$id,
@@ -86,13 +86,17 @@ inspect.tw_openmetadata_catalog <- function(x, ...) {
 }
 
 #' @export
-capabilities.tw_openmetadata_catalog <- function(x, ...) {
+tw_capabilities.tw_openmetadata_catalog <- function(x, ...) {
   catalog_capabilities("OpenMetadata")
 }
 
 #' @export
-publish_metadata.tw_openmetadata_catalog <- function(catalog, metadata, ...) {
-  check_component(catalog)
+tw_publish_metadata.tw_openmetadata_catalog <- function(
+  catalog,
+  metadata,
+  ...
+) {
+  tw_check_component(catalog)
   if (!metadata$status %in% c("completed", "published", "cached")) {
     return(invisible(NULL))
   }

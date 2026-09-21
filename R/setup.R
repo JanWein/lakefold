@@ -12,18 +12,18 @@
 #' @return A serializable configuration object containing no credentials.
 #' @export
 #' @examples
-#' registry_duckdb(file.path(tempdir(), "lake.db"))
-#' storage_local(file.path(tempdir(), "data"))
-#' registry_postgres("DUCKLAKE_PG_CONNECTION")
-registry_duckdb <- function(path) {
+#' tw_registry_duckdb(file.path(tempdir(), "lake.db"))
+#' tw_storage_local(file.path(tempdir(), "data"))
+#' tw_registry_postgres("DUCKLAKE_PG_CONNECTION")
+tw_registry_duckdb <- function(path) {
   structure(
     list(type = "duckdb", path = absolute_path(path)),
     class = "tw_catalog_spec"
   )
 }
-#' @rdname registry_duckdb
+#' @rdname tw_registry_duckdb
 #' @export
-registry_postgres <- function(
+tw_registry_postgres <- function(
   connection_env = "DUCKLAKE_PG_CONNECTION",
   lock_timeout = 30
 ) {
@@ -44,17 +44,17 @@ registry_postgres <- function(
     class = "tw_catalog_spec"
   )
 }
-#' @rdname registry_duckdb
+#' @rdname tw_registry_duckdb
 #' @export
-storage_local <- function(path) {
+tw_storage_local <- function(path) {
   structure(
     list(type = "local", path = absolute_path(path)),
     class = "tw_storage_spec"
   )
 }
-#' @rdname registry_duckdb
+#' @rdname tw_registry_duckdb
 #' @export
-storage_s3 <- function(
+tw_storage_s3 <- function(
   bucket,
   prefix = "dataloom/",
   endpoint,
@@ -89,26 +89,26 @@ storage_s3 <- function(
 #' @param read_only Attach existing storage read-only and skip schema creation
 #'   and migration. A lake created by a newer package may require an upgrade.
 #' @param config A configuration from a previously connected lake.
-#' @param path Optional self-contained local folder, as in [open_lake()].
+#' @param path Optional self-contained local folder, as in [tw_open_lake()].
 #'   Supply this instead of `catalog`, `storage` and `landing`. New folders
 #'   default to DuckDB; use `backend = "ducklake"` for DuckLake. Saved settings
 #'   are reused when reopening.
-#' @return A connected lake handle. Close it with disconnect_lake().
+#' @return A connected lake handle. Close it with tw_disconnect_lake().
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("tidyweave-example-")
-#' config <- lake_config(
-#'   registry_duckdb(file.path(root, "lake.db")),
-#'   storage_local(file.path(root, "data")),
+#' config <- tw_lake_config(
+#'   tw_registry_duckdb(file.path(root, "lake.db")),
+#'   tw_storage_local(file.path(root, "data")),
 #'   landing = file.path(root, "landing"), backend = "duckdb"
 #' )
-#' lake <- connect_lake(config)
+#' lake <- tw_connect_lake(config)
 #' lake
-#' disconnect_lake(lake)
+#' tw_disconnect_lake(lake)
 #' unlink(root, recursive = TRUE)
-setup_lake <- function(
-  catalog = registry_duckdb("metadata.ducklake"),
-  storage = storage_local("data"),
+tw_setup_lake <- function(
+  catalog = tw_registry_duckdb("metadata.ducklake"),
+  storage = tw_storage_local("data"),
   layers = c("raw", "validated", "products"),
   landing = "landing",
   backend = c("ducklake", "duckdb"),
@@ -133,9 +133,9 @@ setup_lake <- function(
     if (!missing(layers)) {
       args$layers <- layers
     }
-    return(connect_lake(do.call(lake_config, args)))
+    return(tw_connect_lake(do.call(tw_lake_config, args)))
   }
-  connect_lake(lake_config(
+  tw_connect_lake(tw_lake_config(
     catalog,
     storage,
     layers,
@@ -154,10 +154,10 @@ setup_lake <- function(
 #' backend and ordered layers, including named layer roles. It never creates
 #' or writes files. A new shorthand lake defaults to
 #' DuckDB; other calls retain the usual DuckLake default. The local layout and
-#' backend marker are shared with [open_lake()]. Unknown non-empty folders are
+#' backend marker are shared with [tw_open_lake()]. Unknown non-empty folders are
 #' refused rather than interpreted as a new lake.
-#' Pass its result to [connect_lake()] or [target_lake()] when ready to execute.
-#' @inheritParams setup_lake
+#' Pass its result to [tw_connect_lake()] or [tw_target_lake()] when ready to execute.
+#' @inheritParams tw_setup_lake
 #' @param path Optional local lake folder. Derives `metadata.duckdb`, `data`
 #'   and `landing` within that folder. Supply either `path` or explicit
 #'   `catalog`, `storage` and `landing`, not both. An explicit backend must
@@ -167,13 +167,13 @@ setup_lake <- function(
 #' @return A connection-free `lake_config` specification.
 #' @export
 #' @examples
-#' config <- lake_config(backend = "duckdb")
+#' config <- tw_lake_config(backend = "duckdb")
 #' print(config)
-#' local <- lake_config(path = file.path(tempdir(), "my-data-lake"))
+#' local <- tw_lake_config(path = file.path(tempdir(), "my-data-lake"))
 #' print(local)
-lake_config <- function(
-  catalog = registry_duckdb("metadata.ducklake"),
-  storage = storage_local("data"),
+tw_lake_config <- function(
+  catalog = tw_registry_duckdb("metadata.ducklake"),
+  storage = tw_storage_local("data"),
   layers = c("raw", "validated", "products"),
   landing = "landing",
   backend = c("ducklake", "duckdb"),
@@ -197,8 +197,8 @@ lake_config <- function(
     )
     backend <- local$backend
     layers <- local$layers
-    catalog <- registry_duckdb(file.path(path, "metadata.duckdb"))
-    storage <- storage_local(file.path(path, "data"))
+    catalog <- tw_registry_duckdb(file.path(path, "metadata.duckdb"))
+    storage <- tw_storage_local(file.path(path, "data"))
     landing <- file.path(path, "landing")
   } else {
     backend <- match.arg(backend)
@@ -319,7 +319,7 @@ local_lake_settings <- function(path, backend = NULL, layers = NULL) {
       length(list.files(path, all.files = TRUE, no.. = TRUE))
   ) {
     abort(
-      "This folder is not empty and has no tidyweave.json. Use its original lake_config() or choose an empty folder."
+      "This folder is not empty and has no tidyweave.json. Use its original tw_lake_config() or choose an empty folder."
     )
   }
   list(
@@ -360,12 +360,12 @@ save_local_lake_settings <- function(config, upgrade = FALSE) {
   invisible(NULL)
 }
 
-#' @rdname setup_lake
+#' @rdname tw_setup_lake
 #' @export
-connect_lake <- function(config, read_only = config$read_only %||% FALSE) {
+tw_connect_lake <- function(config, read_only = config$read_only %||% FALSE) {
   need("duckdb")
   if (!inherits(config, "tw_config")) {
-    abort("Use lake_config() to describe this lake.")
+    abort("Use tw_lake_config() to describe this lake.")
   }
   flag(read_only, "read_only")
   config$read_only <- read_only
@@ -542,7 +542,7 @@ connect_lake <- function(config, read_only = config$read_only %||% FALSE) {
     registry_init(lake)
   } else {
     versions <- tryCatch(
-      registry(lake, "schema_version")$version,
+      tw_registry(lake, "schema_version")$version,
       error = function(e) {
         abort("Registry is missing. Open with a writable connection first.")
       }
@@ -567,15 +567,15 @@ connect_lake <- function(config, read_only = config$read_only %||% FALSE) {
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("tidyweave-example-")
-#' config <- lake_config(
-#'   registry_duckdb(file.path(root, "lake.db")),
-#'   storage_local(file.path(root, "data")),
+#' config <- tw_lake_config(
+#'   tw_registry_duckdb(file.path(root, "lake.db")),
+#'   tw_storage_local(file.path(root, "data")),
 #'   landing = file.path(root, "landing"), backend = "duckdb"
 #' )
-#' lake <- connect_lake(config)
-#' disconnect_lake(lake)
+#' lake <- tw_connect_lake(config)
+#' tw_disconnect_lake(lake)
 #' unlink(root, recursive = TRUE)
-disconnect_lake <- function(lake) {
+tw_disconnect_lake <- function(lake) {
   if (DBI::dbIsValid(lake$con)) {
     DBI::dbDisconnect(lake$con, shutdown = TRUE)
   }

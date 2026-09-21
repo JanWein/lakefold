@@ -35,22 +35,22 @@ without changing the primary source from a table into a list. These dependencies
 participate in validation, memoization, lineage and orchestration.
 
 ```r
-raw <- product("payments", payments) |>
-  add_contract(payment_contract) |>
-  add_quality(~ cash_amount > 0, engine = "pointblank") |>
-  ingest(to = config)
+raw <- tw_product("payments", payments) |>
+  tw_add_contract(payment_contract) |>
+  tw_add_quality(~ cash_amount > 0, engine = "pointblank") |>
+  tw_ingest(to = config)
 
-enriched <- product("enriched_payments", raw) |>
-  add_lookup(policies, by = dplyr::join_by(policy_id, month), engine = "dm") |>
+enriched <- tw_product("enriched_payments", raw) |>
+  tw_add_lookup(policies, by = dplyr::join_by(policy_id, month), engine = "dm") |>
   dplyr::mutate(net_cash = cash_amount - fee) |>
-  publish(to = config, layer = "staging")
+  tw_publish(to = config, layer = "staging")
 
-built <- dbt_project("analytics", lake = config,
+built <- tw_dbt_project("analytics", lake = config,
   sources = list(payments = enriched)) |>
-  run()
+  tw_run()
 
 approved <- built |>
-  publish("monthly_performance", contract = mart_contract)
+  tw_publish("monthly_performance", contract = mart_contract)
 ```
 
 The public publish generic shares intent across products, tables and successful

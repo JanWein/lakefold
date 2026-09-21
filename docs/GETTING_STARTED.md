@@ -1,8 +1,11 @@
 # Get started
 
-Follow the [five introductory lessons](https://janwein.github.io/tidyweave/articles/get-started.html).
-Each has its own setup, expected outcome and next step. The source is
-[get-started.Rmd](../vignettes/get-started.Rmd).
+The canonical introduction is
+[Get started](https://janwein.github.io/tidyweave/articles/get-started.html).
+It composes a product specification, preparation recipe and workflow, executes
+an in-memory trial, and reuses the same definition for a second delivery.
 
-The existing [monthly reporting case study](https://janwein.github.io/tidyweave/articles/getting-started.html)
-is lesson 5, not the first setup page. Its URL is retained for existing links.
+Continue with the product, recipe, workflow and engine guides linked there.
+[Articles](https://janwein.github.io/tidyweave/articles/learn.html) groups task
+guides and integrations. The monthly case study retains its existing URL as an
+advanced publication example. Executable sources live in `vignettes/`.

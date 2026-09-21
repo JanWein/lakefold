@@ -5,7 +5,7 @@
 #' File sources get separate `format = "file"` targets so changes invalidate
 #' downstream products. Constructing the graph never runs a product.
 #'
-#' Place `as_targets(...)` at the end of `_targets.R`, then use
+#' Place `tw_as_targets(...)` at the end of `_targets.R`, then use
 #' `targets::tar_make()`. targets owns caching, dependency scheduling and
 #' parallelism.
 #' Each product is run once in the graph; downstream products use its completed
@@ -25,16 +25,16 @@
 #' @param x Table product or named list of table products. Nested products are
 #'   included. Schedule a complete model publication with targets::tar_target().
 #' @param cue Optional [targets::tar_cue()] applied to product targets.
-#' @param evidence Optional directory for [run()] evidence.
+#' @param evidence Optional directory for [tw_run()] evidence.
 #' @returns A list of objects from [targets::tar_target_raw()]. Product target
 #'   names are derived from product IDs with `make.names()`; conflicting names
-#'   are rejected. Collect a stored result with `collect(targets::tar_read(id))`.
-#' @seealso [init_project()], [run()]
+#'   are rejected. Collect a stored result with `tw_collect(targets::tar_read(id))`.
+#' @seealso [tw_init_project()], [tw_run()]
 #' @export
 #' @examplesIf requireNamespace("targets", quietly = TRUE)
-#' orders <- product("orders") |> add_source(data.frame(id = 1:2))
-#' as_targets(orders)
-as_targets <- function(x, cue = NULL, evidence = NULL) {
+#' orders <- tw_product("orders") |> tw_add_source(data.frame(id = 1:2))
+#' tw_as_targets(orders)
+tw_as_targets <- function(x, cue = NULL, evidence = NULL) {
   need("targets")
   if (inherits(x, "tw_product")) {
     x <- list(x)
@@ -44,7 +44,9 @@ as_targets <- function(x, cue = NULL, evidence = NULL) {
       !length(x) ||
       !all(vapply(x, inherits, logical(1), "tw_product"))
   ) {
-    abort("Supply a product or a non-empty list of products to as_targets().")
+    abort(
+      "Supply a product or a non-empty list of products to tw_as_targets()."
+    )
   }
   if (!is.null(evidence)) {
     evidence <- absolute_path(evidence)
@@ -68,7 +70,7 @@ as_targets <- function(x, cue = NULL, evidence = NULL) {
   visit <- function(product, stack = character()) {
     if (inherits(product, "tw_model_product")) {
       abort(
-        "as_targets() expands table products only. Schedule the complete model with targets::tar_target(name, publish(model_definition, to = destination))."
+        "tw_as_targets() expands table products only. Schedule the complete model with targets::tar_target(name, tw_publish(model_definition, to = destination))."
       )
     }
     if (product$id %in% stack) {
@@ -175,13 +177,13 @@ targets_run_product <- function(
     }
     sources[[alias]] <- structure(
       list(
-        data = result$data %||% collect(result),
+        data = result$data %||% tw_collect(result),
         descriptor = list(
           type = "product",
           id = sources[[alias]]$id,
           version = sources[[alias]]$version
         ),
-        capabilities = capabilities(sources[[alias]]),
+        capabilities = tw_capabilities(sources[[alias]]),
         reference = list(
           asset = result$asset,
           run_id = result$run_id,
@@ -195,10 +197,10 @@ targets_run_product <- function(
     sources[[alias]]$path <- files[[alias]]
   }
   product <- replace_product_sources(product, sources)
-  result <- run(product, evidence = evidence)
+  result <- tw_run(product, evidence = evidence)
   # Never serialize a live lazy-table connection into the targets store.
   if (!is.null(result$data) && !is.data.frame(result$data)) {
-    result$data <- collect(result)
+    result$data <- tw_collect(result)
   }
   result$output_lake <- NULL
   result
@@ -292,18 +294,18 @@ targets_environment_names <- function(expression) {
 }
 
 #' @export
-read_source.tw_completed_source <- function(source, ...) {
+tw_read_source.tw_completed_source <- function(source, ...) {
   data <- source$data
   attr(data, "tw_input_reference") <- source$reference
   data
 }
 #' @export
-inspect.tw_completed_source <- function(x, ...) {
+tw_inspect.tw_completed_source <- function(x, ...) {
   x$descriptor
 }
 #' @export
-check_component.tw_completed_source <- function(x, ...) invisible(x)
+tw_check_component.tw_completed_source <- function(x, ...) invisible(x)
 #' @export
-capabilities.tw_completed_source <- function(x, ...) {
+tw_capabilities.tw_completed_source <- function(x, ...) {
   x$capabilities
 }

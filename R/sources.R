@@ -6,9 +6,9 @@
 #' @return Source specification. Files are read only at execution time.
 #' @export
 #' @examples
-#' source <- source_file("orders.file", "orders.csv", reader = utils::read.csv)
+#' source <- tw_source_file("orders.file", "orders.csv", reader = utils::read.csv)
 #' source
-source_file <- function(
+tw_source_file <- function(
   id,
   path,
   reader = function(path) utils::read.csv(path),

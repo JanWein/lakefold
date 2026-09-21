@@ -20,7 +20,7 @@ These are explicit example assumptions, not universal insurance conventions.
 - New business in the month is excluded from both numerator and denominator.
 - No exposure yields an undefined rate, not zero. The reference includes a
   zero-exposure channel test. Both undefined rates and entirely empty input
-  currently fail measure(); input na_policy does not permit missing outputs.
+  currently fail tw_measure(); input na_policy does not permit missing outputs.
 - Global rates are computed from counts, never by averaging channel rates.
 - Broker/channel attributes use the supplied snapshot. Historical attribution
   would need effective-dated reference tables and explicit temporal joins.
@@ -31,15 +31,15 @@ These are explicit example assumptions, not universal insurance conventions.
 
 | Component | Responsibility | Current implementation |
 |---|---|---|
-| Contract | Types, grain, keys, required fields, business checks | contract() |
-| Table product | Named inputs, preparation, checks, publishable table | product() |
-| Relational model | Several tables and explicit PK/FK relationships | dm; model() for lake releases |
-| Model product | Named, versioned set of table releases and relationships | product(dm), trial(), atomic publish(), collect() |
-| Metric | Reviewed formula, unit, grouping and missing-value policy | metric(), metric_set() |
-| Report | Issued values and immutable evidence | report_release() |
-| Execution configuration | Storage and optional engines, separate from business logic | lake_config(), execution_config() |
+| Contract | Types, grain, keys, required fields, business checks | tw_contract() |
+| Table product | Named inputs, preparation, checks, publishable table | tw_product() |
+| Relational model | Several tables and explicit PK/FK relationships | dm; tw_model() for lake releases |
+| Model product | Named, versioned set of table releases and relationships | tw_product(dm), tw_trial(), atomic tw_publish(), tw_collect() |
+| Metric | Reviewed formula, unit, grouping and missing-value policy | tw_metric(), tw_metric_set() |
+| Report | Issued values and immutable evidence | tw_report_release() |
+| Execution configuration | Storage and optional engines, separate from business logic | tw_lake_config(), tw_execution_config() |
 
-A model remains several tables. `product("report", result, table = "policies")`
+A model remains several tables. `tw_product("report", result, table = "policies")`
 selects a pinned member before transformation. No implicit flattening occurs.
 All member tables, release records, relationships and the model manifest commit
 in one transaction. Complete-model validation materializes member tables in memory.

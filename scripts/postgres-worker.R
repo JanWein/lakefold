@@ -4,8 +4,8 @@ result <- tryCatch(
   {
     if (job$action == "hold") {
       hold <- function() {
-        lake <- connect_lake(job$config)
-        on.exit(close_lake(lake), add = TRUE)
+        lake <- tw_connect_lake(job$config)
+        on.exit(tw_close_lake(lake), add = TRUE)
         tidyweave:::assert_writable(lake)
         file.create(job$ready)
         Sys.sleep(30)
@@ -13,18 +13,18 @@ result <- tryCatch(
       hold()
       list(status = "held")
     } else if (job$action == "report") {
-      metrics <- metric_set(
+      metrics <- tw_metric_set(
         "shared",
         count = dplyr::n(),
         approved = TRUE,
         code_version = "v1"
       )
-      values <- measure(job$previous, metrics = metrics, by = character())
-      report_release(values, "same-report", code_version = "v1")
+      values <- tw_measure(job$previous, metrics = metrics, by = character())
+      tw_report_release(values, "same-report", code_version = "v1")
       list(status = "reported")
     } else {
-      result <- publish(
-        product(job$asset, data.frame(id = job$value)),
+      result <- tw_publish(
+        tw_product(job$asset, data.frame(id = job$value)),
         to = job$config,
         previous = job$previous
       )

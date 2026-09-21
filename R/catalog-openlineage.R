@@ -3,13 +3,13 @@
 #' Sends a START event using the recorded start time, followed by COMPLETE
 #' or FAIL, after execution has finished. This is buffered historical lineage,
 #' not live progress monitoring. Both events keep the same deterministic UUID
-#' across [retry_catalogs()] calls. Delivery is at least once; a retry can
+#' across [tw_retry_catalogs()] calls. Delivery is at least once; a retry can
 #' repeat an already accepted START event. Failed and blocked runs have no
 #' output datasets. No data rows or executable transformation definitions are
 #' sent. Output schema fields are included when available.
 #'
 #' External business catalogs consume descriptive metadata. They are distinct
-#' from [registry()], which records the local lake publication lifecycle.
+#' from [tw_registry()], which records the local lake publication lifecycle.
 #' @param endpoint Full HTTP(S) OpenLineage ingestion URL, for example
 #'   `https://lineage.example/api/v1/lineage`. Supply authentication through
 #'   `request`, never embedded credentials or URL query parameters.
@@ -18,13 +18,13 @@
 #'   returning a configured request. A zero-argument request factory is also
 #'   accepted. Factories can obtain fresh credentials at delivery time. The
 #'   adapter always restores its configured destination URL.
-#' @returns A catalog adapter for [add_catalog()].
-#' @seealso [catalog_openmetadata()], [retry_catalogs()]
+#' @returns A catalog adapter for [tw_add_catalog()].
+#' @seealso [tw_catalog_openmetadata()], [tw_retry_catalogs()]
 #' @export
 #' @examples
-#' catalog <- catalog_openlineage("https://lineage.example/api/v1/lineage")
-#' inspect(catalog)
-catalog_openlineage <- function(
+#' catalog <- tw_catalog_openlineage("https://lineage.example/api/v1/lineage")
+#' tw_inspect(catalog)
+tw_catalog_openlineage <- function(
   endpoint,
   namespace = "tidyweave",
   request = NULL
@@ -47,7 +47,7 @@ catalog_openlineage <- function(
 }
 
 #' @export
-check_component.tw_openlineage_catalog <- function(x, ...) {
+tw_check_component.tw_openlineage_catalog <- function(x, ...) {
   need("httr2")
   catalog_endpoint(x$endpoint)
   scalar(x$namespace, "namespace")
@@ -56,7 +56,7 @@ check_component.tw_openlineage_catalog <- function(x, ...) {
 }
 
 #' @export
-inspect.tw_openlineage_catalog <- function(x, ...) {
+tw_inspect.tw_openlineage_catalog <- function(x, ...) {
   list(
     type = "OpenLineage",
     id = x$id,
@@ -67,13 +67,13 @@ inspect.tw_openlineage_catalog <- function(x, ...) {
 }
 
 #' @export
-capabilities.tw_openlineage_catalog <- function(x, ...) {
+tw_capabilities.tw_openlineage_catalog <- function(x, ...) {
   catalog_capabilities("OpenLineage", all_statuses = TRUE)
 }
 
 #' @export
-publish_metadata.tw_openlineage_catalog <- function(catalog, metadata, ...) {
-  check_component(catalog)
+tw_publish_metadata.tw_openlineage_catalog <- function(catalog, metadata, ...) {
+  tw_check_component(catalog)
   events <- openlineage_events(catalog, metadata)
   for (event in events) {
     request <- catalog_request(catalog$endpoint, catalog$request)

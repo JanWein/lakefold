@@ -8,23 +8,23 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
-Start with `status(result)`, then `quality_report(result)`. `trial()` returns a
-failed result for diagnosis by default. `quality_rows(result)` automatically
+Start with `tw_status(result)`, then `tw_quality_report(result)`. `tw_trial()` returns a
+failed result for diagnosis by default. `tw_quality_rows(result)` automatically
 selects a single failed rule; if several fail, it lists the available choices.
-`run()` and `publish()` stop on failure by default. For interactive inspection,
+`tw_run()` and `tw_publish()` stop on failure by default. For interactive inspection,
 pass `stop_on_failure = FALSE`; retain their strict defaults in scheduled jobs.
 
 ## A delivery is blocked
 
 | Symptom | Next action |
 |---|---|
-| A quality rule fails | Inspect `quality_report(result)`, then `quality_rows(result)`; select a named rule if several fail |
+| A quality rule fails | Inspect `tw_quality_report(result)`, then `tw_quality_rows(result)`; select a named rule if several fail |
 | A contract rejects a table | Check column names, types, missing values, duplicate keys and unexpected columns |
-| `collect()` reports no successful output | Inspect the failed result instead; correct the source and rerun the same definition |
+| `tw_collect()` reports no successful output | Inspect the failed result instead; correct the source and rerun the same definition |
 | A lookup rejects rows | Check for unmatched input keys and duplicate or missing lookup keys |
 | A rule errors or has no evaluable rows | Fix the rule or input; an unexecuted check is not a pass |
 
-Follow [lesson 2](check-delivery.html) for a complete failure and recovery.
+Follow [Check a delivery](check-delivery.html) for a complete failure and recovery.
 Checks do not silently repair or remove data.
 
 ## Storage does not behave as expected
@@ -47,14 +47,14 @@ writes and deliberate recovery belong in the
 
 Reports need published lake inputs and explicitly approved, versioned metrics.
 A trial result is useful for exploration but cannot be issued as a report.
-Use [lesson 4](save-report.html) to follow the supported sequence.
+Use [Save a report](save-report.html) to follow the supported sequence.
 
 An older report remaining unchanged after a correction is expected. Read its
-saved values with `report_read()`. To issue changed content, use a new report ID.
+saved values with `tw_report_read()`. To issue changed content, use a new report ID.
 Declaring `dimensions = "company"` allows grouping; it does not group automatically.
-Request company totals with `measure(..., by = "company")`.
+Request company totals with `tw_measure(..., by = "company")`.
 For a stock metric, select one reporting date with `at`; do not sum stocks
-across dates. [Lesson 5](getting-started.html) demonstrates this distinction.
+across dates. [Monthly reporting](getting-started.html) demonstrates this distinction.
 
 ## An integration fails
 

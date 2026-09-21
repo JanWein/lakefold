@@ -1,0 +1,106 @@
+---
+title: "Preparation recipes"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Preparation recipes}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE, purl=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", message = FALSE)
+```
+
+A recipe stores ordered preparation instructions. Build it once and attach it
+to multiple workflows. It does not own product requirements, primary deliveries
+or destinations. This guide runs with tidyweave's hard dependencies.
+
+## Add steps
+
+```{r}
+library(tidyweave)
+preparation <- tw_recipe() |>
+  tw_step_mutate(amount = round(amount, 2)) |>
+  tw_step_select(id, region, amount)
+preparation
+```
+
+Each call returns an updated recipe. Steps execute in pipe order with ordinary
+dplyr data masking and tidy selection. Expressions retain their R environments;
+inject a small value with `!!` if you need to freeze it at definition time.
+
+| Purpose | Steps |
+|---|---|
+| Calculate or rename columns | `tw_step_mutate()`, `tw_step_rename()` |
+| Select rows and columns | `tw_step_filter()`, `tw_step_select()` |
+| Order or deduplicate rows | `tw_step_arrange()`, `tw_step_distinct()` |
+| Aggregate within groups | `tw_step_summarise(..., .by = group)` |
+| Enrich by a checked relationship | `tw_step_lookup()` |
+| Use an ordinary function or adapter | `tw_step_transform()` |
+
+## Execute through a workflow
+
+```{r}
+delivery <- data.frame(id = 1:3, region = c("North", "North", "South"),
+  amount = c(10.124, 20, 30))
+flow <- tw_workflow() |>
+  tw_add_product(tw_product("orders")) |>
+  tw_add_recipe(preparation)
+tw_collect(tw_trial(flow, data = delivery))
+```
+
+A recipe has no fitted training state. There is no `prep()` or `bake()` phase:
+execution acquires the input, applies the instructions, and checks the output.
+
+## Reuse and extend
+
+```{r}
+regional <- preparation |>
+  tw_step_summarise(total = sum(amount), .by = region)
+regional_flow <- tw_workflow() |>
+  tw_add_product(tw_product("regional_orders")) |>
+  tw_add_recipe(regional)
+totals <- tw_collect(tw_trial(regional_flow, data = delivery))
+totals
+```
+
+`preparation` still has two steps. `regional` adds a third. The totals are
+**30.12** for North and **30** for South. Put output checks on the product that
+matches each recipe's output shape.
+
+## Add a checked lookup
+
+```{r}
+regions <- data.frame(region = c("North", "South"), currency = c("EUR", "EUR"))
+enriched <- preparation |>
+  tw_step_lookup(regions, by = "region", name = "regions")
+enriched_flow <- flow |> tw_update_recipe(enriched)
+tw_collect(tw_trial(enriched_flow, data = delivery))
+```
+
+The lookup checks reference-key uniqueness and, by default, requires every input
+key to match. `unmatched = "keep"` retains unmatched input rows explicitly.
+For a reusable relationship, create `tw_lookup_spec()` and attach it with
+`tw_step_transform()`. See [Engines](engines.html) for optional dm checking.
+
+## Extend with ordinary R
+
+```{r}
+custom <- tw_recipe() |>
+  tw_step_transform(\(data) dplyr::mutate(data, amount = amount * 1.2),
+    name = "add_tax")
+tw_inspect(custom)
+```
+
+The function receives the preceding step's result. It must support the data
+representation it receives. Backend-supported operations remain lazy; tidyweave
+does not silently collect a query to make an unsupported step work. Write an
+[adapter](extending-tidyweave.html) when you need reusable configuration or
+declared capabilities beyond an ordinary function.
+
+Continue with [Workflows](modular-workflows.html).
+
+```{r verify, include=FALSE}
+stopifnot(length(preparation$steps) == 2L,
+          isTRUE(all.equal(sort(totals$total), c(30, 30.12))))
+```

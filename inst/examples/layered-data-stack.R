@@ -4,17 +4,17 @@
 # demo <- layered_data_stack(executable = "/path/to/dbt")
 # demo$revenue
 # Use backend = "ducklake" only with compatible R/Python engines and extension
-# access. The optional catalog argument accepts catalog_openmetadata_dbt(...),
+# access. The optional catalog argument accepts tw_catalog_openmetadata_dbt(...),
 # a function receiving the dbt result, or a compatible custom metadata adapter.
 library(tidyweave)
 
-native_orders <- product(
+native_orders <- tw_product(
   "orders",
   data.frame(order_id = 1:3, amount = c(25, 75, 50))
 ) |>
-  add_quality(~ amount >= 0) |>
-  run()
-stopifnot(sum(collect(native_orders)$amount) == 150)
+  tw_add_quality(~ amount >= 0) |>
+  tw_run()
+stopifnot(sum(tw_collect(native_orders)$amount) == 150)
 
 layered_data_stack <- function(
   path = tempfile("tidyweave-layered-"),
@@ -50,7 +50,7 @@ layered_data_stack <- function(
     stop("Choose a new or empty example directory.", call. = FALSE)
   }
   dir.create(path, recursive = TRUE, showWarnings = FALSE)
-  config <- lake_config(
+  config <- tw_lake_config(
     path = file.path(path, "lake"),
     layers = c("raw", "staging", "core", "marts"),
     backend = backend
@@ -61,50 +61,59 @@ layered_data_stack <- function(
     amount = c(25, 75, 50)
   )
   quality_engine <- if (use_pointblank) "pointblank" else "native"
-  definition <- product("orders", orders) |>
-    add_quality(~ amount >= 0, engine = quality_engine)
+  definition <- tw_product("orders", orders) |>
+    tw_add_quality(~ amount >= 0, engine = quality_engine)
 
   # Receipt is separate from acceptance. The rejected delivery stays in landing.
-  accepted <- definition |> ingest(to = config)
+  accepted <- definition |> tw_ingest(to = config)
   bad_orders <- orders
   bad_orders$amount[1] <- -25
   rejected <- definition |>
-    add_source(bad_orders, replace = TRUE) |>
-    ingest(to = config, stop_on_failure = FALSE)
-  stopifnot(rejected$status == "blocked", sum(collect(accepted)$amount) == 150)
+    tw_add_source(bad_orders, replace = TRUE) |>
+    tw_ingest(to = config, stop_on_failure = FALSE)
+  stopifnot(
+    rejected$status == "blocked",
+    sum(tw_collect(accepted)$amount) == 150
+  )
 
   # No live R connection remains open when the separate dbt process starts.
-  project <- dbt_init(
+  project <- tw_dbt_init(
     file.path(path, "analytics"),
     config,
     executable = executable,
     sources = list(orders = accepted)
   )
-  built <- run(project, echo = FALSE, catalog = catalog)
-  approved <- publish(built, "customer_revenue", to = config)
-  initial_revenue <- collect(approved)
+  built <- tw_run(project, echo = FALSE, catalog = catalog)
+  approved <- tw_publish(built, "customer_revenue", to = config)
+  initial_revenue <- tw_collect(approved)
   stopifnot(sum(initial_revenue$revenue) == 150)
 
   # A correction binds another immutable RAW release under the same logical name.
   next_orders <- orders
   next_orders$amount[1] <- 50
   new_raw <- definition |>
-    add_source(next_orders, replace = TRUE) |>
-    ingest(to = config)
-  project <- dbt_sources(project, list(orders = new_raw), name = "raw")
-  rebuilt <- run(project, echo = FALSE, catalog = catalog)
-  corrected <- publish(rebuilt, "customer_revenue", to = config)
-  revenue <- collect(corrected)
-  stopifnot(sum(revenue$revenue) == 175, sum(collect(approved)$revenue) == 150)
+    tw_add_source(next_orders, replace = TRUE) |>
+    tw_ingest(to = config)
+  project <- tw_dbt_sources(project, list(orders = new_raw), name = "raw")
+  rebuilt <- tw_run(project, echo = FALSE, catalog = catalog)
+  corrected <- tw_publish(rebuilt, "customer_revenue", to = config)
+  revenue <- tw_collect(corrected)
+  stopifnot(
+    sum(revenue$revenue) == 175,
+    sum(tw_collect(approved)$revenue) == 150
+  )
 
   # Consumers can use ordinary R data. Keep the release identity with the export.
   saveRDS(revenue, file.path(path, "approved-revenue.rds"))
   saveRDS(corrected$outputs, file.path(path, "approved-revenue-reference.rds"))
   exported <- NULL
   if (requireNamespace("arrow", quietly = TRUE)) {
-    exported <- product("revenue_export", corrected) |>
-      set_target(target_parquet(file.path(path, "approved-revenue.parquet"))) |>
-      run()
+    exported <- tw_product("revenue_export", corrected) |>
+      tw_set_target(tw_target_parquet(file.path(
+        path,
+        "approved-revenue.parquet"
+      ))) |>
+      tw_run()
   }
   list(
     path = path,

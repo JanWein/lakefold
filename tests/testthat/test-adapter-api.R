@@ -43,37 +43,39 @@ test_that("API sources read actual paginated responses and respect retry policie
     }
     httr2::req_url_query(request, page = next_page)
   }
-  source <- source_api(request, next_request = next_request)
-  expect_equal(read_source(source)$id, 1:2)
-  result <- product("api_orders") |>
-    add_source(source) |>
-    add_quality(~ amount > 0) |>
-    run()
-  expect_equal(collect(result)$amount, c(10, 20))
-  expect_true(inspect(source)$pagination)
+  source <- tw_source_api(request, next_request = next_request)
+  expect_equal(tw_read_source(source)$id, 1:2)
+  result <- tw_product("api_orders") |>
+    tw_add_source(source) |>
+    tw_add_quality(~ amount > 0) |>
+    tw_run()
+  expect_equal(tw_collect(result)$amount, c(10, 20))
+  expect_true(tw_inspect(source)$pagination)
   retry <- httr2::request(paste0(server$url, "/retry")) |>
     httr2::req_retry(max_tries = 2L, backoff = function(tries) 0)
-  expect_equal(read_source(source_api(retry))$id, 1L)
+  expect_equal(tw_read_source(tw_source_api(retry))$id, 1L)
   expect_true(file.exists(file.path(server$directory, "retried")))
   called <- FALSE
-  factory <- source_api(function() {
+  factory <- tw_source_api(function() {
     called <<- TRUE
     request
   })
-  check_component(factory)
+  tw_check_component(factory)
   expect_false(called)
-  expect_equal(read_source(factory)$id, 1L)
+  expect_equal(tw_read_source(factory)$id, 1L)
 })
 
 test_that("API pagination fails closed at cycles and page limits", {
   server <- api_fixture()
   request <- httr2::request(paste0(server$url, "/orders"))
   expect_error(
-    read_source(source_api(request, next_request = function(response) request)),
+    tw_read_source(tw_source_api(request, next_request = function(response) {
+      request
+    })),
     "repeated a request"
   )
   expect_error(
-    read_source(source_api(
+    tw_read_source(tw_source_api(
       request,
       max_pages = 1L,
       next_request = function(response) {
@@ -82,9 +84,9 @@ test_that("API pagination fails closed at cycles and page limits", {
     )),
     "exceeded max_pages"
   )
-  expect_error(source_api(request, max_pages = 0), "positive whole")
+  expect_error(tw_source_api(request, max_pages = 0), "positive whole")
   expect_error(
-    read_source(source_api(function() NULL)),
+    tw_read_source(tw_source_api(function() NULL)),
     "must return an httr2 request"
   )
 })
@@ -94,19 +96,22 @@ test_that("API failures and inspection do not disclose request or response secre
   request <- httr2::request(paste0(server$url, "/failure")) |>
     httr2::req_url_query(token = "query-secret") |>
     httr2::req_auth_bearer_token("header-secret")
-  source <- source_api(request)
-  text <- jsonlite::toJSON(inspect(source), auto_unbox = TRUE)
+  source <- tw_source_api(request)
+  text <- jsonlite::toJSON(tw_inspect(source), auto_unbox = TRUE)
   expect_false(grepl("secret|127.0.0.1", text))
-  failure <- tryCatch(read_source(source), error = identity)
+  failure <- tryCatch(tw_read_source(source), error = identity)
   expect_s3_class(failure, "tw_api_failed")
   expect_false(grepl("secret", conditionMessage(failure)))
   expect_null(failure$parent)
   expect_error(
-    read_source(source_api(httr2::request(paste0(server$url, "/invalid")))),
+    tw_read_source(tw_source_api(httr2::request(paste0(
+      server$url,
+      "/invalid"
+    )))),
     "could not be parsed"
   )
   expect_error(
-    read_source(source_api(
+    tw_read_source(tw_source_api(
       httr2::request(paste0(server$url, "/orders")),
       parse = function(response) list(id = 1)
     )),
@@ -131,7 +136,7 @@ test_that("API ingestion rejects inconsistent page schemas", {
     httr2::req_url_query(request, page = 2L)
   }
   expect_error(
-    read_source(source_api(request, parse, next_request)),
+    tw_read_source(tw_source_api(request, parse, next_request)),
     "different columns"
   )
 })

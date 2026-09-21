@@ -16,13 +16,13 @@
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("tidyweave-")
-#' lake <- connect_lake(lake_config(registry_duckdb(file.path(root, "lake.db")),
-#'   storage_local(file.path(root, "data")),
+#' lake <- tw_connect_lake(tw_lake_config(tw_registry_duckdb(file.path(root, "lake.db")),
+#'   tw_storage_local(file.path(root, "data")),
 #'   landing = file.path(root, "landing"), backend = "duckdb"))
-#' cleanup(lake)
-#' disconnect_lake(lake)
+#' tw_cleanup(lake)
+#' tw_disconnect_lake(lake)
 #' unlink(root, recursive = TRUE)
-cleanup <- function(
+tw_cleanup <- function(
   lake,
   older_than_days = 30,
   dry_run = TRUE,
@@ -46,8 +46,8 @@ cleanup <- function(
   ) {
     abort("at must be one POSIXct value.")
   }
-  plan <- function() {
-    runs <- registry(lake, "runs")
+  tw_plan <- function() {
+    runs <- tw_registry(lake, "runs")
     age <- as.numeric(difftime(
       at,
       as.POSIXct(runs$finished_at, format = "%Y-%m-%dT%H:%M:%OSZ", tz = "UTC"),
@@ -66,7 +66,7 @@ cleanup <- function(
         "WHERE table_catalog = 'lake' AND table_type = 'BASE TABLE'"
       )
     )
-    releases <- releases(lake)
+    releases <- tw_releases(lake)
     protected <- paste(releases$schema_name, releases$table_name, sep = ".")
     rows <- lapply(seq_len(nrow(runs)), function(i) {
       candidates <- tables[
@@ -96,10 +96,10 @@ cleanup <- function(
     }
     dplyr::bind_rows(rows)
   }
-  out <- plan()
+  out <- tw_plan()
   if (!dry_run && nrow(out)) {
     DBI::dbWithTransaction(lake$con, {
-      current <- plan()
+      current <- tw_plan()
       if (!identical(out, current)) {
         abort("Cleanup eligibility changed; request a fresh plan.")
       }

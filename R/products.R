@@ -2,13 +2,13 @@
 #'
 #' A table input defines a table product. A dm input defines a model product:
 #' its tables and declared relationships are checked together and published in
-#' one transaction. collect() returns a dm; select a member explicitly with
-#' product("report", result, table = "policies"). Model execution materializes
+#' one transaction. tw_collect() returns a dm; select a member explicitly with
+#' tw_product("report", result, table = "policies"). Model execution materializes
 #' all tables in memory. Table contracts are supplied through contracts.
 #'
 #' Add named sources, ordinary transformation functions and optional checks or
-#' a target. Use [trial()] to try it, or [publish()] to save checked output.
-#' [run()] executes the full configuration, including writers. Products can be
+#' a target. Use [tw_trial()] to try it, or [tw_publish()] to save checked output.
+#' [tw_run()] executes the full configuration, including writers. Products can be
 #' sources of other products; shared dependencies run once per execution.
 #' @param id Product identity, unique within a dependency graph.
 #' @param data Optional table, path, source adapter, product, or successful run.
@@ -21,21 +21,21 @@
 #'   explicitly reusing a previously published lake release with `cache = TRUE`.
 #' @param source_name Optional name for `data`. Defaults to the product ID for
 #'   ordinary inputs, or the upstream product ID for a nested product.
-#' @param execution Optional connection-free [execution_config()] stored on this
-#'   definition. Used when it is the root of [run()], [publish()] or [ingest()].
+#' @param execution Optional connection-free [tw_execution_config()] stored on this
+#'   definition. Used when it is the root of [tw_run()], [tw_publish()] or [tw_ingest()].
 #'   An explicit execution argument overrides these defaults.
 #' @param contracts Named table contracts when data is a dm model.
 #' @param table Table name to select from a successful model trial or publication.
 #'   Published selections retain the exact member release.
-#' @returns A `tw_product`, ready for composition, inspection and execution.
+#' @returns A `product`, ready for composition, inspection and execution.
 #' @export
 #' @examples
-#' orders <- product("orders", data.frame(id = 1:2, amount = c(25, 75))) |>
+#' orders <- tw_product("orders", data.frame(id = 1:2, amount = c(25, 75))) |>
 #'   dplyr::mutate(amount = round(amount, 2)) |>
-#'   add_quality(~ amount >= 0)
-#' orders |> trial() |> collect()
+#'   tw_add_quality(~ amount >= 0)
+#' orders |> tw_trial() |> tw_collect()
 
-product <- function(
+tw_product <- function(
   id,
   data = NULL,
   contract = NULL,
@@ -66,7 +66,7 @@ product <- function(
   }
   if (is.null(data) && !is.null(source_name)) {
     abort(
-      "source_name requires data. Name a later source with add_source(name = )."
+      "source_name requires data. Name a later source with tw_add_source(name = )."
     )
   }
   if (!is.null(table)) {
@@ -74,7 +74,7 @@ product <- function(
   }
   if (inherits(data, "tw_model_result")) {
     abort(
-      "Choose the model table explicitly with product(..., table = \"name\")."
+      "Choose the model table explicitly with tw_product(..., table = \"name\")."
     )
   }
   if (inherits(data, "dm")) {
@@ -89,7 +89,7 @@ product <- function(
   if (!is.null(data)) {
     source_name <- source_name %||%
       if (inherits(data, "tw_product")) data$id else id
-    x <- add_source(x, data, name = source_name)
+    x <- tw_add_source(x, data, name = source_name)
   }
   x
 }
@@ -106,28 +106,28 @@ product <- function(
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("tidyweave-example-")
-#' config <- lake_config(
-#'   registry_duckdb(file.path(root, "lake.db")),
-#'   storage_local(file.path(root, "data")),
+#' config <- tw_lake_config(
+#'   tw_registry_duckdb(file.path(root, "lake.db")),
+#'   tw_storage_local(file.path(root, "data")),
 #'   landing = file.path(root, "landing"), backend = "duckdb"
 #' )
-#' lake <- connect_lake(config)
+#' lake <- tw_connect_lake(config)
 #' path <- file.path(root, "orders.csv")
 #' utils::write.csv(data.frame(order_id = 1:2, amount = c(25, 75)), path,
 #'   row.names = FALSE)
-#' source <- source_file("orders.file", path, reader = utils::read.csv)
-#' contract <- contract(
+#' source <- tw_source_file("orders.file", path, reader = utils::read.csv)
+#' contract <- tw_contract(
 #'   "orders", "1.0.0", "Analytics", "Order amounts", "One order",
 #'   c(order_id = "integer", amount = "numeric"), key = "order_id"
 #' )
-#' release <- product("orders", contract = contract, code_version = "v1") |>
-#'   add_source(source) |> publish(to = lake)
-#' model <- model(lake, c(orders = "orders"),
+#' release <- tw_product("orders", contract = contract, code_version = "v1") |>
+#'   tw_add_source(source) |> tw_publish(to = lake)
+#' model <- tw_model(lake, c(orders = "orders"),
 #'   primary_keys = list(orders = "order_id"))
 #' model
-#' disconnect_lake(lake)
+#' tw_disconnect_lake(lake)
 #' unlink(root, recursive = TRUE)
-model <- function(
+tw_model <- function(
   lake,
   tables,
   primary_keys = list(),
@@ -151,7 +151,7 @@ model <- function(
   })
   names(refs) <- names(tables)
   model <- dm::dm(
-    !!!lapply(refs, function(r) tbl(lake, r$asset[[1]], r$release_id[[1]]))
+    !!!lapply(refs, function(r) tw_tbl(lake, r$asset[[1]], r$release_id[[1]]))
   )
   model <- dm_keys(model, primary_keys, foreign_keys, check)
   attr(model, "tw_releases") <- lapply(refs, function(r) r$release_id[[1]])

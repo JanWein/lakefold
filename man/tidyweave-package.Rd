@@ -4,81 +4,71 @@
 \name{tidyweave-package}
 \alias{tidyweave}
 \alias{tidyweave-package}
-\title{tidyweave: reusable data products with optional infrastructure}
+\title{tidyweave: modular checked data products}
 \description{
-Name the table you want, add its inputs and run it. Preparation uses ordinary
-R functions; contracts, quality rules and destinations are optional additions.
-A product is a definition. A run result describes one execution. \code{\link[=collect]{collect()}}
-returns an ordinary table for further analysis.
+Compose reusable product specifications, preparation recipes and execution
+workflows. Definitions are connection-free R values. Executions return
+results with data references, quality outcomes and lineage.
 }
-\section{Start here}{
+\section{Product specifications}{
 
-\code{\link[=product]{product()}}, \code{\link[=trial]{trial()}} and \code{\link[=collect]{collect()}} form the first in-memory workflow.
-Add \code{\link[=add_contract]{add_contract()}} or \code{\link[=add_quality]{add_quality()}} to state what acceptable data means.
-\code{\link[=trial]{trial()}} disables configured framework writers; \code{\link[=run]{run()}} executes them.
-Use \code{\link[=publish]{publish()}} to save checked data. It does not make data public online.
-}
-
-\section{Learn in five steps}{
-
-Begin with \code{vignette("get-started")}. Each lesson runs independently:
-\itemize{
-\item \code{vignette("first-product")}: prepare and try a table.
-\item \code{vignette("check-delivery")}: find a bad row and correct it.
-\item \code{vignette("publish-data")}: save a delivery and retain its earlier version.
-\item \code{vignette("save-report")}: save values and read them without recalculating.
-\item \code{vignette("getting-started")}: complete-month deliveries and corrections.
-}
+\code{\link[=tw_product]{tw_product()}} defines output identity. Add a \code{\link[=tw_contract]{tw_contract()}} for schema and
+keys and \code{\link[=tw_quality_rule]{tw_quality_rule()}} specifications for value requirements using
+\code{\link[=tw_add_contract]{tw_add_contract()}} and \code{\link[=tw_add_quality]{tw_add_quality()}}. Requirements apply to prepared
+output. See \code{vignette("first-product")}.
 }
 
-\section{Find a task or solve a problem}{
+\section{Preparation recipes}{
 
-\code{vignette("learn")} groups advanced guides by task.
-\code{vignette("troubleshooting")} starts from symptoms.
-\code{vignette("glossary")} explains terms as you encounter them.
-Saved reports contain values and evidence, not rendered PDF or slide files.
+\code{\link[=tw_recipe]{tw_recipe()}} stores ordered, deferred \code{\link[=tw_step_mutate]{tw_step_mutate()}} and other preparation
+steps. Reuse a recipe across products. \code{\link[=tw_step_transform]{tw_step_transform()}} accepts an
+ordinary function or adapter; \code{\link[=tw_step_lookup]{tw_step_lookup()}} adds a checked relationship.
+\code{\link[=tw_set_engine]{tw_set_engine()}} chooses a supported quality or relationship implementation.
+Recipes have no fitted training state. See \code{vignette("preparation-recipes")}
+and \code{vignette("engines")}.
 }
 
-\section{Optional capabilities}{
+\section{Workflow assembly}{
 
-DBI and Arrow sources support lazy work where their backends permit it.
-pointblank and dbt keep their specialist execution semantics. Targets choose
-persistence: a lake keeps immutable releases; a database table, Parquet file
-or pin has its adapter's documented guarantees. \code{\link[=run_history]{run_history()}} reads optional
-durable execution evidence. Catalog adapters deliver descriptive metadata
-separately from data publication. \code{\link[=as_targets]{as_targets()}} and \code{\link[=init_project]{init_project()}} connect
-definitions to established project and orchestration tools.
+Start with \code{\link[=tw_workflow]{tw_workflow()}}, then \code{\link[=tw_add_product]{tw_add_product()}} and \code{\link[=tw_add_recipe]{tw_add_recipe()}}.
+Update, remove or extract each component independently. Add a source or bind
+\verb{data =} at execution. Use \code{\link[=tw_inspect]{tw_inspect()}} and \code{\link[=tw_plan]{tw_plan()}} without reading data.
+See \code{vignette("modular-workflows")}.
 }
 
-\section{Why this architecture}{
+\section{Execution and results}{
 
-Readable verbs and familiar R objects keep the user interface small. Internal
-normalization, specifications, preflight and S3 adapters make implementations
-interchangeable. The structure draws on tidymodels without exposing modeling
-APIs. There is no required platform object or catalog service.
+\code{\link[=tw_trial]{tw_trial()}} prepares and checks a delivery with framework writers disabled.
+\code{\link[=tw_run]{tw_run()}} executes configured writers; \code{\link[=tw_publish]{tw_publish()}} saves checked output.
+\code{\link[=tw_collect]{tw_collect()}} returns usable data. \code{\link[=tw_status]{tw_status()}}, \code{\link[=tw_quality_report]{tw_quality_report()}} and
+\code{\link[=tw_lineage]{tw_lineage()}} explain the attempt. Lake results identify immutable releases;
+other targets retain their own persistence guarantees.
 }
 
-\section{Boundaries}{
+\section{Learn more}{
 
-Caller-supplied connections stay caller-owned; keep them open for lazy results.
-Factory-backed DBI sources materialize before closing their owned connections.
-Local file lakes and evidence directories need one coordinated writer.
-PostgreSQL catalogs coordinate package writes through advisory locks. External catalog
-delivery is not part of a data transaction. No scheduler, streaming engine,
-distributed transaction system or enterprise authentication system is provided.
-Public interfaces remain experimental until the first stable release candidate.
+Begin with \code{vignette("get-started")}. \code{vignette("learn")} groups task guides,
+integrations and case studies. \code{vignette("api-migration")} explains the
+prefixed API and extension methods. All public tidyweave functions start
+with \code{tw_}; ordinary dplyr methods remain available through dplyr.
+}
+
+\section{Extend and operate}{
+
+Public S3 protocols support sources, transformations, quality engines,
+targets and catalogs. See \code{vignette("extending-tidyweave")}. Caller-supplied
+connections remain caller-owned. Local lake writes need one coordinated
+writer; PostgreSQL catalogs coordinate package writes through advisory locks.
+Catalog delivery is outside the data transaction. Scheduling, report rendering
+and access management remain with existing tools. Interfaces are experimental
+until the first stable release candidate.
 }
 
 \seealso{
-\code{\link[=inspect]{inspect()}}, \code{\link[=capabilities]{capabilities()}}, \code{\link[=source_database]{source_database()}}, \code{\link[=target_lake]{target_lake()}}
+\code{\link[=tw_product]{tw_product()}}, \code{\link[=tw_recipe]{tw_recipe()}}, \code{\link[=tw_workflow]{tw_workflow()}}
 }
 \author{
 \strong{Maintainer}: Jan-Hendrik Weinert \email{65009403+JanWein@users.noreply.github.com}
-
-Authors:
-\itemize{
-  \item Jan-Hendrik Weinert \email{65009403+JanWein@users.noreply.github.com}
-}
 
 }
 \keyword{internal}

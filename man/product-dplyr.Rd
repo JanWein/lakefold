@@ -2,7 +2,6 @@
 % Please edit documentation in R/dplyr-product.R
 \name{product-dplyr}
 \alias{product-dplyr}
-\alias{filter}
 \alias{mutate.tw_product}
 \alias{filter.tw_product}
 \alias{select.tw_product}
@@ -16,8 +15,6 @@
 \alias{count.tw_product}
 \title{Use dplyr verbs in a product definition}
 \usage{
-filter(.data, ..., .by = NULL, .preserve = FALSE)
-
 \method{mutate}{tw_product}(.data, ...)
 
 \method{filter}{tw_product}(.data, ..., .by = NULL, .preserve = FALSE)
@@ -53,7 +50,7 @@ An updated product definition.
 \description{
 Ordinary dplyr verbs append deferred transformations to a product. They use
 the same data masking, tidy selection and grouping rules as dplyr on the
-acquired table. Nothing is read until \code{\link[=run]{run()}} or \code{\link[=publish]{publish()}}.
+acquired table. Nothing is read until \code{\link[=tw_run]{tw_run()}} or \code{\link[=tw_publish]{tw_publish()}}.
 }
 \details{
 Expressions retain their R environments. Inspection records expressions,
@@ -62,16 +59,16 @@ a later run: use an explicit \code{code_version} when enabling lake caching, and
 an explicit targets cue for dynamic environment or external state. To freeze
 a small value in an expression, inject it with \verb{!!}.
 
-Use \code{\link[=add_transform]{add_transform()}} for other functions. Multiple primary sources must
-first be combined by a transformation; \code{\link[=add_lookup]{add_lookup()}} adds a checked
+Use \code{\link[=tw_add_transform]{tw_add_transform()}} for other functions. Multiple primary sources must
+first be combined by a transformation; \code{\link[=tw_add_lookup]{tw_add_lookup()}} adds a checked
 auxiliary source without changing the primary table.
 \code{left_join()} on a product gives guidance rather than guessing relationship
-rules. Use \code{add_lookup(reference, by = ..., name = "reference")} for checked
-enrichment, or join ordinary tables inside \code{add_transform()} for other joins.
+rules. Use \code{tw_add_lookup(reference, by = ..., name = "reference")} for checked
+enrichment, or join ordinary tables inside \code{tw_add_transform()} for other joins.
 }
 \examples{
-orders <- product("orders", data.frame(group = c("a", "a"), amount = c(10, 20))) |>
+orders <- tw_product("orders", data.frame(group = c("a", "a"), amount = c(10, 20))) |>
   dplyr::mutate(tax = amount * 0.2) |>
   dplyr::summarise(total = sum(amount), .by = group)
-orders |> run() |> collect()
+orders |> tw_run() |> tw_collect()
 }

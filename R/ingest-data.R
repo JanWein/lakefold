@@ -3,24 +3,24 @@
 #' Use after reading Excel or fetching an API response with existing R tools.
 #' Stores an RDS snapshot in landing, then uses the standard ingestion pipeline.
 #' This records the received R object, not the original response or workbook.
-#' Use [source_file()] to preserve those original files.
-#' @param lake Connected lake or [lake_config()].
+#' Use [tw_source_file()] to preserve those original files.
+#' @param lake Connected lake or [tw_lake_config()].
 #' @param data Data frame already in R memory.
 #' @param contract Final candidate contract.
 #' @param asset Governed output asset ID.
 #' @param code_version Version of preparation code and dependencies.
 #' @param version Ingestion and source definition version.
 #' @param input_contract Optional contract to check before writing Raw.
-#' @param ... Arguments forwarded to `tw_ingest()`, such as business_date,
+#' @param ... Arguments forwarded to `pipeline_ingest()`, such as business_date,
 #'   layer, notify and stop_on_failure.
 #' @returns A tw_run_result. Identical data and definitions can reuse a release.
 #'   Connections opened here are closed on exit.
 #' @examples
 #' root <- tempfile("tidyweave-")
-#' config <- lake_config(registry_duckdb(file.path(root, "lake.db")),
-#'   storage_local(file.path(root, "data")),
+#' config <- tw_lake_config(tw_registry_duckdb(file.path(root, "lake.db")),
+#'   tw_storage_local(file.path(root, "data")),
 #'   landing = file.path(root, "landing"), backend = "duckdb")
-#' contract <- contract("orders", "1", "Analytics", "Orders", "One order",
+#' contract <- tw_contract("orders", "1", "Analytics", "Orders", "One order",
 #'   c(id = "integer"), key = "id")
 #' tw_ingest_data(config, data.frame(id = 1:3), contract, "orders",
 #'   code_version = "v1", input_contract = contract)
@@ -54,7 +54,7 @@ tw_ingest_data <- function(
     writeLines(jencode(writer_identity()), file.path(slot, "writer.json"))
     path <- file.path(slot, "delivery.rds")
     saveRDS(as.data.frame(data), path, compress = FALSE, version = 3)
-    source <- source_file(
+    source <- tw_source_file(
       paste0(asset, ".data"),
       path,
       reader = readRDS,
@@ -62,7 +62,7 @@ tw_ingest_data <- function(
       owner = contract$owner,
       description = "Snapshot of an R data frame; original transport is external."
     )
-    tw_ingest(
+    pipeline_ingest(
       con,
       source,
       contract,

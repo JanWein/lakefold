@@ -2,14 +2,14 @@
 #'
 #' Run `metadata ingest -c` using the separately installed OpenMetadata ingestion
 #' CLI. OpenMetadata interprets models, tests, descriptions, tags and SQL lineage;
-#' tidyweave supplies verified artifacts from one [dbt_build()] or [dbt_test()]
+#' tidyweave supplies verified artifacts from one [tw_dbt_build()] or [tw_dbt_test()]
 #' invocation. No data rows or database connections are transferred by this
 #' adapter. The database service and its table inventory must already exist in
 #' OpenMetadata. Refresh database ingestion after creating new physical RAW
 #' release relations or dbt models; the dbt engine enriches existing table
 #' entities and can omit lineage edges when a table cannot be found.
 #' `delivered` means the CLI returned zero, not that every intended graph edge
-#' was verified. This is separate from [catalog_openmetadata()], which publishes
+#' was verified. This is separate from [tw_catalog_openmetadata()], which publishes
 #' ordinary product table metadata over HTTP.
 #'
 #' Install `openmetadata-ingestion[dbt]` in a separate Python environment and
@@ -29,11 +29,11 @@
 #' tidyweave release was published. Both successful and failed dbt invocations
 #' can supply valid metadata. Delivery errors return `pending` with a warning;
 #' invalid or changed artifacts return `blocked` without starting the CLI.
-#' Retry with `publish_metadata(adapter, result)`. A small credential-free
+#' Retry with `tw_publish_metadata(adapter, result)`. A small credential-free
 #' receipt beside the original artifacts records attempts across R sessions;
 #' an already delivered invocation is not sent again. Use one coordinated writer
 #' per artifact directory. After refreshing missing table inventory, explicitly
-#' redeliver with `publish_metadata(adapter, result, force = TRUE)`.
+#' redeliver with `tw_publish_metadata(adapter, result, force = TRUE)`.
 #' An interruption after remote ingestion but before
 #' the receipt is saved can cause a repeated delivery: this is at-least-once,
 #' not an exactly-once transaction.
@@ -49,22 +49,22 @@
 #'   `searchAcrossDatabases`, `overrideLineage` (logical),
 #'   `dbtClassificationName` (string), and `parsingTimeoutLimit` (positive integer).
 #'   Credentials, artifact paths and arbitrary CLI flags are not accepted here.
-#' @returns A catalog adapter for the `catalog` argument of [dbt_build()] and
-#'   [dbt_test()]. `publish_metadata(adapter, result)` returns a delivery list
+#' @returns A catalog adapter for the `catalog` argument of [tw_dbt_build()] and
+#'   [tw_dbt_test()]. `tw_publish_metadata(adapter, result)` returns a delivery list
 #'   with `status`, `destination`, `invocation_id`, `attempt`, timestamps,
 #'   `exit_status`, `error_class`, `message` and `recorded`. It never changes
 #'   the dbt result's `success` or `status` fields.
-#' @seealso [dbt_status()], [dbt_publish()]
+#' @seealso [tw_dbt_status()], [tw_dbt_publish()]
 #' @export
 #' @examples
-#' catalog <- catalog_openmetadata_dbt(
+#' catalog <- tw_catalog_openmetadata_dbt(
 #'   "https://metadata.example", service = "warehouse"
 #' )
-#' inspect(catalog)
+#' tw_inspect(catalog)
 #' # After configuring the external service, CLI and token environment:
-#' # result <- dbt_build(project, catalog = catalog, stop_on_failure = FALSE)
-#' # delivery <- publish_metadata(catalog, result)
-catalog_openmetadata_dbt <- function(
+#' # result <- tw_dbt_build(project, catalog = catalog, stop_on_failure = FALSE)
+#' # delivery <- tw_publish_metadata(catalog, result)
+tw_catalog_openmetadata_dbt <- function(
   endpoint,
   service,
   token_env = "OPENMETADATA_JWT_TOKEN",
@@ -153,7 +153,7 @@ dbt_catalog_options <- function(options) {
 }
 
 #' @export
-inspect.tw_openmetadata_dbt_catalog <- function(x, ...) {
+tw_inspect.tw_openmetadata_dbt_catalog <- function(x, ...) {
   list(
     type = "OpenMetadata dbt ingestion",
     id = x$id,
@@ -166,7 +166,7 @@ inspect.tw_openmetadata_dbt_catalog <- function(x, ...) {
 }
 
 #' @export
-capabilities.tw_openmetadata_dbt_catalog <- function(x, ...) {
+tw_capabilities.tw_openmetadata_dbt_catalog <- function(x, ...) {
   result <- catalog_capabilities("OpenMetadata dbt ingestion")
   result$statuses <- c("dbt_success", "dbt_failed")
   result$metadata_inputs <- "tw_dbt_result"
@@ -174,7 +174,7 @@ capabilities.tw_openmetadata_dbt_catalog <- function(x, ...) {
 }
 
 #' @export
-check_component.tw_openmetadata_dbt_catalog <- function(x, ...) {
+tw_check_component.tw_openmetadata_dbt_catalog <- function(x, ...) {
   need("processx")
   if (!nzchar(Sys.which(x$executable)) && !file.exists(x$executable)) {
     abort(
@@ -192,7 +192,7 @@ check_component.tw_openmetadata_dbt_catalog <- function(x, ...) {
 }
 
 #' @export
-publish_metadata.tw_openmetadata_dbt_catalog <- function(
+tw_publish_metadata.tw_openmetadata_dbt_catalog <- function(
   catalog,
   metadata,
   ...,
@@ -201,7 +201,7 @@ publish_metadata.tw_openmetadata_dbt_catalog <- function(
   flag(force, "force")
   if (!inherits(metadata, "tw_dbt_result")) {
     abort(
-      "Use this adapter with dbt_build(catalog = ...), dbt_test(catalog = ...), or publish_metadata(adapter, dbt_result).",
+      "Use this adapter with tw_dbt_build(catalog = ...), tw_dbt_test(catalog = ...), or tw_publish_metadata(adapter, dbt_result).",
       "tw_dbt_catalog_invalid"
     )
   }
@@ -247,10 +247,10 @@ publish_metadata.tw_openmetadata_dbt_catalog <- function(
     }
     delivery$message <- switch(
       delivery$error_class,
-      tw_dbt_catalog_unavailable = "OpenMetadata CLI is unavailable. Install openmetadata-ingestion[dbt] >= 2.0.0.0 matching the server and set executable; retry publish_metadata(adapter, result).",
-      tw_dbt_catalog_credentials = "OpenMetadata authentication is not configured. Set the environment variable named by token_env and retry publish_metadata(adapter, result).",
+      tw_dbt_catalog_unavailable = "OpenMetadata CLI is unavailable. Install openmetadata-ingestion[dbt] >= 2.0.0.0 matching the server and set executable; retry tw_publish_metadata(adapter, result).",
+      tw_dbt_catalog_credentials = "OpenMetadata authentication is not configured. Set the environment variable named by token_env and retry tw_publish_metadata(adapter, result).",
       tw_dbt_artifact_invalid = "Metadata delivery blocked: artifacts changed while preparing the ingestion. Restore the original artifacts before retrying.",
-      "OpenMetadata ingestion could not finish. Check CLI availability, timeout and server connectivity, then retry publish_metadata(adapter, result)."
+      "OpenMetadata ingestion could not finish. Check CLI availability, timeout and server connectivity, then retry tw_publish_metadata(adapter, result)."
     )
     if (delivery$error_class == "tw_dbt_artifact_invalid") {
       delivery$status <- "blocked"
@@ -261,7 +261,7 @@ publish_metadata.tw_openmetadata_dbt_catalog <- function(
       delivery$status <- "delivered"
     } else {
       delivery$error_class <- "tw_dbt_catalog_exit"
-      delivery$message <- "OpenMetadata ingestion returned a nonzero exit status. Check engine/server versions, authentication and the existing database service, then retry publish_metadata(adapter, result)."
+      delivery$message <- "OpenMetadata ingestion returned a nonzero exit status. Check engine/server versions, authentication and the existing database service, then retry tw_publish_metadata(adapter, result)."
     }
   }
   delivery$finished_at <- now()
@@ -386,7 +386,7 @@ dbt_catalog_config <- function(catalog, path, files) {
 }
 
 dbt_catalog_ingest <- function(catalog, result) {
-  check_component(catalog)
+  tw_check_component(catalog)
   temporary <- tempfile("tidyweave-dbt-metadata-")
   if (!dir.create(temporary, mode = "0700")) {
     abort("Could not create the ingestion directory.")

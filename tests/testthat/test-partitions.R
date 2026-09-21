@@ -3,31 +3,31 @@ test_that("partition replacement retains other periods and validates global keys
   on.exit(fixture_cleanup(f))
   f$pipeline$steps$publish$mode <- "replace_partition"
   f$pipeline$steps$publish$partition_by <- "date"
-  a <- run(f$pipeline, f$lake)
+  a <- tw_run(f$pipeline, f$lake)
   sep <- f$good
   sep$date <- as.Date("2026-09-30")
   sep$reserve <- c(400, 500)
   f$write(sep)
-  b <- run(f$pipeline, f$lake)
-  expect_equal(nrow(dplyr::collect(tbl(f$lake, "risk.validated"))), 4)
+  b <- tw_run(f$pipeline, f$lake)
+  expect_equal(nrow(dplyr::collect(tw_tbl(f$lake, "risk.validated"))), 4)
   fixed <- f$good
   fixed$reserve <- c(150, 250)
   f$write(fixed)
-  run(f$pipeline, f$lake)
-  current <- dplyr::collect(tbl(f$lake, "risk.validated"))
+  tw_run(f$pipeline, f$lake)
+  current <- dplyr::collect(tw_tbl(f$lake, "risk.validated"))
   expect_equal(nrow(current), 4)
   expect_equal(sum(current$reserve), 1300)
   expect_equal(
-    nrow(dplyr::collect(tbl(f$lake, "risk.validated", a$release_id))),
+    nrow(dplyr::collect(tw_tbl(f$lake, "risk.validated", a$release_id))),
     2
   )
   expect_equal(
-    sum(dplyr::collect(tbl(f$lake, "risk.validated", b$release_id))$reserve),
+    sum(dplyr::collect(tw_tbl(f$lake, "risk.validated", b$release_id))$reserve),
     1200
   )
   f$write(f$good[0, ])
   expect_equal(
-    run(f$pipeline, f$lake, stop_on_failure = FALSE)$status,
+    tw_run(f$pipeline, f$lake, stop_on_failure = FALSE)$status,
     "error"
   )
 })
@@ -35,12 +35,12 @@ test_that("partition replacement retains other periods and validates global keys
 test_that("publication transaction rolls back release and successful run together", {
   f <- fixture()
   on.exit(fixture_cleanup(f))
-  first <- run(f$pipeline, f$lake)
+  first <- tw_run(f$pipeline, f$lake)
   run <- tidyweave:::new_run(f$lake, "test", "risk.validated", "d", "v")
   raw <- tidyweave:::materialize(f$lake, f$good, "raw", "rollback_raw")
   pub <- f$pipeline$steps$publish
   candidate <- tidyweave:::compose_candidate(f$lake, raw, pub, run)
-  quality <- validate(candidate$data, f$contract)
+  quality <- tw_validate(candidate$data, f$contract)
   expect_error(
     tidyweave:::publish_candidate(
       f$lake,
@@ -57,12 +57,12 @@ test_that("publication transaction rolls back release and successful run togethe
     ),
     "simulated crash"
   )
-  expect_equal(nrow(registry(f$lake, "releases")), 1)
+  expect_equal(nrow(tw_registry(f$lake, "releases")), 1)
   expect_equal(
-    registry(f$lake, "runs")$status[
-      registry(f$lake, "runs")$run_id == run
+    tw_registry(f$lake, "runs")$status[
+      tw_registry(f$lake, "runs")$run_id == run
     ],
     "running"
   )
-  expect_equal(run(f$pipeline, f$lake)$release_id, first$release_id)
+  expect_equal(tw_run(f$pipeline, f$lake)$release_id, first$release_id)
 })

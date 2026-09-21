@@ -21,19 +21,19 @@
 #' @param id,version Identifier and definition version. At least one must differ
 #'   from `x`; version ordering is not inferred.
 #' @param columns Named type vector or zero-length prototypes to add or replace,
-#'   as in [contract()]. Omit to retain the declared types.
+#'   as in [tw_contract()]. Omit to retain the declared types.
 #' @param remove Character vector of declared column names to remove.
-#' @param ... Other named arguments of [contract()] to replace in full, such as
+#' @param ... Other named arguments of [tw_contract()] to replace in full, such as
 #'   `required`, `key`, `grain`, `rules`, `owner` or `column_metadata`.
-#' @returns A new `tw_contract` specification. Use [contract_diff()] to review it.
-#' @seealso [contract()], [contract_diff()]
+#' @returns A new `contract` specification. Use [tw_contract_diff()] to review it.
+#' @seealso [tw_contract()], [tw_contract_diff()]
 #' @export
 #' @examples
-#' orders <- contract("orders", columns = c(id = "integer"), key = "id")
+#' orders <- tw_contract("orders", columns = c(id = "integer"), key = "id")
 #' enriched <- orders |>
-#'   contract_update(id = "enriched_orders", columns = c(channel = "character"))
-#' contract_diff(orders, enriched)
-contract_update <- function(
+#'   tw_contract_update(id = "enriched_orders", columns = c(channel = "character"))
+#' tw_contract_diff(orders, enriched)
+tw_contract_update <- function(
   x,
   id = x$id,
   version = x$version,
@@ -59,7 +59,7 @@ contract_update <- function(
         !all(
           names(changes) %in%
             setdiff(
-              names(formals(contract)),
+              names(formals(tw_contract)),
               c(
                 "id",
                 "version",
@@ -78,7 +78,7 @@ contract_update <- function(
   additions <- if (is.null(columns)) {
     list()
   } else {
-    contract(columns = columns)$columns
+    tw_contract(columns = columns)$columns
   }
   if (length(intersect(names(additions), remove))) {
     abort("A column cannot be both added and removed.")
@@ -132,5 +132,5 @@ contract_update <- function(
     args$column_metadata[remove] <- NULL
   }
   args[names(changes)] <- changes
-  do.call(contract, args)
+  do.call(tw_contract, args)
 }

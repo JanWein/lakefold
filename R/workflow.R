@@ -12,14 +12,14 @@
 #' @param id Unique step identifier within this pipeline.
 #' @return An updated pipeline specification.
 #' @examples
-#' pipeline <- tw_pipeline("orders.import", lake_config(backend = "duckdb"),
+#' pipeline <- tw_pipeline("orders.import", tw_lake_config(backend = "duckdb"),
 #'   code_version = "v1") |>
-#'   tw_step_land(source_file("orders.file", "orders.csv", utils::read.csv)) |>
+#'   tw_step_land(tw_source_file("orders.file", "orders.csv", utils::read.csv)) |>
 #'   tw_step_extract() |>
-#'   tw_step_transform(function(data) dplyr::filter(data, amount > 0), "positive")
-#' plan(pipeline)
+#'   pipeline_step_transform(function(data) dplyr::filter(data, amount > 0), "positive")
+#' tw_plan(pipeline)
 #' @noRd
-tw_step_transform <- function(pipeline, transform, id) {
+pipeline_step_transform <- function(pipeline, transform, id) {
   if (!inherits(pipeline, "tw_pipeline")) {
     abort("Use tw_pipeline() first.")
   }
@@ -60,11 +60,11 @@ tw_step_transform <- function(pipeline, transform, id) {
 #'   The `complete` attribute reports whether structural validation succeeds.
 #' @export
 #' @examples
-#' product("orders") |>
-#'   add_source(data.frame(id = 1:2)) |>
-#'   add_transform(function(data) dplyr::filter(data, id > 1)) |>
-#'   plan()
-plan <- function(pipeline) {
+#' tw_product("orders") |>
+#'   tw_add_source(data.frame(id = 1:2)) |>
+#'   tw_add_transform(function(data) dplyr::filter(data, id > 1)) |>
+#'   tw_plan()
+tw_plan <- function(pipeline) {
   if (inherits(pipeline, "tw_product_workflow")) {
     return(product_plan(compile_product_workflow(pipeline)))
   }
@@ -125,10 +125,10 @@ plan <- function(pipeline) {
 #'   object-first API
 #'
 #' Internal dispatch for legacy lake pipelines, metrics and dbt projects.
-#' The public entry point is [run()]. A connection opened here is closed on
+#' The public entry point is [tw_run()]. A connection opened here is closed on
 #' exit; an existing connection remains owned by its caller.
 #' @param object Pipeline, composed or derived product, metric or dbt project
-#'   specification. Composed products use [run()] as the shorter equivalent.
+#'   specification. Composed products use [tw_run()] as the shorter equivalent.
 #' @param lake Connected lake or lake_config. NULL uses a pipeline's stored
 #'   config.
 #' @param ... Arguments forwarded to the underlying execution function.
@@ -137,17 +137,17 @@ plan <- function(pipeline) {
 #'   operation.
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
 #' root <- tempfile("tidyweave-example-")
-#' config <- lake_config(
-#'   registry_duckdb(file.path(root, "lake.db")),
-#'   storage_local(file.path(root, "data")),
+#' config <- tw_lake_config(
+#'   tw_registry_duckdb(file.path(root, "lake.db")),
+#'   tw_storage_local(file.path(root, "data")),
 #'   landing = file.path(root, "landing"), backend = "duckdb"
 #' )
-#' lake <- connect_lake(config)
+#' lake <- tw_connect_lake(config)
 #' path <- file.path(root, "orders.csv")
 #' utils::write.csv(data.frame(order_id = 1:2, amount = c(25, 75)), path,
 #'   row.names = FALSE)
-#' source <- source_file("orders.file", path, reader = utils::read.csv)
-#' contract <- contract(
+#' source <- tw_source_file("orders.file", path, reader = utils::read.csv)
+#' contract <- tw_contract(
 #'   "orders", "1.0.0", "Analytics", "Order amounts", "One order",
 #'   c(order_id = "integer", amount = "numeric"), key = "order_id"
 #' )
@@ -157,7 +157,7 @@ plan <- function(pipeline) {
 #'   tw_step_validate(contract) |>
 #'   tw_step_publish("orders")
 #' tw_execute(pipeline, lake)
-#' disconnect_lake(lake)
+#' tw_disconnect_lake(lake)
 #' unlink(root, recursive = TRUE)
 #' @noRd
 tw_execute <- function(object, lake = NULL, ...) UseMethod("tw_execute")
@@ -166,24 +166,24 @@ tw_execute <- function(object, lake = NULL, ...) UseMethod("tw_execute")
 tw_execute.tw_pipeline <- function(object, lake = NULL, ...) {
   with_execution_lake(
     lake,
-    function(con) run(object, con, ...),
+    function(con) tw_run(object, con, ...),
     allow_null = TRUE
   )
 }
 #' @export
 #' @noRd
 tw_execute.tw_metric <- function(object, lake = NULL, ...) {
-  with_execution_lake(lake, function(con) measure(con, object, ...))
+  with_execution_lake(lake, function(con) tw_measure(con, object, ...))
 }
 #' @export
 #' @noRd
 tw_execute.default <- function(object, lake = NULL, ...) {
-  abort("run() supports products, metrics and dbt projects.")
+  abort("tw_run() supports products, metrics and dbt projects.")
 }
 with_execution_lake <- function(lake, fn, allow_null = FALSE) {
   if (inherits(lake, "tw_config")) {
-    lake <- connect_lake(lake)
-    on.exit(disconnect_lake(lake), add = TRUE)
+    lake <- tw_connect_lake(lake)
+    on.exit(tw_disconnect_lake(lake), add = TRUE)
   }
   if (is.null(lake) && allow_null) {
     return(fn(NULL))
@@ -209,7 +209,7 @@ print.tw_config <- function(x, ...) {
 #' @export
 print.tw_pipeline <- function(x, ...) {
   cat("<tw_pipeline>", x$id, "@", x$version, "| code:", x$code_version, "\n")
-  plan <- plan(x)
+  plan <- tw_plan(x)
   print(plan)
   cat(
     if (isTRUE(attr(plan, "complete"))) {

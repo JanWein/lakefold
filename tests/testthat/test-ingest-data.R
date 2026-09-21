@@ -22,7 +22,7 @@ test_that("frame ingestion retains types, gates input and caches identical deliv
   expect_equal(first$status, "published")
   expect_equal(second$status, "cached")
   expect_equal(second$release_id, first$release_id)
-  expect_equal(dplyr::collect(tbl(f$lake, "risk.frame"))$date, f$good$date)
+  expect_equal(dplyr::collect(tw_tbl(f$lake, "risk.frame"))$date, f$good$date)
   expect_equal(
     dir.exists(file.path(
       f$lake$config$landing,
