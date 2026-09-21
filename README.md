@@ -17,7 +17,7 @@ remotes::install_github("JanWein/tidyweave")
 
 ## Try your first product
 
-A product is a reusable set of instructions for a named table.
+A table product is a reusable set of instructions for a named table.
 
 ```r
 library(tidyweave)
@@ -34,6 +34,10 @@ collect(result)
 This returns the three checked rows, totalling **150**. `trial()` tries the
 instructions without writing a publication; `collect()` returns an ordinary
 tibble. No database or service is needed.
+
+For related tables, a model product keeps the dm relationships and publishes
+one consistent model. The [cancellation report](https://janwein.github.io/tidyweave/articles/cancellation-report.html)
+shows reusable contracts, model products and corrected reports.
 
 ## Learn tidyweave
 
