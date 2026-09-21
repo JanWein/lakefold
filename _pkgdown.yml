@@ -35,7 +35,7 @@ reference:
 articles:
   - title: Start here
     navbar: Start here
-    contents: [why-tidyweave, everyday-workflows, composing-products]
+    contents: [why-tidyweave, everyday-workflows, create-ducklake, composing-products]
   - title: Add capabilities
     navbar: Guides
     contents: [getting-started, layered-data-stack, relational-insurance, optional-integrations, quality-gates, quality-history, products-metrics, dbt-workflows]

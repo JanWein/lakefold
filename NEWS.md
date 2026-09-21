@@ -1,5 +1,18 @@
 # tidyweave 0.12.0.9000
 
+* Local lake folders now preserve their ordered layers and named layer roles
+  together with the backend. Reopening no longer adds default layers or rejects
+  publication into an originally configured layer. Conflicting settings fail
+  before connecting. Older custom folders require their original layers once;
+  read-only opens never rewrite the configuration.
+  New and upgraded folders use configuration format 2; older tidyweave versions
+  reject this format instead of silently forgetting the layer settings.
+* `open_lake()` accepts `layers` and `install_extensions`, keeping creation and
+  reopening on the same entry point. A DuckLake setup tutorial walks through
+  initial publication, reopening and another delivery.
+* `setup_lake(path = )` accepts the same self-contained local folders as
+  `open_lake()` and `lake_config(path = )`.
+
 * `compare(first, second)` compares exact publication results and manages its
   own read-only connection.
 * `measure()` accepts successful in-memory trials using the same metric
