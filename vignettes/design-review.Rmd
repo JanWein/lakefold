@@ -1,26 +1,34 @@
 ---
-title: "Architecture review and development priorities"
+title: "Development record"
+description: "Historical design decisions and the scope of recorded verification."
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Architecture review and development priorities}
+  %\VignetteIndexEntry{Development record}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
 
-The 0.11 development refactor keeps one product representation and ordinary
-dplyr expressions while removing repeated execution choices, contract fields,
-measurement calls and correction bookkeeping. Execution defaults, contract
-composition and source replacement are ordinary explicit operations. Batch
-measurements keep pinned evidence and expose tidy values. Infrastructure remains
-optional, and business keys, time semantics and report issuance remain explicit.
+This page is for contributors inspecting earlier decisions. It is not a setup
+guide and is not evidence that every environment has been tested.
 
-Read the maintained documents for different questions:
+For current usage, use [Get started](get-started.html) and the
+[function reference](../reference/index.html). For current architectural
+responsibilities, read [Architecture](workflow-design.html).
 
-- [Why this architecture](workflow-design.html): mental model and responsibilities.
-- [Critical architecture review](https://github.com/JanWein/tidyweave/blob/main/docs/REFACTOR_REVIEW.md): findings, decisions and remaining weaknesses.
-- [Modern data stack and Ab Initio comparison](https://github.com/JanWein/tidyweave/blob/main/docs/MODERN_DATA_STACK.md): requirements, delivered scope and gaps.
-- [Validation record](https://github.com/JanWein/tidyweave/blob/main/docs/VALIDATION.md): what was actually exercised and its limits.
+## Read records in their context
 
-The package is still in development. Compatibility guarantees begin with the
-first stable release candidate. Current design changes favor a smaller coherent
-API over preserving experimental interfaces.
+- [Architecture review](https://github.com/JanWein/tidyweave/blob/main/docs/REFACTOR_REVIEW.md)
+  records the 0.10 to 0.11 transition. Some findings have since been addressed.
+- [Capability assessment](https://github.com/JanWein/tidyweave/blob/main/docs/MODERN_DATA_STACK.md)
+  compares implemented components with platform requirements; it is not an operational certification.
+- [Validation record](https://github.com/JanWein/tidyweave/blob/main/docs/VALIDATION.md)
+  describes specific versions and environments. Consult CI for the commit you use.
+- [DuckLake usability test](https://github.com/JanWein/tidyweave/blob/main/docs/DUCKLAKE_USER_TEST.md)
+  records an executed local simulation, not an independent human study.
+- [Documentation review](https://github.com/JanWein/tidyweave/blob/main/docs/DOCUMENTATION_REVIEW.md)
+  explains the learning structure and how to verify it.
+
+The [repository documentation index](https://github.com/JanWein/tidyweave/blob/main/docs/README.md)
+separates active operational notes from historical implementation plans.
+
+[Back to Learn](learn.html)

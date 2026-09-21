@@ -13,22 +13,30 @@ returns an ordinary table for further analysis.
 }
 \section{Start here}{
 
-\code{\link[=product]{product()}}, \code{\link[=add_source]{add_source()}}, \code{\link[=run]{run()}} and \code{\link[=collect]{collect()}} form a complete in-memory
-workflow. Add \code{\link[=add_transform]{add_transform()}}, \code{\link[=add_contract]{add_contract()}} or \code{\link[=add_quality]{add_quality()}} when
-needed. Use \code{\link[=set_target]{set_target()}} to select storage, or \code{\link[=publish]{publish()}} to supply a local
-lake target. Publishing writes checked data to its destination; it does not
-make data public on the internet.
+\code{\link[=product]{product()}}, \code{\link[=trial]{trial()}} and \code{\link[=collect]{collect()}} form the first in-memory workflow.
+Add \code{\link[=add_contract]{add_contract()}} or \code{\link[=add_quality]{add_quality()}} to state what acceptable data means.
+\code{\link[=trial]{trial()}} disables configured framework writers; \code{\link[=run]{run()}} executes them.
+Use \code{\link[=publish]{publish()}} to save checked data. It does not make data public online.
 }
 
-\section{Learn by building}{
+\section{Learn in five steps}{
 
+Begin with \code{vignette("get-started")}. Each lesson runs independently:
 \itemize{
-\item \code{vignette("why-tidyweave")}: the problem and benefits in plain language.
-\item \code{vignette("composing-products")}: a small workflow that grows one step at a time.
-\item \code{vignette("getting-started")}: corrections and reproducible monthly reports.
-\item \code{vignette("workflow-design")}: intent, execution, adapters and ownership.
-\item \code{vignette("extending-tidyweave")}: a runnable S3 extension.
+\item \code{vignette("first-product")}: prepare and try a table.
+\item \code{vignette("check-delivery")}: find a bad row and correct it.
+\item \code{vignette("publish-data")}: save a delivery and retain its earlier version.
+\item \code{vignette("save-report")}: save values and read them without recalculating.
+\item \code{vignette("getting-started")}: complete-month deliveries and corrections.
 }
+}
+
+\section{Find a task or solve a problem}{
+
+\code{vignette("learn")} groups advanced guides by task.
+\code{vignette("troubleshooting")} starts from symptoms.
+\code{vignette("glossary")} explains terms as you encounter them.
+Saved reports contain values and evidence, not rendered PDF or slide files.
 }
 
 \section{Optional capabilities}{

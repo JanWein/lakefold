@@ -1,5 +1,10 @@
 # tidyweave 0.12.0.9000
 
+* Documentation now starts with five ordered, self-contained lessons. Task guides,
+  reference and troubleshooting are separated, with consistent trial, publication
+  and report examples. The complete website and its internal links are checked
+  on pull requests before the main-branch Pages deployment.
+
 * `add_lookup()` retains a stable delivery name, inferred from a bare variable or
   supplied with `name`. `explain()` and printing show these names; corrections
   use them directly in `sources`. Primary `data` and other named replacements

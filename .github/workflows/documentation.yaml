@@ -2,16 +2,18 @@ name: Documentation
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: pages
+  group: documentation-${{ github.ref }}
   cancel-in-progress: false
 jobs:
   documentation:
     runs-on: ubuntu-24.04
     env:
+      TIDYWEAVE_TEST_DUCKLAKE: "true"
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v6
@@ -31,10 +33,19 @@ jobs:
                   download.file.extra = "--retry 3 --retry-all-errors")
           pkgdown::build_site(new_process = FALSE)
         shell: Rscript {0}
+      - name: Check internal documentation links
+        run: python scripts/check-site-links.py site
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'pull_request'
+        with:
+          name: documentation-preview
+          path: site/
       - uses: actions/upload-pages-artifact@v3
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         with:
           path: site/
   deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: documentation
     runs-on: ubuntu-24.04
     permissions:

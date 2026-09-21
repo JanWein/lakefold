@@ -1,5 +1,9 @@
 # Coherent everyday workflows
 
+> Historical development record. Examples and findings describe their original
+> development stage. For current usage, follow [Get started](https://janwein.github.io/tidyweave/articles/get-started.html).
+
+
 Follow-up to PR #11, based on b0e214d. Use the Posit package-development,
 testing and implementation skills. Keep one product representation, genuine
 dplyr evaluation, optional infrastructure, immutable lake releases and explicit

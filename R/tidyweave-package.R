@@ -6,18 +6,24 @@
 #' returns an ordinary table for further analysis.
 #'
 #' @section Start here:
-#' [product()], [add_source()], [run()] and [collect()] form a complete in-memory
-#' workflow. Add [add_transform()], [add_contract()] or [add_quality()] when
-#' needed. Use [set_target()] to select storage, or [publish()] to supply a local
-#' lake target. Publishing writes checked data to its destination; it does not
-#' make data public on the internet.
+#' [product()], [trial()] and [collect()] form the first in-memory workflow.
+#' Add [add_contract()] or [add_quality()] to state what acceptable data means.
+#' [trial()] disables configured framework writers; [run()] executes them.
+#' Use [publish()] to save checked data. It does not make data public online.
 #'
-#' @section Learn by building:
-#' * `vignette("why-tidyweave")`: the problem and benefits in plain language.
-#' * `vignette("composing-products")`: a small workflow that grows one step at a time.
-#' * `vignette("getting-started")`: corrections and reproducible monthly reports.
-#' * `vignette("workflow-design")`: intent, execution, adapters and ownership.
-#' * `vignette("extending-tidyweave")`: a runnable S3 extension.
+#' @section Learn in five steps:
+#' Begin with `vignette("get-started")`. Each lesson runs independently:
+#' * `vignette("first-product")`: prepare and try a table.
+#' * `vignette("check-delivery")`: find a bad row and correct it.
+#' * `vignette("publish-data")`: save a delivery and retain its earlier version.
+#' * `vignette("save-report")`: save values and read them without recalculating.
+#' * `vignette("getting-started")`: complete-month deliveries and corrections.
+#'
+#' @section Find a task or solve a problem:
+#' `vignette("learn")` groups advanced guides by task.
+#' `vignette("troubleshooting")` starts from symptoms.
+#' `vignette("glossary")` explains terms as you encounter them.
+#' Saved reports contain values and evidence, not rendered PDF or slide files.
 #'
 #' @section Optional capabilities:
 #' DBI and Arrow sources support lazy work where their backends permit it.

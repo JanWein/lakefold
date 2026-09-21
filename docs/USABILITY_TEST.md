@@ -41,7 +41,7 @@ Pass criteria:
 | 2 | The full tutorial reached 350, then 380, while preserving both reports. A grouping reminder initially appeared even before invalid calculations; a shared product used twice collided with its inferred name. | Move reminders after successful calculations; share a single delivery name across references to the same product. Keep conflicting definitions rejected. |
 | 3 | Transfer tasks exercise a broker correction, unmatched contract and duplicate payment. A collected report table no longer has issuance evidence. | Keep one correction grammar and add an actionable message directing the user to the original measurement result. |
 
-The canonical tutorial is `vignettes/everyday-workflows.Rmd`; its generated
+The canonical tutorial is `vignettes/three-deliveries.Rmd`; its generated
 download is `inst/examples/everyday_workflows.R`. Run the complete journey and
 transfer cases against an installed package with
 `Rscript scripts/simulate-first-use.R`. Assertions check the numbers, not just

@@ -1,11 +1,15 @@
 ---
-title: "Write an adapter without changing the framework"
+title: "Write an adapter"
+description: "Implement and verify an S3 adapter for a new component."
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Write an adapter without changing the framework}
+  %\VignetteIndexEntry{Write an adapter}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
+
+For package developers. Read [Architecture](workflow-design.html) first.
+The core extension example is self-contained and needs no external service.
 
 ```{r setup, include=FALSE, purl=FALSE}
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>", message = FALSE)
@@ -197,3 +201,6 @@ The [optional integrations guide](optional-integrations.html) demonstrates built
 adapters together. The package tests include independent S3 substitution and built-in adapter
 checks. Real deployment verification still belongs to the integration's owner:
 a local HTTP fixture cannot certify an enterprise catalog or IAM configuration.
+
+
+[Back to Learn](learn.html) · [Troubleshooting](troubleshooting.html)

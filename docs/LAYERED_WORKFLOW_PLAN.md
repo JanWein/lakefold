@@ -1,5 +1,9 @@
 # Layered ingestion and dbt workflow
 
+> Historical development record. Examples and findings describe their original
+> development stage. For current usage, follow [Get started](https://janwein.github.io/tidyweave/articles/get-started.html).
+
+
 Baseline: tidyweave 0.8.0 (`64b2dfa`). This development increment closes the
 specific source → input checks → raw → dbt staging/core/marts → approved release
 → consumers workflow. Integrations remain optional and documentation is English.

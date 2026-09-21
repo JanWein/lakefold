@@ -1,0 +1,54 @@
+---
+title: "Terms you will encounter"
+description: "Plain definitions linked to the first place each concept is needed."
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Terms you will encounter}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+You only need the first three terms to start. The others appear when you add
+checks, storage or reporting.
+
+| Term | Meaning | First use |
+|---|---|---|
+| Product | Reusable instructions for a named table | [Lesson 1](first-product.html) |
+| Result | The outcome and evidence from one execution | [Lesson 1](first-product.html) |
+| Collect | Obtain an ordinary table from a successful result | [Lesson 1](first-product.html) |
+| Contract | Required columns, types, keys and other table promises | [Lesson 2](check-delivery.html) |
+| Quality rule | A test of whether the values are acceptable | [Lesson 2](check-delivery.html) |
+| Target | The destination to which checked output is written | [Lesson 3](publish-data.html) |
+| Lake | A configured store with release history | [Lesson 3](publish-data.html) |
+| Release | One saved, immutable version of a table in a lake | [Lesson 3](publish-data.html) |
+| Pinned input | An exact release, rather than whichever data is current | [Lesson 4](save-report.html) |
+| Metric | A named calculation with defined input and time meaning | [Lesson 4](save-report.html) |
+| Issued report | Saved values and evidence that are read without recalculating | [Lesson 4](save-report.html) |
+| Partition | Rows sharing a field such as reporting date, replaced as a whole | [Lesson 5](getting-started.html) |
+| Stock / flow | A value at one date / an amount over a period | [Lesson 5](getting-started.html) |
+| Layer | A named storage area, such as raw or core | [DuckLake](create-ducklake.html) |
+| Receipt | The received input retained before downstream preparation | [Layered workflow](layered-data-stack.html) |
+| Lineage | Recorded relationships between inputs and outputs | [Quality and history](quality-history.html) |
+| Adapter | A component connecting the workflow to a specific tool | [Integrations](optional-integrations.html) |
+
+## Three execution verbs
+
+| Call | Use it when | Writes? |
+|---|---|---|
+| `trial(product)` | You want to try preparation and checks | Disables configured framework targets and catalogs |
+| `publish(product)` | You intend to save checked output | Yes, to the selected destination |
+| `run(definition)` | You want to execute its full configuration | May write, depending on the configuration |
+
+`trial()` returns a failed result for inspection by default; use
+`stop_on_failure = TRUE` for a strict trial. `run()` and `publish()` stop on
+failure by default. Inspect a failed attempt with `quality_report()` and
+`quality_rows()`.
+
+Trial mode cannot sandbox side effects inside your own callbacks. Keep source
+and transformation functions free of unintended writes.
+
+`publish()` does not upload to a public website. `report_release()` does not
+render a document. A lake may use ordinary DuckDB or explicitly selected
+DuckLake; those are different storage backends with the same user workflow.
+
+[Back to Get started](get-started.html) · [Find a guide](learn.html)

@@ -1,11 +1,17 @@
 ---
-title: "Insurance reporting with one product grammar"
+title: "Case study: insurance reporting"
+description: "Combine three deliveries, checked relationships, SQL models and a correction."
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Insurance reporting with one product grammar}
+  %\VignetteIndexEntry{Case study: insurance reporting}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
+
+An advanced case study. Complete [Get started](get-started.html) and
+[Use dbt](dbt-workflows.html) first. The complete runner needs DuckDB,
+pointblank, dm and a dbt CLI. Synthetic definitions are included in the appendix;
+the downloadable runner includes them so it can execute independently.
 
 ```{r setup, include=FALSE, purl=FALSE}
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>", message = FALSE)
@@ -266,7 +272,7 @@ ageing. Those require explicit additional business rules.
 
 ## 2. Add only the infrastructure this workflow uses
 
-The first product examples in the [introductory guide](composing-products.html)
+The first product examples in the [introductory lessons](get-started.html)
 need no infrastructure. This full walkthrough uses DuckDB or DuckLake, optional
 Pointblank and dm, plus a separately installed dbt-duckdb CLI.
 
@@ -730,3 +736,6 @@ report is issued. Simpler syntax cannot infer those decisions safely.
 ```{r cleanup, include=FALSE, purl=FALSE}
 if (run_stack) unlink(path, recursive = TRUE)
 ```
+
+
+[Back to Learn](learn.html) · [Troubleshooting](troubleshooting.html)

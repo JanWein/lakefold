@@ -1,5 +1,9 @@
 # One development grammar
 
+> Historical development record. Examples and findings describe their original
+> development stage. For current usage, follow [Get started](https://janwein.github.io/tidyweave/articles/get-started.html).
+
+
 Start with `product(name, data)`. Add ordinary supported dplyr calls, checked
 lookups with explicit equality keys, a contract or quality predicates. Execute
 with `run()` and get a table with `collect()`. `publish()` writes checked output;

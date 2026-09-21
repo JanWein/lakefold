@@ -53,8 +53,8 @@ An updated product specification. No source data are read.
 }
 \description{
 These functions describe work without executing it. Start with
-\code{product("orders")}, add a data frame, file path, zero-argument function
-or source adapter, then add only the capabilities you need.
+\code{product("orders", data)}, then add only the capabilities you need.
+Sources can be tables, file paths, functions or source adapters.
 Transformations run in addition order; the contract and quality checks run
 on the final candidate. Sources, transforms, rules and catalogs accumulate.
 A contract or target replaces the previously configured component.
@@ -65,8 +65,8 @@ orders <- product("orders") |>
   add_transform(function(data) transform(data, amount = amount * 2)) |>
   add_contract(c(id = "integer", amount = "numeric")) |>
   add_quality(~ amount >= 0)
-orders |> run() |> collect()
+orders |> trial() |> collect()
 }
 \seealso{
-\code{\link[=run]{run()}}, \code{\link[=publish]{publish()}}, \code{\link[=validate]{validate()}}, \code{\link[=inspect]{inspect()}}
+\code{\link[=trial]{trial()}}, \code{\link[=run]{run()}}, \code{\link[=publish]{publish()}}, \code{\link[=validate]{validate()}}, \code{\link[=inspect]{inspect()}}
 }

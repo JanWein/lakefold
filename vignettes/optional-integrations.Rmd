@@ -1,11 +1,16 @@
 ---
-title: "Add integrations only when you need them"
+title: "Connect existing tools"
+description: "Select a source, destination or integration without changing the product grammar."
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Add integrations only when you need them}
+  %\VignetteIndexEntry{Connect existing tools}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
+
+Use this after [Get started](get-started.html). Read only the section for
+the tool you need. Each integration declares its optional packages, connection
+ownership and persistence limits. Remote service snippets require your own setup.
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
@@ -14,8 +19,7 @@ root <- tempfile("tidyweave-integrations-")
 dir.create(root)
 ```
 
-Start with [composing products](composing-products.html) if you are new to
-tidyweave. A data frame and a function are enough for useful work. This guide
+Start with [Get started](get-started.html) if you are new to tidyweave. A data frame and a function are enough for useful work. This guide
 explains what to add when a workflow needs another storage system, an HTTP
 source, dependency-aware execution or a deployment environment.
 
@@ -283,3 +287,6 @@ source(system.file("examples", "advanced_integrations.R", package = "tidyweave")
 ```{r cleanup, include=FALSE}
 unlink(root, recursive = TRUE)
 ```
+
+
+[Back to Learn](learn.html) · [Troubleshooting](troubleshooting.html)

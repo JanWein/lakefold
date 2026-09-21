@@ -27,6 +27,19 @@ DuckLake integration with `TIDYWEAVE_TEST_DUCKLAKE=true`. Real dbt tests use
 `TIDYWEAVE_DBT_EXECUTABLE`. The core-only CI job runs `scripts/check-core.R`
 without optional infrastructure. Keep external services out of normal examples.
 
+## Documentation structure
+
+Keep one recommended path: Get started (five ordered lessons), Learn (tasks),
+Reference (arguments), Help (symptoms and terms). Each tutorial states its goal,
+prerequisites, expected results and next step. Beginner lessons must run in a
+fresh R session without objects from an earlier page. Prefer `trial()` for
+exploration and `publish(..., data = ...)` for a new delivery. Explain optional
+integrations only when their task needs them. Historical plans are not user guides.
+
+Build the site with `TIDYWEAVE_TEST_DUCKLAKE=true`, then run
+`python scripts/check-site-links.py site`. PR builds produce a preview artifact;
+main builds deploy to Pages. Keep existing article URLs when changing titles.
+
 ## One canonical home for each tutorial
 
 All package documentation and user-facing messages are English. The README is
@@ -39,7 +52,7 @@ The downloadable examples are extracted from the corresponding vignettes:
 
 | Script | Source |
 |---|---|
-| `everyday_workflows.R` | `everyday-workflows.Rmd` |
+| `everyday_workflows.R` | `three-deliveries.Rmd` |
 | `create_ducklake.R` | `create-ducklake.Rmd` |
 | `composing_products.R` | `composing-products.Rmd` |
 | `monthly_reporting.R` | `getting-started.Rmd` |

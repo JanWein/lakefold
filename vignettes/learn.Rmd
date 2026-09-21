@@ -1,0 +1,52 @@
+---
+title: "Learn by task"
+description: "Choose a focused guide after completing the introductory lessons."
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Learn by task}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+New to tidyweave? Follow [Get started](get-started.html) first. These guides
+extend that workflow. Choose the task you have now; you do not need to adopt
+every integration.
+
+## Prepare and check data
+
+| I want to... | Guide | Adds |
+|---|---|---|
+| Combine tables without multiplying rows | [Compose products](composing-products.html) | Checked lookups and reusable dependencies |
+| Express stricter checks or use pointblank | [Quality rules](quality-gates.html) | Tolerances, reference checks and optional pointblank |
+| Diagnose an attempt or inspect earlier data | [Quality and history](quality-history.html) | Saved evidence, release selection and monitoring |
+| Correct one of several named deliveries | [Three deliveries and a report](three-deliveries.html) | Payment and reference corrections with retained reports |
+| Repeat dependent steps after a correction | [Repeat a workflow](everyday-workflows.html) | A named workflow and selective reruns |
+
+## Store data and report values
+
+| I want to... | Guide | Adds |
+|---|---|---|
+| Create and reopen an actual local DuckLake | [Create a DuckLake](create-ducklake.html) | DuckLake extension and optional layers |
+| Replace a complete month and retain other months | [Monthly reporting case study](getting-started.html) | Partition replacement and dated stock metrics |
+| Group calculations or inspect table relationships | [Relationships and metrics](products-metrics.html) | Dimensions, time meaning and optional dm |
+
+## Connect existing tools
+
+| I want to... | Guide | Adds |
+|---|---|---|
+| Use files, DBI, Parquet, pins, HTTP or targets | [Integrations](optional-integrations.html) | Sources, destinations and their boundaries |
+| Run SQL models from R | [Use dbt](dbt-workflows.html) | A separately installed dbt CLI |
+| Check received files before building SQL layers | [Build a layered workflow](layered-data-stack.html) | Receipt checks, RAW storage and dbt |
+| Work through a larger insurance example | [Insurance reporting](relational-insurance.html) | Three inputs, dm, pointblank, dbt and corrections |
+
+## Understand or extend the package
+
+- [Why tidyweave?](why-tidyweave.html): when the package earns its place.
+- [Architecture](workflow-design.html): execution, ownership and adapter boundaries.
+- [Write an adapter](extending-tidyweave.html): a runnable extension example.
+- [Development record](design-review.html): historical decisions and validation scope.
+- [Operations](https://github.com/JanWein/tidyweave/blob/main/docs/OPERATIONS.md): writer coordination and recovery.
+
+Need a definition? Use [Terms](glossary.html). Need a fix? Use
+[Troubleshooting](troubleshooting.html). Need an argument? Use the
+[function reference](../reference/index.html).

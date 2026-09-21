@@ -1,6 +1,4 @@
-knitr::opts_chunk$set(collapse = TRUE, comment = "#>", message = FALSE)
 library(tidyweave)
-
 payment_data <- data.frame(
   payment_id = c("T1", "T2", "T3"),
   policy_id = c("P1", "P2", "P3"),

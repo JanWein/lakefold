@@ -1,11 +1,16 @@
 ---
-title: "Quality: start with one check, add rules when needed"
+title: "Choose and configure quality rules"
+description: "Add contracts, tolerances, reference checks and pointblank."
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Quality: start with one check, add rules when needed}
+  %\VignetteIndexEntry{Choose and configure quality rules}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
+
+Use this after [Check a delivery](check-delivery.html). Start with the
+requirement you need now. Basic rules need no optional engine; the pointblank
+and storage sections state their additional dependencies.
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>", message = FALSE)
@@ -18,10 +23,9 @@ database, an external quality engine or governance metadata.
 
 ```{r first-check}
 orders <- data.frame(id = 1:3, amount = c(10, 20, 30))
-result <- product("orders") |>
-  add_source(orders) |>
+result <- product("orders", orders) |>
   add_quality(~ amount >= 0) |>
-  run()
+  trial()
 collect(result)
 quality(result)
 ```
@@ -204,3 +208,6 @@ stopifnot(blocked$status == "blocked",
 close_lake(lake)
 unlink(root, recursive = TRUE)
 ```
+
+
+[Back to Learn](learn.html) · [Troubleshooting](troubleshooting.html)

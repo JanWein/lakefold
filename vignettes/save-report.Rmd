@@ -1,0 +1,95 @@
+---
+title: "4. Save a report"
+description: "Keep reported values and their evidence while later data changes."
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{4. Save a report}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE, purl=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", message = FALSE,
+  eval = requireNamespace("duckdb", quietly = TRUE))
+```
+
+**Goal:** save reported values and read them later without recalculating.
+**Needs:** tidyweave and DuckDB >= 1.5.5. This example creates its own data and
+storage; no objects from lesson 3 are needed.
+
+## Publish the input
+
+```{r input}
+library(tidyweave)
+folder <- tempfile("orders-report-")
+orders <- product("orders", data.frame(id = 1:3, amount = c(25, 75, 50))) |>
+  add_quality(~ amount >= 0) |>
+  set_target(folder)
+first <- orders |> publish()
+```
+
+A report must identify the saved input it used. Keep `first` as the input to
+calculation rather than passing only its collected table.
+
+## Define related calculations together
+
+```{r metrics}
+metrics <- metric_set("orders",
+  total = sum(amount, na.rm = TRUE),
+  count = dplyr::n(),
+  units = c(total = "EUR", count = "orders"),
+  code_version = "orders-v1", approved = TRUE)
+values <- first |> measure(metrics = metrics)
+collect(values)
+```
+
+A **metric** names a calculation. The set shares the input table `"orders"`.
+The results are **150 EUR** and **3 orders**.
+
+`approved = TRUE` records your decision that the definitions are suitable for
+this report; it does not carry out a review or grant access. `code_version`
+identifies the reviewed calculation code. Change it when relevant code,
+external values or dependencies change. For exploration, omit those two
+arguments and use `measure()` or ordinary dplyr; issuing a report requires them.
+
+## Save the report once
+
+```{r save}
+report <- values |> report_release("orders-report-v1", code_version = "report-v1")
+saved <- report_read(folder, "orders-report-v1", values_only = TRUE)
+saved
+```
+
+The destination comes from the published input. A **report** stores the values
+and the evidence explaining them. Its ID names this issued report; the report
+code version identifies your reporting logic.
+
+This produces saved data and evidence, not a PDF, Word document or slide deck.
+Use the returned tables with your reporting tools. Reading a report never
+recalculates its formulas.
+
+## Check what happens after a correction
+
+```{r correction}
+corrected <- data.frame(id = 1:3, amount = c(30, 75, 50))
+second <- orders |> publish(data = corrected)
+current <- second |> measure(metrics = metrics)
+collect(current)
+original_report <- report_read(folder, "orders-report-v1", values_only = TRUE)
+original_report
+```
+
+The current total is **155**; the issued report remains **150**. To issue revised
+values, use a new report ID. Reusing an ID with changed content is rejected.
+Retrying the same content is safe.
+
+```{r verify-and-cleanup, include=FALSE}
+stopifnot(identical(saved, original_report),
+  collect(values)$value[collect(values)$.metric == "total"] == 150,
+  collect(current)$value[collect(current)$.metric == "total"] == 155)
+unlink(folder, recursive = TRUE)
+```
+
+## Continue
+
+[Previous: Publish and correct data](publish-data.html) · [Next: Work through a reporting month](getting-started.html) · [All five lessons](get-started.html)

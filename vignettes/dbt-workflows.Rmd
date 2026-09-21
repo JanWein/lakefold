@@ -1,11 +1,17 @@
 ---
 title: "Use dbt for SQL transformations"
+description: "Connect an existing or generated dbt project to checked data products."
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Use dbt for SQL transformations}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
+
+Use this when you already need dbt SQL models. Read [Publish and correct
+data](publish-data.html) first. You need DuckDB and a separately installed
+dbt CLI; installation is described below. Credential-dependent snippets are
+configuration examples, not steps required for the beginner lessons.
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
@@ -250,3 +256,6 @@ For details, consult dbt's
 ```{r cleanup, include=FALSE}
 unlink(root, recursive = TRUE)
 ```
+
+
+[Back to Learn](learn.html) · [Troubleshooting](troubleshooting.html)

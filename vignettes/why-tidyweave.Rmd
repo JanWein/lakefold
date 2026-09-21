@@ -1,11 +1,15 @@
 ---
 title: "Why tidyweave?"
+description: "Decide whether repeated deliveries and report history justify the package."
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Why tidyweave?}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
+
+Read this to decide whether tidyweave fits your problem. For the first
+hands-on example, go directly to [Get started](get-started.html).
 
 ## The problem starts after the first successful script
 
@@ -27,11 +31,10 @@ integrations only when they solve a problem you actually have.
 ```{r small-example}
 library(tidyweave)
 
-orders <- product("orders") |>
-  add_source(data.frame(id = 1:2, amount = c(100, 250))) |>
+orders <- product("orders", data.frame(id = 1:2, amount = c(100, 250))) |>
   add_quality(~ amount >= 0)
 
-result <- run(orders)
+result <- trial(orders)
 sum(collect(result)$amount)
 stopifnot(sum(collect(result)$amount) == 350)
 ```
@@ -51,7 +54,7 @@ These are additions to the same product, rather than separate ways of working.
 | Situation | What you do | What you gain |
 |---|---|---|
 | Another file arrives | Run the same product with the new source | The same preparation and checks |
-| A check fails | Inspect `quality(result)` or `incidents(result)` | A named failed check and counts |
+| A check fails | Inspect `quality_report(result)` | A named failed check and counts |
 | Two reports need the same prepared data | Use the product as another product's source | One shared definition |
 | Data should live outside your R session | Add a target | An explicit destination and its guarantees |
 | You need an execution record | Supply `evidence = "runs"` | Durable statuses, schema and check counts |
@@ -87,7 +90,9 @@ It is not a replacement for dplyr, DBI, pointblank, dbt or your scheduler.
 It connects their roles. There is no required platform server, visual editor,
 metadata service or elaborate setup wizard.
 
-Continue with [Compose a product](composing-products.html), or follow the
-[monthly correction and report example](getting-started.html). The
+Continue with the [five introductory lessons](get-started.html). The
 [architecture guide](workflow-design.html) explains the internal structure once
 you need to extend it.
+
+
+[Back to Learn](learn.html) · [Troubleshooting](troubleshooting.html)

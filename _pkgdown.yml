@@ -1,44 +1,73 @@
 url: https://janwein.github.io/tidyweave/
 destination: site
 home:
-  title: tidyweave
-  description: Reusable R data products with optional checks, storage and integrations.
+  title: Checked data and reproducible reports
+  description: Prepare recurring deliveries, catch data errors and retain the values behind earlier reports.
 template:
   bootstrap: 5
+  bslib:
+    primary: "#17645b"
+    link-color: "#125e75"
+    border-radius: 0.35rem
+navbar:
+  structure:
+    left: [getstarted, learn, reference, help, news]
+    right: [search, github]
+  components:
+    getstarted:
+      text: Get started
+      href: articles/get-started.html
+    learn:
+      text: Learn
+      href: articles/learn.html
+    help:
+      text: Help
+      menu:
+        - text: Troubleshooting
+          href: articles/troubleshooting.html
+        - text: Terms
+          href: articles/glossary.html
+        - text: Why tidyweave?
+          href: articles/why-tidyweave.html
 reference:
-  - title: Start here - define, try and publish
-    contents: [tidyweave-package, product, product-dplyr, run, trial, publish, collect]
-  - title: Everyday - checks and explanations
-    contents: [contract, add_lookup, status, quality, quality_report, quality_rows, lineage]
-  - title: Everyday - calculations and reports
-    contents: [metric_set, metric, measure, report_release, report_read]
-  - title: Configure and reuse
-    contents: [execution_config, add_source, replace_sources, inspect, plan, validate, contract_update]
-  - title: Integration - detailed expectations and diagnostics
+  - title: Define, try and collect
+    desc: Start here. For a guided introduction, follow [Get started](../articles/get-started.html).
+    contents: [tidyweave-package, product, product-dplyr, trial, collect]
+  - title: Check and explain a result
+    desc: State table requirements, inspect failed checks and find affected rows.
+    contents: [contract, status, quality, quality_report, quality_rows, lineage]
+  - title: Save data and keep reports
+    desc: Publish a checked table, define calculations and read saved report values.
+    contents: [publish, open_lake, compare, metric_set, metric, measure, report_release, report_read]
+  - title: Combine and repeat work
+    desc: Reuse inputs and definitions. run() executes configured writers as well as transformations.
+    contents: [add_lookup, add_source, replace_sources, execution_config, run, workflow, inspect, plan, validate, contract_update]
+  - title: Detailed quality rules
     contents: [contract_from, contract_confirm, contract_diff, quality_rule, quality_reference, expect_quality, profile_data, quality_errors, pointblank_report, contract_yaml, model, commons_yaml]
-  - title: Integration - checked receipts
-    contents: [ingest]
-  - title: Integration - sources and transformations
-    contents: [source_file, source_database, source_release, source_parquet, source_api, source_pins, sql_transform, transform_dbt]
-  - title: Integration - destinations
-    contents: [target_lake, target_database, target_parquet, target_pins]
-  - title: Integration - execution evidence and metadata
-    contents: [run_history, retry_catalogs, catalog_openlineage, catalog_openmetadata, catalog_openmetadata_dbt, catalog_export, catalog_app]
-  - title: Integration - projects and orchestration
-    contents: [workflow, init_project, as_targets]
-  - title: Integration - lake configuration and history
-    contents: [open_lake, lake_config, registry_duckdb, setup_lake, disconnect_lake, write_data, read_release, tbl, compare, releases, register, registry, freshness, check_delivery, interrupted, recover, cleanup]
-  - title: Integration - dbt
+  - title: Connect sources and destinations
+    desc: Optional integrations, each with its own resource and persistence guarantees.
+    contents: [source_file, source_database, source_release, source_parquet, source_api, source_pins, sql_transform, transform_dbt, target_lake, target_database, target_parquet, target_pins]
+  - title: Operate a lake
+    desc: Advanced configuration, receipt ingestion, release history and deliberate recovery.
+    contents: [ingest, lake_config, registry_duckdb, setup_lake, disconnect_lake, write_data, read_release, tbl, releases, register, registry, freshness, check_delivery, interrupted, recover, cleanup]
+  - title: Run dbt models
     contents: [dbt_init, dbt_project, dbt_sources, dbt_contract, dbt_build, dbt_status, dbt_lineage, dbt_model, dbt_publish]
-  - title: Extension - adapter interfaces
+  - title: Integrate evidence, catalogs and scheduling
+    contents: [run_history, retry_catalogs, catalog_openlineage, catalog_openmetadata, catalog_openmetadata_dbt, catalog_export, catalog_app, init_project, as_targets]
+  - title: Extend the framework
+    desc: S3 interfaces for adapter authors.
     contents: [capabilities, check_component, read_source, execute_transform, run_quality, write_target, publish_metadata]
 articles:
-  - title: Start here
-    navbar: Start here
-    contents: [why-tidyweave, everyday-workflows, create-ducklake, composing-products]
-  - title: Add capabilities
-    navbar: Guides
-    contents: [getting-started, layered-data-stack, relational-insurance, optional-integrations, quality-gates, quality-history, products-metrics, dbt-workflows]
-  - title: Understand and extend
-    navbar: Architecture
+  - title: Get started
+    desc: Follow these five lessons in order. Each includes its own setup.
+    contents: [get-started, first-product, check-delivery, publish-data, save-report, getting-started]
+  - title: Prepare, check and repeat
+    contents: [learn, composing-products, three-deliveries, quality-gates, quality-history, everyday-workflows]
+  - title: Store and calculate
+    contents: [create-ducklake, products-metrics]
+  - title: Connect tools and work through larger examples
+    contents: [optional-integrations, dbt-workflows, layered-data-stack, relational-insurance]
+  - title: Help and background
+    contents: [troubleshooting, glossary, why-tidyweave]
+  - title: For developers
     contents: [workflow-design, extending-tidyweave, design-review]

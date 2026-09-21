@@ -44,14 +44,13 @@ A \code{tw_product}, ready for composition, inspection and execution.
 }
 \description{
 Add named sources, ordinary transformation functions and optional checks or
-a target. Nothing executes until \code{\link[=run]{run()}} or \code{\link[=publish]{publish()}}. Products can be
+a target. Use \code{\link[=trial]{trial()}} to try it, or \code{\link[=publish]{publish()}} to save checked output.
+\code{\link[=run]{run()}} executes the full configuration, including writers. Products can be
 sources of other products; shared dependencies run once per execution.
 }
 \examples{
-orders <- product("orders") |> add_source(data.frame(id = 1:2))
-product("summary") |>
-  add_source(orders) |>
-  add_transform(function(data) data.frame(rows = nrow(data))) |>
-  run() |>
-  collect()
+orders <- product("orders", data.frame(id = 1:2, amount = c(25, 75))) |>
+  dplyr::mutate(amount = round(amount, 2)) |>
+  add_quality(~ amount >= 0)
+orders |> trial() |> collect()
 }

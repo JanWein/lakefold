@@ -1,11 +1,16 @@
 ---
 title: "Create a DuckLake and reopen it tomorrow"
+description: "Create a real local DuckLake, save data and reopen the folder."
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Create a DuckLake and reopen it tomorrow}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
+
+Use this after [Publish and correct data](publish-data.html) when you want
+the actual DuckLake backend. The basic lessons use ordinary DuckDB. A **layer**
+is a named storage area; custom layers are optional.
 
 One folder holds your local DuckLake configuration, metadata, stored data and
 received deliveries. No PostgreSQL server or S3 account is needed for this local
@@ -105,3 +110,6 @@ can use explicit layers but does not save or migrate the configuration.
 ```{r cleanup, include=FALSE}
 unlink(folder, recursive = TRUE) # Only remove this disposable tutorial folder.
 ```
+
+
+[Back to Learn](learn.html) · [Troubleshooting](troubleshooting.html)

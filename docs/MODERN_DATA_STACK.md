@@ -1,5 +1,9 @@
 # Modern data stack requirements and Ab Initio comparison
 
+> Historical development record. Examples and findings describe their original
+> development stage. For current usage, follow [Get started](https://janwein.github.io/tidyweave/articles/get-started.html).
+
+
 This is a capability assessment, not a performance benchmark or a claim of
 enterprise-platform equivalence. The scope is an R-first framework that combines
 existing tools. A working adapter is distinct from an operated production service.

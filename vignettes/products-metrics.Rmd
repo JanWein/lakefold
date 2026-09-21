@@ -1,11 +1,16 @@
 ---
-title: "Products, relationships and reproducible metrics"
+title: "Group metrics and inspect relationships"
+description: "Add dimensions, explicit time meaning and optional dm exploration."
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Products, relationships and reproducible metrics}
+  %\VignetteIndexEntry{Group metrics and inspect relationships}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
+
+Use this after [Save a report](save-report.html) for grouped calculations
+and relationships across tables. Storage sections require DuckDB; relationship
+exploration additionally uses dm. The example is self-contained.
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>", message = FALSE)
@@ -100,7 +105,10 @@ values <- measure(published, revenue, by = "region")
 values
 ```
 
-The values are 30 for EU and 30 for US. `approved = TRUE` records your declared
+The values are 30 for EU and 30 for US. `dimensions = "region"` declares an
+allowed grouping dimension; `by = "region"` actually requests grouped values.
+Omitting `by` produces an overall total and a message when dimensions are
+available. `approved = TRUE` records your declared
 decision; it is not a separate authorization system. Change `code_version`
 when custom code, captured values or dependencies change. Arbitrary closure
 environments are not fingerprinted.
@@ -145,3 +153,6 @@ stopifnot(sum(values$value) == 60,
 close_lake(lake)
 unlink(root, recursive = TRUE)
 ```
+
+
+[Back to Learn](learn.html) · [Troubleshooting](troubleshooting.html)
