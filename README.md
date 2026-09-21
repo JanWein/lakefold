@@ -36,10 +36,10 @@ contract when you know the required types, business key and meaning of a row.
 
 ```r
 bad_delivery <- data.frame(id = 1:3, amount = c(-25, 75, 50))
-failed <- orders |> trial(data = bad_delivery, stop_on_failure = FALSE)
+failed <- orders |> trial(data = bad_delivery)
 status(failed)
 quality_report(failed)
-quality_rows(failed, ~ amount >= 0)
+quality_rows(failed)
 ```
 
 Checks reject unacceptable data; they do not silently drop bad rows. The
@@ -88,7 +88,8 @@ value: `execution_config(to = "reporting-lake")`. Pass it as the product's
 global settings. In workflows with several inputs, supply a named `sources` list
 at execution. Stable source names and nested product IDs identify what changed.
 
-Compare two publications directly with `compare(first, second)`. No manual lake
+Compare these publications with `compare(first, second, key = "id")`. If a
+contract already declares the key, `compare(first, second)` reuses it. No manual lake
 connection or release-ID lookup is needed.
 
 ## Calculate and keep a report
@@ -109,6 +110,10 @@ Metric sets share their product, dimensions and time settings. For exploration,
 omit approval and code version; saving an issued report requires explicitly
 approved, versioned definitions. Approval records your decision, not an external
 authorization process. Report readback retrieves saved values without recalculating.
+`dimensions` lists permitted columns; `measure(by = "company")` chooses the
+report grouping. `by = character()` explicitly requests an overall total.
+An issued report stores values and their provenance; use your usual reporting
+tools to render a document.
 
 Use the same metrics on `trial(orders)` while exploring. Trial measurements cannot
 be issued as reports; publish and recalculate when ready.
@@ -121,7 +126,16 @@ affected branches and exposes step status. Keep report issuance explicit.
 ## Follow one guide, then add what you need
 
 Start with [the everyday workflow](https://janwein.github.io/tidyweave/articles/everyday-workflows.html):
-define, try, publish, correct, compare, calculate and reopen a report.
+three named deliveries, one data error, a report and corrections to either the
+main delivery or a reference table. Keep the same names throughout:
+
+```r
+# Given payment and contract tables:
+payments <- product("payments", payment_data) |>
+  add_lookup(contract_data, by = "policy_id", name = "contracts")
+explain(payments)
+trial(payments, sources = list(contracts = corrected_contract_data))
+```
 
 | When you need it | Guide |
 |---|---|

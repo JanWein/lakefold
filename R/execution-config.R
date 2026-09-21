@@ -173,9 +173,9 @@ product_execution <- function(x, execution) {
 }
 
 replace_execution_sources <- function(x, data = NULL, sources = NULL) {
-  if (!is.null(data) && !is.null(sources)) {
+  if (!is.null(sources) && (!is.list(sources) || is.data.frame(sources))) {
     abort(
-      "Use either data for one primary input or sources for named replacements, not both."
+      "sources must be a named list, for example sources = list(orders = new_orders)."
     )
   }
   if (!is.null(data)) {
@@ -199,7 +199,14 @@ replace_execution_sources <- function(x, data = NULL, sources = NULL) {
     # Select the deepest product globally, so references from lookup branches
     # receive the same delivery and retain one consistent definition per ID.
     name <- if (identical(leaf$id, x$id)) names(x$sources)[[1L]] else leaf$id
-    sources <- stats::setNames(list(data), name)
+    if (name %in% names(sources)) {
+      abort(paste0(
+        "Delivery '",
+        name,
+        "' was supplied in both data and sources. Supply it once, not both."
+      ))
+    }
+    sources <- c(stats::setNames(list(data), name), sources)
   }
   if (!is.null(sources)) {
     if (!is.list(sources) || is.data.frame(sources)) {

@@ -7,15 +7,16 @@
 #' Read-only access to existing published inputs is still allowed.
 #' @param x Product definition.
 #' @param data,sources Replacement delivery or named sources, as in [run()].
-#' @param stop_on_failure Signal an error on a failed check. Use `FALSE` to
-#'   inspect the returned result.
+#' @param stop_on_failure Defaults to `FALSE`: a failed trial returns a result
+#'   for [quality_report()] and [quality_rows()]. Use `TRUE` to raise an error.
+#'   [run()] and [publish()] still raise errors on failure by default.
 #' @returns An in-memory run result accepted by [collect()] and [measure()].
 #' @export
 #' @examples
 #' orders <- product("orders", data.frame(amount = c(10, 20))) |>
 #'   set_target("reporting-lake")
 #' trial(orders) |> collect()
-trial <- function(x, data = NULL, sources = NULL, stop_on_failure = TRUE) {
+trial <- function(x, data = NULL, sources = NULL, stop_on_failure = FALSE) {
   if (!inherits(x, "tw_product")) {
     abort("trial() needs a product definition.")
   }

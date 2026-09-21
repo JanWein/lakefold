@@ -31,6 +31,10 @@
 #'   with missing reference values. Unused reference rows are always allowed.
 #' @param suffix Two suffixes for overlapping non-key column names, as in
 #'   [dplyr::left_join()].
+#' @param name Stable delivery name used by `sources = list(name = new_data)`.
+#'   Defaults to the reference product id or a bare source variable's name.
+#'   For expressions such as file readers, supply a name explicitly; otherwise
+#'   an automatic lookup name is used. [explain()] shows the available names.
 #' @returns An updated product specification.
 #' @export
 #' @examples
@@ -46,12 +50,39 @@ add_lookup <- function(
   by,
   engine = c("native", "dm"),
   unmatched = c("error", "keep"),
-  suffix = c(".x", ".y")
+  suffix = c(".x", ".y"),
+  name = NULL
 ) {
+  source_expr <- substitute(source)
   x <- editable_product(x)
-  name <- paste0("lookup_", length(x$transforms) + 1L)
+  step_name <- paste0("lookup_", length(x$transforms) + 1L)
+  name <- name %||%
+    if (inherits(source, "tw_product")) {
+      source$id
+    } else if (is.symbol(source_expr)) {
+      as.character(source_expr)
+    } else {
+      step_name
+    }
+  scalar(name, "name")
+  aliases <- delivery_aliases(x)
+  existing <- if (name %in% names(aliases)) {
+    product_sources(x)[[aliases[[name]]]]
+  } else {
+    NULL
+  }
+  if (
+    name %in% names(aliases) && !same_delivery_product(existing, source, name)
+  ) {
+    abort(paste0(
+      "Delivery name '",
+      name,
+      "' is already used. Supply a unique name in add_lookup(name = )."
+    ))
+  }
   step <- structure(
     list(
+      name = name,
       source = normalize_source(source, id = x$id, name = name),
       by = lookup_keys(by),
       engine = match.arg(engine),
@@ -61,7 +92,7 @@ add_lookup <- function(
     ),
     class = "tw_lookup_transform"
   )
-  add_transform(x, step, name = name)
+  add_transform(x, step, name = step_name)
 }
 
 lookup_keys <- function(by) {

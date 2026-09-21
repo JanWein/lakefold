@@ -21,8 +21,7 @@ commands run. Execute the returned definition with \code{\link[=run]{run()}} or 
 or rebuild its \code{\link[=as_targets]{as_targets()}} graph to let targets cache unaffected products.
 }
 \details{
-For products, names select a root source alias (including the qualified
-transformation aliases shown by internal dependency inspection) or a nested
+For products, names select a delivery name shown by \code{\link[=explain]{explain()}} or a nested
 product ID. A product ID updates the ordinary delivery at the end of its
 single-primary-input chain, retaining every product's transforms, checks and
 target in every reference, including

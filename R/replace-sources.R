@@ -4,8 +4,7 @@
 #' commands run. Execute the returned definition with [run()] or [publish()],
 #' or rebuild its [as_targets()] graph to let targets cache unaffected products.
 #'
-#' For products, names select a root source alias (including the qualified
-#' transformation aliases shown by internal dependency inspection) or a nested
+#' For products, names select a delivery name shown by [explain()] or a nested
 #' product ID. A product ID updates the ordinary delivery at the end of its
 #' single-primary-input chain, retaining every product's transforms, checks and
 #' target in every reference, including
@@ -58,6 +57,31 @@ replace_sources_list <- function(x, replacements) {
   definitions <- replacement_graph(x)
   ids <- setdiff(names(definitions), x$id)
   sources <- product_sources(x)
+  aliases <- delivery_aliases(x)
+  # Resolve public delivery names to execution dependencies once, preserving
+  # product-ID replacement across every reference in the existing graph.
+  for (i in seq_along(nms)) {
+    name <- nms[[i]]
+    if (name %in% names(aliases)) {
+      path <- unname(aliases[[name]])
+      if (name %in% ids && !identical(name, path)) {
+        if (
+          !(inherits(sources[[path]], "tw_product") &&
+            identical(sources[[path]]$id, name))
+        ) {
+          abort(paste("Ambiguous delivery name and product ID:", name))
+        }
+      } else {
+        nms[[i]] <- path
+      }
+    }
+  }
+  if (anyDuplicated(nms)) {
+    abort(
+      "The same delivery was selected more than once. Use one name per replacement."
+    )
+  }
+  names(replacements) <- nms
   modes <- stats::setNames(rep("alias", length(nms)), nms)
   for (name in nms) {
     alias <- name %in% names(sources)
@@ -67,7 +91,7 @@ replace_sources_list <- function(x, replacements) {
         "Unknown replacement source: ",
         name,
         ". Available names: ",
-        paste(sort(unique(c(names(sources), ids))), collapse = ", "),
+        paste(sort(unique(c(names(aliases), ids))), collapse = ", "),
         "."
       ))
     }
@@ -142,6 +166,52 @@ replace_sources_list <- function(x, replacements) {
   }
   replacement_graph(out)
   out
+}
+
+delivery_aliases <- function(x) {
+  aliases <- stats::setNames(names(x$sources), names(x$sources))
+  sources <- product_sources(x)
+  for (step in names(x$transforms)) {
+    transform <- x$transforms[[step]]
+    paths <- transform_source_names(step, component_sources(transform))
+    labels <- if (inherits(transform, "tw_lookup_transform")) {
+      transform$name %||% step
+    } else {
+      paths
+    }
+    if (any(labels %in% names(aliases))) {
+      if (
+        length(labels) == 1L &&
+          same_delivery_product(
+            sources[[aliases[[labels]]]],
+            sources[[paths]],
+            labels
+          )
+      ) {
+        next
+      }
+      abort(
+        "Delivery names must be unique. Rename the lookup with add_lookup(name = )."
+      )
+    }
+    aliases <- c(aliases, stats::setNames(paths, labels))
+  }
+  conflicting <- names(aliases) %in%
+    names(sources) &
+    names(aliases) != unname(aliases)
+  if (any(conflicting)) {
+    abort(
+      "A delivery name conflicts with another source. Supply a different lookup name."
+    )
+  }
+  aliases
+}
+
+same_delivery_product <- function(a, b, name) {
+  inherits(a, "tw_product") &&
+    inherits(b, "tw_product") &&
+    identical(a$id, name) &&
+    identical(b$id, name)
 }
 
 replace_primary_delivery <- function(product, replacement) {

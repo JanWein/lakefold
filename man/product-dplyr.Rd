@@ -65,6 +65,9 @@ a small value in an expression, inject it with \verb{!!}.
 Use \code{\link[=add_transform]{add_transform()}} for other functions. Multiple primary sources must
 first be combined by a transformation; \code{\link[=add_lookup]{add_lookup()}} adds a checked
 auxiliary source without changing the primary table.
+\code{left_join()} on a product gives guidance rather than guessing relationship
+rules. Use \code{add_lookup(reference, by = ..., name = "reference")} for checked
+enrichment, or join ordinary tables inside \code{add_transform()} for other joins.
 }
 \examples{
 orders <- product("orders", data.frame(group = c("a", "a"), amount = c(10, 20))) |>

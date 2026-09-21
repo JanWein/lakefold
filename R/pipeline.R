@@ -813,7 +813,7 @@ run.tw_pipeline <- function(
     abort(
       paste(
         run_result_message(result),
-        "The condition retains this result in $result. Inspect quality(condition$result) for check details."
+        "For diagnosis, rerun with stop_on_failure = FALSE and save the result. Inspect quality_report(result) and quality_rows(result)."
       ),
       "tw_run_failed",
       result = result,
@@ -827,7 +827,7 @@ print.tw_run_result <- function(x, ...) {
   cat(run_result_message(x), "\n")
   if (!x$status %in% c("completed", "published", "cached")) {
     cat(
-      "Inspect quality(result) or quality_report(result) for check details.\n"
+      "Inspect quality_report(result) for checks and quality_rows(result) for affected rows.\n"
     )
   }
   invisible(x)

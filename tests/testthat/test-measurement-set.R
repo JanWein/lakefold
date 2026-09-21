@@ -29,7 +29,7 @@ test_that("batch measurements separate stock dates and aggregate flows explicitl
   expect_s3_class(set, "tw_measurement_set")
   expect_output(
     tidyweave:::print.tw_measurement_set(set),
-    "4 pinned calculations"
+    "Grouped by: company"
   )
   expect_identical(class(values), c("tbl_df", "tbl", "data.frame"))
   expect_named(values, c("company", ".metric", ".period", ".unit", "value"))

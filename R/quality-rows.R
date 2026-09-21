@@ -8,6 +8,8 @@
 #' Failed lake candidates remain available until cleanup removes them.
 #' @param x A blocked run result, or a table to diagnose explicitly.
 #' @param rule Check name from [quality_report()], or a one-sided row formula.
+#'   Omit it when the result has one failed check or a failed lookup. When
+#'   several checks fail, the error lists the names to choose from.
 #' @param contract Contract when supplying a table and a named check.
 #' @param limit Maximum returned rows; `Inf` explicitly requests all rows.
 #' @returns A tibble containing the affected rows, bounded by `limit`.
@@ -17,7 +19,7 @@
 #'   add_quality(list(positive = ~ amount >= 0))
 #' failed <- trial(orders, stop_on_failure = FALSE)
 #' quality_rows(failed, "positive")
-quality_rows <- function(x, rule, contract = NULL, limit = 100) {
+quality_rows <- function(x, rule = NULL, contract = NULL, limit = 100) {
   if (
     !is.numeric(limit) ||
       length(limit) != 1L ||
@@ -28,6 +30,22 @@ quality_rows <- function(x, rule, contract = NULL, limit = 100) {
     abort("limit must be a non-negative whole number or Inf.")
   }
   if (inherits(x, "tw_run_result")) {
+    checks <- quality(x)
+    if (is.null(rule) && is.data.frame(checks)) {
+      failed <- unique(checks$rule[!checks$status %in% c("passed", "warning")])
+      if (length(failed) == 1L) {
+        rule <- failed[[1L]]
+      }
+      if (length(failed) > 1L) {
+        abort(paste0(
+          "Several checks need attention: ",
+          paste(failed, collapse = ", "),
+          ". Select one with quality_rows(result, rule = \"",
+          failed[[1L]],
+          "\")."
+        ))
+      }
+    }
     diagnostic <- x$diagnostic
     if (is.null(diagnostic)) {
       condition <- x$error
@@ -66,6 +84,11 @@ quality_rows <- function(x, rule, contract = NULL, limit = 100) {
     }
   }
   table_result(x, "Diagnostic input")
+  if (is.null(rule)) {
+    abort(
+      "Supply a row formula or select a failed check from quality_report(result)."
+    )
+  }
   if (inherits(rule, "formula")) {
     check <- rule
   } else {
