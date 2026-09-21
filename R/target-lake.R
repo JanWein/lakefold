@@ -94,6 +94,7 @@ tw_execute_target.tw_lake_target <- function(
   business_date = NA_character_,
   notify = NULL,
   cache = FALSE,
+  previous = NULL,
   ...
 ) {
   rlang::check_dots_empty()
@@ -127,6 +128,8 @@ tw_execute_target.tw_lake_target <- function(
     on.exit(close_lake(lake), add = TRUE)
   }
   assert_writable(lake)
+  check_previous_release(lake, product$id, previous)
+  assert_table_asset(lake, product$id)
   definition <- inspect(product)
   definition$status <- NULL
   definition$target <- NULL

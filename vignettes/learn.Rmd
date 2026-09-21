@@ -26,6 +26,8 @@ every integration.
 
 | I want to... | Guide | Adds |
 |---|---|---|
+| Define a cancellation report from customers, policies and brokers | [Cancellation reference case](cancellation-report.html) | Contracts, dm relationships, opening portfolio and corrections |
+| Publish from several R sessions | [Shared DuckLake](shared-ducklake.html) | PostgreSQL writer coordination and stale-correction checks |
 | Create and reopen an actual local DuckLake | [Create a DuckLake](create-ducklake.html) | DuckLake extension and optional layers |
 | Replace a complete month and retain other months | [Monthly reporting case study](getting-started.html) | Partition replacement and dated stock metrics |
 | Group calculations or inspect table relationships | [Relationships and metrics](products-metrics.html) | Dimensions, time meaning and optional dm |

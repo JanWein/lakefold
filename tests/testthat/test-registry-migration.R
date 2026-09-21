@@ -14,7 +14,7 @@ test_that("legacy quality evidence survives an idempotent registry migration", {
   evidence <- quality(f$lake, run_id = first$run_id)
   expect_equal(evidence$engine, rep("legacy", nrow(first$quality)))
   expect_equal(evidence$stage, rep("candidate", nrow(first$quality)))
-  expect_equal(registry(f$lake, "schema_version")$version, 3L)
+  expect_equal(registry(f$lake, "schema_version")$version, 4L)
   expect_equal(releases(f$lake)$release_id, first$release_id)
   DBI::dbExecute(f$lake$con, "UPDATE lake._dl.schema_version SET version = 999")
   expect_snapshot(error = TRUE, tidyweave:::registry_init(f$lake))

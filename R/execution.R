@@ -104,7 +104,8 @@ publish_metadata.default <- function(catalog, metadata, ...) {
 #'   overriding defaults stored by `product(execution = )`.
 #' @param ... Execution options, including `data` or `sources` for new deliveries
 #'   as described in [run()], `stop_on_failure` and, for lake
-#'   targets, `business_date`, `notify` and `cache`. dbt builds accept
+#'   targets, `business_date`, `notify`, `cache` and `previous`. Supply a previous
+#'   publication to reject stale corrections if the destination has changed. dbt builds accept
 #'   [dbt_publish()] options such as `contract`, `asset` and `layer`.
 #' @returns A run result. An exception on failure includes `condition$result`.
 #' @export
@@ -182,7 +183,8 @@ publish.default <- function(x, name = NULL, to = NULL, ...) {
 #' @param x Run result, data frame or lazy table.
 #' @param ... Arguments passed to dplyr when collecting retained data. Lake
 #'   results collect the complete pinned release and accept no extra arguments.
-#' @returns An ordinary tibble. Failed or blocked runs cannot be collected.
+#' @returns An ordinary tibble for a table product, or a dm for a model
+#'   product. Failed or blocked runs cannot be collected.
 #' @name collect
 #' @importFrom dplyr collect
 #' @export
@@ -538,6 +540,11 @@ result_data <- function(result) {
 
 read_product_sources <- function(product, lake = NULL, on_input = NULL) {
   context <- attr(product, "tw_run_context") %||% new_product_context()
+  if (!is.null(lake)) {
+    previous_read_lake <- context$read_lake
+    context$read_lake <- lake
+    withr::defer(context$read_lake <- previous_read_lake)
+  }
   sources <- product_sources(product)
   tables <- vector("list", length(sources))
   names(tables) <- names(sources)
@@ -613,7 +620,7 @@ read_product_sources <- function(product, lake = NULL, on_input = NULL) {
           )
         } else {
           data <- if (identical(class(source), "tw_release_source")) {
-            read_release_source(source, lake)
+            read_release_source(source, lake %||% context$read_lake)
           } else {
             read_source(source)
           }

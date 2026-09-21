@@ -7,7 +7,8 @@
 as_targets(x, cue = NULL, evidence = NULL)
 }
 \arguments{
-\item{x}{Product or named list of products. Nested products are included.}
+\item{x}{Table product or named list of table products. Nested products are
+included. Schedule a complete model publication with targets::tar_target().}
 
 \item{cue}{Optional \code{\link[targets:tar_cue]{targets::tar_cue()}} applied to product targets.}
 

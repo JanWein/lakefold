@@ -146,6 +146,11 @@ normalize_source <- function(source, id, name, reader = NULL) {
 #' @rdname add_source
 #' @export
 add_transform <- function(x, transform, name = NULL) {
+  if (inherits(x, "tw_model_product")) {
+    abort(
+      "Transform a member table product, then use replace_sources(model, table_name = product)."
+    )
+  }
   x <- editable_product(x)
   if (inherits(transform, "formula")) {
     transform <- rlang::as_function(transform)

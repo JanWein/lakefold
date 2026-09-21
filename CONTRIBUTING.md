@@ -52,6 +52,7 @@ The downloadable examples are extracted from the corresponding vignettes:
 
 | Script | Source |
 |---|---|
+| `cancellation_report.R` | `cancellation-report.Rmd` |
 | `everyday_workflows.R` | `three-deliveries.Rmd` |
 | `create_ducklake.R` | `create-ducklake.Rmd` |
 | `composing_products.R` | `composing-products.Rmd` |

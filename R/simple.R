@@ -221,6 +221,7 @@ write_data <- function(
   }
   with_execution_lake(lake, function(con) {
     assert_writable(con)
+    assert_table_asset(con, name)
     if (is.null(contract)) {
       contract <- published_schema(con, name)
     }
@@ -431,7 +432,8 @@ published_schema <- function(lake, name) {
 #' @param name Published asset name.
 #' @param release Optional release ID. Defaults to the latest release.
 #' @param lazy Return a lazy database table instead of collecting all rows.
-#' @returns A tibble, or a lazy `tbl_sql` when `lazy = TRUE`.
+#' @returns A tibble, a lazy `tbl_sql` when `lazy = TRUE`, or a dm for a
+#'   model product. Models restore all member tables from the same manifest.
 #' @seealso [write_data()], [tbl()], [releases()]
 #' @export
 #' @examplesIf requireNamespace("duckdb", quietly = TRUE)
@@ -446,6 +448,15 @@ published_schema <- function(lake, name) {
 #' unlink(root, recursive = TRUE)
 read_release <- function(lake, name, release = NULL, lazy = FALSE) {
   flag(lazy, "lazy")
+  ref <- resolve_release(lake, name, release)
+  if (startsWith(ref$table_name[[1]], "model_")) {
+    if (lazy) {
+      abort(
+        "Model reads return a dm of collected tables; select a member for lazy queries."
+      )
+    }
+    return(read_model_release(lake, name, ref$release_id[[1]]))
+  }
   data <- tbl(lake, name, release)
   if (lazy) data else dplyr::collect(data)
 }

@@ -64,7 +64,7 @@ articles:
   - title: Prepare, check and repeat
     contents: [learn, composing-products, three-deliveries, quality-gates, quality-history, everyday-workflows]
   - title: Store and calculate
-    contents: [create-ducklake, products-metrics]
+    contents: [create-ducklake, products-metrics, cancellation-report, shared-ducklake]
   - title: Connect tools and work through larger examples
     contents: [optional-integrations, dbt-workflows, layered-data-stack, relational-insurance]
   - title: Help and background

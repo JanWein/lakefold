@@ -9,7 +9,7 @@ registry_init <- function(lake) {
     )
   )
   versions <- query(lake, paste("SELECT version FROM", registry_table))$version
-  if (anyNA(versions) || any(versions > 3L)) {
+  if (anyNA(versions) || any(versions > 4L)) {
     abort(
       "Registry schema is newer than this tidyweave version supports.",
       "tw_registry_version"
@@ -59,11 +59,11 @@ registry_init <- function(lake) {
         )
       )
     }
-    if (!3L %in% versions) {
+    if (!4L %in% versions) {
       insert_meta(
         lake,
         "schema_version",
-        list(version = 3L, applied_at = now())
+        list(version = 4L, applied_at = now())
       )
     }
   })
@@ -251,5 +251,10 @@ tbl.tw_lake <- function(src, asset, release = NULL, ...) {
   rlang::check_dots_empty()
   lake <- src
   r <- resolve_release(lake, asset_id(asset), release)
+  if (startsWith(r$table_name[[1]], "model_")) {
+    abort(
+      "Use read_release() to read a complete model, or select a published member table."
+    )
+  }
   dplyr::tbl(lake$con, table_id(r$schema_name[[1]], r$table_name[[1]]))
 }

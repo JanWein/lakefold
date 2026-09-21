@@ -1,5 +1,14 @@
 # tidyweave 0.12.0.9000
 
+* `product()` accepts dm models with named table contracts. `trial()` checks
+  the complete model; `publish()` commits all member tables and their manifest
+  together. `collect()` and `read_release()` restore the pinned model.
+  `product()` and `add_lookup()` select model members with `table =`.
+* Lake publication accepts `previous` to reject stale corrections.
+* PostgreSQL catalogs coordinate package writes with database-scoped advisory
+  locks using RPostgres. Metadata schema 4 prevents older writers reopening
+  upgraded lakes. Writes are serialized, including report issuance.
+
 * Documentation now starts with five ordered, self-contained lessons. Task guides,
   reference and troubleshooting are separated, with consistent trial, publication
   and report examples. The complete website and its internal links are checked

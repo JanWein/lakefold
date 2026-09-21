@@ -11,7 +11,8 @@ add_lookup(
   engine = c("native", "dm"),
   unmatched = c("error", "keep"),
   suffix = c(".x", ".y"),
-  name = NULL
+  name = NULL,
+  table = NULL
 )
 }
 \arguments{
@@ -37,6 +38,9 @@ with missing reference values. Unused reference rows are always allowed.}
 Defaults to the reference product id or a bare source variable's name.
 For expressions such as file readers, supply a name explicitly; otherwise
 an automatic lookup name is used. \code{\link[=explain]{explain()}} shows the available names.}
+
+\item{table}{Table to select when source is a successful model result. The
+table name is also the default delivery name; published members stay pinned.}
 }
 \value{
 An updated product specification.

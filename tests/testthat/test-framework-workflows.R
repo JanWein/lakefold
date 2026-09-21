@@ -366,11 +366,11 @@ test_that("schema 2 migration retains history and read-only opening never migrat
     "Unsupported registry version"
   )
   f$lake <- connect_lake(config)
-  expect_equal(registry(f$lake, "schema_version")$version, c(2L, 3L))
+  expect_equal(registry(f$lake, "schema_version")$version, c(2L, 4L))
   expect_identical(registry(f$lake, "assets"), original)
   expect_equal(read_release(f$lake, "orders", first$release_id)$id, 1L)
   registry_init(f$lake)
-  expect_equal(registry(f$lake, "schema_version")$version, c(2L, 3L))
+  expect_equal(registry(f$lake, "schema_version")$version, c(2L, 4L))
   expect_equal(nrow(registry(f$lake, "run_owners")), 0)
   expect_identical(registry(f$lake, "run"), registry(f$lake, "runs"))
   expect_identical(registry(f$lake, "ru"), registry(f$lake, "runs"))

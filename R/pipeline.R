@@ -499,6 +499,7 @@ run.tw_pipeline <- function(
   contract <- pipeline$steps$validate
   input_contract <- pipeline$steps$precheck
   pub <- pipeline$steps$publish
+  assert_table_asset(lake, pub$asset)
   register(lake, src)
   if (!isTRUE(pipeline$infer_contract)) {
     register(lake, contract)

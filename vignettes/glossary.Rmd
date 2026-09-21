@@ -13,15 +13,16 @@ checks, storage or reporting.
 
 | Term | Meaning | First use |
 |---|---|---|
-| Product | Reusable instructions for a named table | [Lesson 1](first-product.html) |
+| Product | Reusable instructions for a named table or related table model | [Lesson 1](first-product.html) |
 | Result | The outcome and evidence from one execution | [Lesson 1](first-product.html) |
-| Collect | Obtain an ordinary table from a successful result | [Lesson 1](first-product.html) |
+| Collect | Obtain a tibble or dm from a successful result | [Lesson 1](first-product.html) |
 | Contract | Required columns, types, keys and other table promises | [Lesson 2](check-delivery.html) |
 | Quality rule | A test of whether the values are acceptable | [Lesson 2](check-delivery.html) |
 | Target | The destination to which checked output is written | [Lesson 3](publish-data.html) |
 | Lake | A configured store with release history | [Lesson 3](publish-data.html) |
-| Release | One saved, immutable version of a table in a lake | [Lesson 3](publish-data.html) |
+| Release | One saved, immutable version of a product in a lake | [Lesson 3](publish-data.html) |
 | Pinned input | An exact release, rather than whichever data is current | [Lesson 4](save-report.html) |
+| Model product | Related tables with checked keys, published together; collect returns a dm | [Cancellation report](cancellation-report.html) |
 | Metric | A named calculation with defined input and time meaning | [Lesson 4](save-report.html) |
 | Issued report | Saved values and evidence that are read without recalculating | [Lesson 4](save-report.html) |
 | Partition | Rows sharing a field such as reporting date, replaced as a whole | [Lesson 5](getting-started.html) |

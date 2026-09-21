@@ -54,6 +54,23 @@ replace_sources_list <- function(x, replacements) {
   if (!inherits(x, "tw_product")) {
     abort("x must be a product or a managed dbt project definition.")
   }
+  if (inherits(x, "tw_model_product")) {
+    if (!all(nms %in% names(x$sources))) {
+      abort(paste(
+        "Unknown model table. Choose:",
+        paste(names(x$sources), collapse = ", ")
+      ))
+    }
+    for (name in nms) {
+      value <- replacements[[name]]
+      x$sources[[name]] <- if (inherits(value, "tw_product")) {
+        value
+      } else {
+        replace_primary_delivery(x$sources[[name]], value)
+      }
+    }
+    return(x)
+  }
   definitions <- replacement_graph(x)
   ids <- setdiff(names(definitions), x$id)
   sources <- product_sources(x)
