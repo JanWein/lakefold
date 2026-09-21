@@ -84,7 +84,7 @@ test_that("native policy fails closed for inactive, errored and unconfigured che
   }
 })
 
-test_that("legacy rule policy remains independent of native action levels", {
+test_that("rule policy remains independent of native action levels", {
   skip_if_not_installed("pointblank")
   contract <- tw_contract(
     "x",

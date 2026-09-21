@@ -16,7 +16,7 @@ tw_setup_lake(
   path = NULL
 )
 
-tw_connect_lake(config, read_only = config$read_only \%||\% FALSE)
+tw_connect_lake(config, read_only = config$read_only)
 }
 \arguments{
 \item{catalog}{Metadata configuration.}
@@ -33,7 +33,7 @@ S3).}
 \item{install_extensions}{Allow DuckDB to install required extensions.}
 
 \item{read_only}{Attach existing storage read-only and skip schema creation
-and migration. A lake created by a newer package may require an upgrade.}
+writes. Only the current registry schema is supported.}
 
 \item{path}{Optional self-contained local folder, as in \code{\link[=tw_open_lake]{tw_open_lake()}}.
 Supply this instead of \code{catalog}, \code{storage} and \code{landing}. New folders

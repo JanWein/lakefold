@@ -87,7 +87,7 @@ tw_storage_s3 <- function(
 #' @param backend DuckLake, or local DuckDB for offline development.
 #' @param install_extensions Allow DuckDB to install required extensions.
 #' @param read_only Attach existing storage read-only and skip schema creation
-#'   and migration. A lake created by a newer package may require an upgrade.
+#'   writes. Only the current registry schema is supported.
 #' @param config A configuration from a previously connected lake.
 #' @param path Optional self-contained local folder, as in [tw_open_lake()].
 #'   Supply this instead of `catalog`, `storage` and `landing`. New folders
@@ -232,7 +232,6 @@ tw_lake_config <- function(
   )
   if (!is.null(path)) {
     attr(out, "tw_local_path") <- path
-    attr(out, "tw_legacy_layers") <- isTRUE(local$legacy) && layers_missing
   }
   out
 }
@@ -249,7 +248,6 @@ local_lake_settings <- function(path, backend = NULL, layers = NULL) {
     )
     if (
       !is.list(saved) ||
-        !(identical(saved$format, 1L) || identical(saved$format, 2L)) ||
         !is.character(saved$backend) ||
         length(saved$backend) != 1L ||
         is.na(saved$backend) ||
@@ -259,59 +257,61 @@ local_lake_settings <- function(path, backend = NULL, layers = NULL) {
         "Invalid tidyweave.json. Restore the folder's original configuration."
       )
     }
+    if (!identical(saved$format, 2L)) {
+      abort(
+        "Unsupported local configuration format. Create a new lake with this package version."
+      )
+    }
     if (!is.null(backend) && !identical(backend, saved$backend)) {
       abort(
         "This folder uses a different backend. Reopen without backend or choose a new folder."
       )
     }
-    if (identical(saved$format, 2L)) {
-      valid <- function(x) {
-        is.list(x) &&
-          length(x) > 0L &&
-          all(vapply(
-            x,
-            function(value) {
-              is.character(value) && length(value) == 1L && !is.na(value)
-            },
-            logical(1)
-          ))
-      }
-      if (!valid(saved$layers)) {
-        abort(
-          "Invalid tidyweave.json layers. Restore the folder's original configuration."
-        )
-      }
-      saved_layers <- unlist(saved$layers, use.names = FALSE)
+    valid <- function(x) {
+      is.list(x) &&
+        length(x) > 0L &&
+        all(vapply(
+          x,
+          function(value) {
+            is.character(value) && length(value) == 1L && !is.na(value)
+          },
+          logical(1)
+        ))
+    }
+    if (!valid(saved$layers)) {
+      abort(
+        "Invalid tidyweave.json layers. Restore the folder's original configuration."
+      )
+    }
+    saved_layers <- unlist(saved$layers, use.names = FALSE)
+    if (
+      anyDuplicated(saved_layers) ||
+        any(!grepl("^[A-Za-z][A-Za-z0-9_]*$", saved_layers))
+    ) {
+      abort(
+        "Invalid tidyweave.json layers. Restore the folder's original configuration."
+      )
+    }
+    if (!is.null(saved$layer_names)) {
       if (
-        anyDuplicated(saved_layers) ||
-          any(!grepl("^[A-Za-z][A-Za-z0-9_]*$", saved_layers))
+        !valid(saved$layer_names) ||
+          length(saved$layer_names) != length(saved_layers)
       ) {
         abort(
-          "Invalid tidyweave.json layers. Restore the folder's original configuration."
+          "Invalid tidyweave.json layer names. Restore the folder's original configuration."
         )
       }
-      if (!is.null(saved$layer_names)) {
-        if (
-          !valid(saved$layer_names) ||
-            length(saved$layer_names) != length(saved_layers)
-        ) {
-          abort(
-            "Invalid tidyweave.json layer names. Restore the folder's original configuration."
-          )
-        }
-        names(saved_layers) <- unlist(saved$layer_names, use.names = FALSE)
-      }
-      if (!is.null(layers) && !identical(layers, saved_layers)) {
-        abort(
-          "This folder has different saved layers. Omit layers to reuse its configuration, or choose a new folder."
-        )
-      }
-      layers <- saved_layers
+      names(saved_layers) <- unlist(saved$layer_names, use.names = FALSE)
     }
+    if (!is.null(layers) && !identical(layers, saved_layers)) {
+      abort(
+        "This folder has different saved layers. Omit layers to reuse its configuration, or choose a new folder."
+      )
+    }
+    layers <- saved_layers
     return(list(
       backend = saved$backend,
-      layers = layers %||% c("raw", "validated", "products"),
-      legacy = identical(saved$format, 1L)
+      layers = layers
     ))
   }
   if (
@@ -324,20 +324,19 @@ local_lake_settings <- function(path, backend = NULL, layers = NULL) {
   }
   list(
     backend = backend %||% "duckdb",
-    layers = layers %||% c("raw", "validated", "products"),
-    legacy = FALSE
+    layers = layers %||% c("raw", "validated", "products")
   )
 }
 
-save_local_lake_settings <- function(config, upgrade = FALSE) {
+save_local_lake_settings <- function(config) {
   path <- attr(config, "tw_local_path")
   if (is.null(path)) {
     return(invisible(NULL))
   }
   manifest <- file.path(path, "tidyweave.json")
   if (file.exists(manifest)) {
-    settings <- local_lake_settings(path, config$backend, config$layers)
-    if (!upgrade || !isTRUE(settings$legacy)) return(invisible(NULL))
+    local_lake_settings(path, config$backend, config$layers)
+    return(invisible(NULL))
   }
   temporary <- tempfile(".local-config-", tmpdir = path)
   on.exit(unlink(temporary), add = TRUE)
@@ -362,7 +361,7 @@ save_local_lake_settings <- function(config, upgrade = FALSE) {
 
 #' @rdname tw_setup_lake
 #' @export
-tw_connect_lake <- function(config, read_only = config$read_only %||% FALSE) {
+tw_connect_lake <- function(config, read_only = config$read_only) {
   need("duckdb")
   if (!inherits(config, "tw_config")) {
     abort("Use tw_lake_config() to describe this lake.")
@@ -371,9 +370,7 @@ tw_connect_lake <- function(config, read_only = config$read_only %||% FALSE) {
   config$read_only <- read_only
   local_path <- attr(config, "tw_local_path")
   if (!is.null(local_path)) {
-    local <- local_lake_settings(local_path, config$backend, config$layers)
-    attr(config, "tw_legacy_layers") <- isTRUE(local$legacy) &&
-      isTRUE(attr(config, "tw_legacy_layers"))
+    local_lake_settings(local_path, config$backend, config$layers)
   }
   if (
     read_only &&
@@ -512,23 +509,6 @@ tw_connect_lake <- function(config, read_only = config$read_only %||% FALSE) {
       }
     )
   }
-  if (isTRUE(attr(config, "tw_legacy_layers"))) {
-    existing_layers <- query(
-      lake,
-      "SELECT schema_name FROM information_schema.schemata WHERE catalog_name = 'lake' ORDER BY schema_name"
-    )$schema_name
-    custom <- setdiff(existing_layers, c("main", "_dl", config$layers))
-    if (length(custom)) {
-      abort(paste0(
-        "This older folder did not save its layer configuration. Reopen once with layers = c(",
-        paste(
-          encodeString(setdiff(existing_layers, c("main", "_dl")), quote = '"'),
-          collapse = ", "
-        ),
-        ") in your intended order. A writable open will remember this choice."
-      ))
-    }
-  }
   if (!read_only) {
     for (s in c(config$layers, "_dl")) {
       exec(
@@ -547,16 +527,13 @@ tw_connect_lake <- function(config, read_only = config$read_only %||% FALSE) {
         abort("Registry is missing. Open with a writable connection first.")
       }
     )
-    if (!length(versions) || anyNA(versions) || max(versions) != 4L) {
+    if (!identical(versions, 4L)) {
       abort(
-        "Unsupported registry version. Open with a compatible writable package first."
+        "Unsupported registry version. Create a new lake with this package version."
       )
     }
   }
   query(lake, "SELECT 1 AS connection_test")
-  if (!read_only) {
-    save_local_lake_settings(config, upgrade = TRUE)
-  }
   ok <- TRUE
   lake
 }

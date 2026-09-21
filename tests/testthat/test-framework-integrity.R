@@ -9,7 +9,7 @@ test_that("identifiers neither consume nor create the R random seed", {
   expect_false(exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE))
 })
 
-test_that("full formulas distinguish previously abbreviated metric definitions", {
+test_that("full formulas distinguish metric definitions", {
   f <- fixture()
   on.exit(fixture_cleanup(f))
   tw_run(f$pipeline, f$lake)
@@ -41,34 +41,6 @@ test_that("full formulas distinguish previously abbreviated metric definitions",
     "expression",
     registered$definition[registered$id == first$id]
   )))
-})
-
-test_that("legacy metric identities are preserved and require a new version", {
-  f <- fixture()
-  on.exit(fixture_cleanup(f))
-  metric <- reserve_metric()
-  legacy <- canonical(metric)
-  legacy$expr <- "sum(...)"
-  legacy$input_columns <- NULL
-  insert_meta(
-    f$lake,
-    "assets",
-    list(
-      id = metric$id,
-      version = metric$version,
-      kind = "metric",
-      owner = "Risk",
-      description = "Legacy",
-      definition = jencode(legacy),
-      fingerprint = fingerprint(legacy),
-      registered_at = now()
-    )
-  )
-  old <- tw_registry(f$lake, "assets")
-  expect_error(tw_register(f$lake, metric), class = "tw_legacy_metric")
-  expect_identical(tw_registry(f$lake, "assets"), old)
-  metric$version <- "2.0.0"
-  expect_no_error(tw_register(f$lake, metric))
 })
 
 test_that("all supported data pronouns enforce the missing-value policy", {
@@ -272,41 +244,6 @@ test_that("report retries ignore only volatile calculation times", {
     ),
     "different content"
   )
-})
-
-test_that("legacy report values remain readable including missing groups", {
-  f <- fixture()
-  on.exit(fixture_cleanup(f))
-  old <- list(
-    id = "legacy",
-    code_version = "v0",
-    params = list(),
-    measures = list(
-      total = list(
-        manifest = list(metric = "old", calculated_at = "2026-01-01"),
-        values = data.frame(group = c("a", NA), value = c(2, 3))
-      )
-    )
-  )
-  insert_meta(
-    f$lake,
-    "reports",
-    list(id = "legacy", created_at = now(), manifest = jencode(old))
-  )
-  expect_equal(
-    tw_report_read(f$lake, "legacy", TRUE)$total,
-    tibble::tibble(group = c("a", NA), value = c(2, 3))
-  )
-  expect_error(tw_report_read(f$lake, "absent"), class = "tw_no_report")
-})
-
-
-test_that("saved pre-read-only configurations remain executable", {
-  f <- fixture()
-  on.exit(fixture_cleanup(f))
-  legacy <- f$pipeline
-  legacy$config$read_only <- NULL
-  expect_equal(tw_run(legacy, f$lake)$status, "published")
 })
 
 test_that("custom metric groups are unique and repeated lineage is deduplicated", {

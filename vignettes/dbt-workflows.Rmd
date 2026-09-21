@@ -9,7 +9,7 @@ vignette: >
 ---
 
 Use this when you already need dbt SQL models. Read [Publish and correct
-data](publish-data.html) first. You need DuckDB and a separately installed
+data](modular-workflows.html) first. You need DuckDB and a separately installed
 dbt CLI; installation is described below. Credential-dependent snippets are
 configuration examples, not steps required for the beginner lessons.
 
@@ -256,6 +256,3 @@ For details, consult dbt's
 ```{r cleanup, include=FALSE}
 unlink(root, recursive = TRUE)
 ```
-
-
-[Back to Learn](learn.html) · [Troubleshooting](troubleshooting.html)

@@ -1,4 +1,4 @@
-# reports preserve doubles and reject changes smaller than legacy rounding
+# reports preserve doubles and detect small numeric changes
 
     Code
       tw_report_release(f$lake, "changed", list(total = changed), "v1")

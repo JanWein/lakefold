@@ -8,15 +8,14 @@
 #' [tw_product()] defines output identity. Add a [tw_contract()] for schema and
 #' keys and [tw_quality_rule()] specifications for value requirements using
 #' [tw_add_contract()] and [tw_add_quality()]. Requirements apply to prepared
-#' output. See `vignette("first-product")`.
+#' output. See `vignette("get-started")`.
 #'
 #' @section Preparation recipes:
 #' [tw_recipe()] stores ordered, deferred [tw_step_mutate()] and other preparation
 #' steps. Reuse a recipe across products. [tw_step_transform()] accepts an
 #' ordinary function or adapter; [tw_step_lookup()] adds a checked relationship.
 #' [tw_set_engine()] chooses a supported quality or relationship implementation.
-#' Recipes have no fitted training state. See `vignette("preparation-recipes")`
-#' and `vignette("engines")`.
+#' Recipes have no fitted training state. See `vignette("preparation-recipes")`.
 #'
 #' @section Workflow assembly:
 #' Start with [tw_workflow()], then [tw_add_product()] and [tw_add_recipe()].
@@ -32,10 +31,10 @@
 #' other targets retain their own persistence guarantees.
 #'
 #' @section Learn more:
-#' Begin with `vignette("get-started")`. `vignette("learn")` groups task guides,
-#' integrations and case studies. `vignette("api-migration")` explains the
-#' prefixed API and extension methods. All public tidyweave functions start
-#' with `tw_`; ordinary dplyr methods remain available through dplyr.
+#' Begin with `vignette("get-started")`. `vignette("quality-gates")` explains
+#' checks and diagnosis; `vignette("save-report")` covers reported values.
+#' `vignette("optional-integrations")` describes storage and optional tools.
+#' All public functions start with `tw_`; dplyr methods remain available.
 #'
 #' @section Extend and operate:
 #' Public S3 protocols support sources, transformations, quality engines,
@@ -44,7 +43,7 @@
 #' writer; PostgreSQL catalogs coordinate package writes through advisory locks.
 #' Catalog delivery is outside the data transaction. Scheduling, report rendering
 #' and access management remain with existing tools. Interfaces are experimental
-#' until the first stable release candidate.
+#' until version 1.0, without backward compatibility.
 #'
 #' @seealso [tw_product()], [tw_recipe()], [tw_workflow()]
 #' @keywords internal

@@ -230,11 +230,3 @@ report_json <- function(x) {
 report_fingerprint <- function(x) {
   digest::digest(report_json(x), algo = "sha256", serialize = FALSE)
 }
-
-measurement_fingerprint <- function(x, manifest) {
-  if (identical(manifest$result_hash_version, 2L)) {
-    report_fingerprint(as.data.frame(x))
-  } else {
-    fingerprint(as.data.frame(x))
-  }
-}

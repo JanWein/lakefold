@@ -18,7 +18,7 @@ catalog <- tw_registry_duckdb("metadata.ducklake")
 # Set DUCKLAKE_PG_CONNECTION in the runtime, not in Git.
 # Example format: host=... port=5432 dbname=... user=... password=... sslmode=require
 # catalog <- tw_registry_postgres("DUCKLAKE_PG_CONNECTION")
-# This connects to a NEW catalog. It does NOT migrate an existing local catalog.
+# This configuration connects to a new catalog.
 
 lake <- tw_setup_lake(
   catalog = catalog,

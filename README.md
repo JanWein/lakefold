@@ -60,13 +60,10 @@ they have no fitted training state or `prep()` / `bake()` phase.
 ## Documentation
 
 - [Get started](https://janwein.github.io/tidyweave/articles/get-started.html): one complete workflow, including a second delivery.
-- [Product specifications](https://janwein.github.io/tidyweave/articles/first-product.html): state what acceptable output means.
 - [Preparation recipes](https://janwein.github.io/tidyweave/articles/preparation-recipes.html): compose, reuse and inspect steps.
 - [Workflows](https://janwein.github.io/tidyweave/articles/modular-workflows.html): assemble components, replace slots and execute.
-- [Engines](https://janwein.github.io/tidyweave/articles/engines.html): select native, pointblank or dm implementations.
-- [Articles](https://janwein.github.io/tidyweave/articles/learn.html) and [reference](https://janwein.github.io/tidyweave/reference/index.html): publication, reports, integrations and arguments.
+- [Articles](https://janwein.github.io/tidyweave/articles/index.html) and [reference](https://janwein.github.io/tidyweave/reference/index.html): publication, reports, integrations and arguments.
 
-Upgrading existing code? Read the [API migration guide](https://janwein.github.io/tidyweave/articles/api-migration.html).
 
 ## Scope
 
@@ -76,5 +73,4 @@ documented storage semantics. Local lake writes require one coordinated writer.
 DuckLake is an explicit backend choice. Saved reports contain values and
 evidence; rendering, scheduling and access management remain with your tools.
 
-The package is in development. Interfaces may change before the first stable
-release candidate. See [Contributing](CONTRIBUTING.md). MIT licensed.
+The package is in development. Interfaces may change before version 1.0, without backward compatibility. See [Contributing](CONTRIBUTING.md). MIT licensed.

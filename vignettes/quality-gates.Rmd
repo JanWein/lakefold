@@ -8,7 +8,7 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
-Use this after [Check a delivery](check-delivery.html). Start with the
+Use this after [Check a delivery](quality-gates.html). Start with the
 requirement you need now. Basic rules need no optional engine; the pointblank
 and storage sections state their additional dependencies.
 
@@ -198,9 +198,7 @@ testthat::test_that("the example delivery meets its contract", {
 })
 ```
 
-For failure diagnosis, historical reads and cache behavior, continue with
-[Quality and history](quality-history.html). dbt model tests belong in the dbt
-project; see [dbt workflows](dbt-workflows.html).
+dbt model tests belong in the dbt project; see [dbt workflows](dbt-workflows.html).
 
 ```{r close-quality-lake, include=FALSE, eval=requireNamespace("duckdb", quietly = TRUE)}
 stopifnot(blocked$status == "blocked",
@@ -210,4 +208,37 @@ unlink(root, recursive = TRUE)
 ```
 
 
-[Back to Learn](learn.html) · [Troubleshooting](troubleshooting.html)
+
+## Diagnose and monitor
+
+Start with `tw_status(result)` and `tw_quality_report(result)`. A trial retains
+failed results by default. For `tw_run()` or `tw_publish()`, explicitly choose
+`stop_on_failure = FALSE` when inspecting interactively.
+
+| Symptom | Next action |
+|---|---|
+| A quality rule fails | Call `tw_quality_rows(result)`; select a rule if several fail |
+| A schema fails | Check names, types, missing values, duplicate keys and extra columns |
+| A lookup fails | Check unmatched input keys and duplicate reference keys |
+| A rule errors or evaluates no rows | Fix its definition or input; it cannot count as a pass |
+| Collection fails | Inspect the unsuccessful result, correct the delivery and rerun |
+
+Use `tw_quality_errors()` for in-memory conditions. Retained pointblank agents
+also remain in memory; they are not registry records. With `evidence = "runs"`,
+execution saves portable metadata for `tw_run_history()`, `tw_read_run()` and
+`tw_incidents()` without saving source rows or raw conditions.
+
+Lake releases retain their quality evidence. Read a pinned release with
+`tw_read_release(lake, asset, release_id)` and inspect its checks with
+`tw_quality(lake, asset = asset, release = release_id)`. A corrected delivery
+gets a new release; changing a definition's version does not identify data.
+
+Execution runs again by default. For lake targets, `cache = TRUE` requires an
+explicit product `code_version` and matching current inputs. Update that version
+when callback dependencies or external state change. Dynamic reference checks
+reject caching. A cached result retains the original execution evidence.
+
+Contracts have no implicit freshness deadline. Configure `max_age_hours` or use
+`tw_check_delivery()` with the expected business date and due time. Run monitoring
+from your existing scheduler. See the [operations notes](https://github.com/JanWein/tidyweave/blob/main/docs/OPERATIONS.md)
+for recovery, metadata retries and writer coordination.

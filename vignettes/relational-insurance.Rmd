@@ -736,6 +736,3 @@ report is issued. Simpler syntax cannot infer those decisions safely.
 ```{r cleanup, include=FALSE, purl=FALSE}
 if (run_stack) unlink(path, recursive = TRUE)
 ```
-
-
-[Back to Learn](learn.html) · [Troubleshooting](troubleshooting.html)

@@ -20,9 +20,8 @@ ordinary reports or a long tibble for batch reports.
 }
 \description{
 Reads the saved manifest without recalculating any metric. It preserves the
-original calculation times. Works on read-only lakes, including reports
-created before version 0.6.0. Values use the JSON representation stored in
-the report; dates are ISO strings. With \code{values_only}, ordinary reports return
+original calculation times and works on read-only lakes. Values use the
+JSON representation stored in the report; dates are ISO strings. With \code{values_only}, ordinary reports return
 named result tibbles; batch reports return the long measurement table, with
 Date selections restored in the \code{.period} list column.
 }

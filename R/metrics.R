@@ -331,7 +331,7 @@ tw_measure <- function(
     )
     if (nrow(old) && any(old$fingerprint != fingerprint(metric))) {
       abort(
-        "Definition changed without a version bump; legacy formulas require a new metric version."
+        "Definition changed without a version bump."
       )
     }
   }
@@ -442,8 +442,7 @@ tw_measure <- function(
     filters = filters,
     params = params,
     calculated_at = now(),
-    result_hash = report_fingerprint(result),
-    result_hash_version = 2L
+    result_hash = report_fingerprint(result)
   )
   attr(result, "tw_manifest") <- manifest
   attr(result, "tw_quality_reference") <- if (exploring) {
@@ -508,9 +507,6 @@ inform_measure_grouping <- function(metrics) {
 #'
 #' Reports preserve double precision. Nested list columns are rejected before
 #' writing; expand them into named atomic columns in the metric calculation.
-#' Existing stored reports remain readable; previously rounded values cannot
-#' be recovered. Recalculate measurements made by older package versions before
-#' saving a new report.
 #' Report JSON stores numeric values. Integer64 columns must stay within
 #' -2^53 to 2^53 inclusive so saved values can be read back exactly. Larger
 #' integers are rejected before writing; retain those individual results
@@ -633,14 +629,9 @@ tw_report_release <- function(
     if (
       !identical(
         m$result_hash,
-        if (identical(m$result_hash_version, 2L)) {
-          report_fingerprint(as.data.frame(x))
-        } else {
-          fingerprint(as.data.frame(x))
-        }
+        report_fingerprint(as.data.frame(x))
       )
     ) {
-      # Tibbles and data.frames have the same canonical JSON representation.
       abort("Metric result changed after calculation.")
     }
     if (
@@ -668,11 +659,6 @@ tw_report_release <- function(
           ))
         }
       }
-    }
-    if (!identical(m$result_hash_version, 2L)) {
-      abort(
-        "Recalculate this measurement before saving: its legacy checksum cannot verify numeric values exactly."
-      )
     }
     values <- as.data.frame(x)
     attr(values, "tw_manifest") <- NULL
@@ -799,9 +785,8 @@ report_identity <- function(json) {
 #' Read an immutable report and its saved results
 #'
 #' Reads the saved manifest without recalculating any metric. It preserves the
-#' original calculation times. Works on read-only lakes, including reports
-#' created before version 0.6.0. Values use the JSON representation stored in
-#' the report; dates are ISO strings. With `values_only`, ordinary reports return
+#' original calculation times and works on read-only lakes. Values use the
+#' JSON representation stored in the report; dates are ISO strings. With `values_only`, ordinary reports return
 #' named result tibbles; batch reports return the long measurement table, with
 #' Date selections restored in the `.period` list column.
 #' @param lake Connected lake, lake configuration or local lake folder.

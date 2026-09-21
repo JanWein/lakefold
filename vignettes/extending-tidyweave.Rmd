@@ -8,7 +8,7 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
-For package developers. Read [Architecture](workflow-design.html) first.
+For package developers. Read [Workflows](modular-workflows.html) first.
 The core extension example is self-contained and needs no external service.
 
 ```{r setup, include=FALSE, purl=FALSE}
@@ -201,6 +201,3 @@ The [optional integrations guide](optional-integrations.html) demonstrates built
 adapters together. The package tests include independent S3 substitution and built-in adapter
 checks. Real deployment verification still belongs to the integration's owner:
 a local HTTP fixture cannot certify an enterprise catalog or IAM configuration.
-
-
-[Back to Learn](learn.html) · [Troubleshooting](troubleshooting.html)

@@ -11,36 +11,12 @@ template:
     border-radius: 0.35rem
 navbar:
   structure:
-    left: [getstarted, learn, reference, help, news]
+    left: [getstarted, articles, reference, news]
     right: [search, github]
   components:
     getstarted:
       text: Get started
       href: articles/get-started.html
-    learn:
-      text: Guides
-      menu:
-        - text: Product specifications
-          href: articles/first-product.html
-        - text: Preparation recipes
-          href: articles/preparation-recipes.html
-        - text: Workflows
-          href: articles/modular-workflows.html
-        - text: Operation engines
-          href: articles/engines.html
-        - text: All articles
-          href: articles/learn.html
-        - text: API migration
-          href: articles/api-migration.html
-    help:
-      text: Help
-      menu:
-        - text: Troubleshooting
-          href: articles/troubleshooting.html
-        - text: Terms
-          href: articles/glossary.html
-        - text: Why tidyweave?
-          href: articles/why-tidyweave.html
 reference:
   - title: Product specifications
     desc: Define output identity and requirements independently of preparation.
@@ -71,13 +47,9 @@ reference:
     desc: Public S3 protocols for source, transformation, quality, target and catalog extensions.
     contents: [tw_capabilities, tw_check_component, tw_read_source, tw_execute_transform, tw_run_quality, tw_write_target, tw_publish_metadata]
 articles:
-  - title: Core guides
-    contents: [get-started, first-product, preparation-recipes, modular-workflows, engines, api-migration]
-  - title: Checks and publication
-    contents: [check-delivery, publish-data, save-report, quality-gates, quality-history]
-  - title: Composition and case studies
-    contents: [composing-products, three-deliveries, everyday-workflows, getting-started, cancellation-report, products-metrics, relational-insurance]
-  - title: Backends and integrations
-    contents: [optional-integrations, create-ducklake, shared-ducklake, dbt-workflows, layered-data-stack]
-  - title: Developers and help
-    contents: [learn, extending-tidyweave, workflow-design, troubleshooting, glossary, why-tidyweave, design-review]
+  - title: Define and execute
+    contents: [get-started, preparation-recipes, modular-workflows]
+  - title: Check and report
+    contents: [quality-gates, save-report]
+  - title: Integrate and extend
+    contents: [optional-integrations, dbt-workflows, relational-insurance, extending-tidyweave]

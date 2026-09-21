@@ -15,7 +15,7 @@ results with data references, quality outcomes and lineage.
 \code{\link[=tw_product]{tw_product()}} defines output identity. Add a \code{\link[=tw_contract]{tw_contract()}} for schema and
 keys and \code{\link[=tw_quality_rule]{tw_quality_rule()}} specifications for value requirements using
 \code{\link[=tw_add_contract]{tw_add_contract()}} and \code{\link[=tw_add_quality]{tw_add_quality()}}. Requirements apply to prepared
-output. See \code{vignette("first-product")}.
+output. See \code{vignette("get-started")}.
 }
 
 \section{Preparation recipes}{
@@ -24,8 +24,7 @@ output. See \code{vignette("first-product")}.
 steps. Reuse a recipe across products. \code{\link[=tw_step_transform]{tw_step_transform()}} accepts an
 ordinary function or adapter; \code{\link[=tw_step_lookup]{tw_step_lookup()}} adds a checked relationship.
 \code{\link[=tw_set_engine]{tw_set_engine()}} chooses a supported quality or relationship implementation.
-Recipes have no fitted training state. See \code{vignette("preparation-recipes")}
-and \code{vignette("engines")}.
+Recipes have no fitted training state. See \code{vignette("preparation-recipes")}.
 }
 
 \section{Workflow assembly}{
@@ -47,10 +46,10 @@ other targets retain their own persistence guarantees.
 
 \section{Learn more}{
 
-Begin with \code{vignette("get-started")}. \code{vignette("learn")} groups task guides,
-integrations and case studies. \code{vignette("api-migration")} explains the
-prefixed API and extension methods. All public tidyweave functions start
-with \code{tw_}; ordinary dplyr methods remain available through dplyr.
+Begin with \code{vignette("get-started")}. \code{vignette("quality-gates")} explains
+checks and diagnosis; \code{vignette("save-report")} covers reported values.
+\code{vignette("optional-integrations")} describes storage and optional tools.
+All public functions start with \code{tw_}; dplyr methods remain available.
 }
 
 \section{Extend and operate}{
@@ -61,7 +60,7 @@ connections remain caller-owned. Local lake writes need one coordinated
 writer; PostgreSQL catalogs coordinate package writes through advisory locks.
 Catalog delivery is outside the data transaction. Scheduling, report rendering
 and access management remain with existing tools. Interfaces are experimental
-until the first stable release candidate.
+until version 1.0, without backward compatibility.
 }
 
 \seealso{

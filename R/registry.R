@@ -1,71 +1,44 @@
 registry_init <- function(lake) {
   registry_table <- meta(lake, "schema_version")
-  exec(
-    lake,
-    paste0(
-      "CREATE TABLE IF NOT EXISTS ",
-      registry_table,
-      " (version INTEGER, applied_at VARCHAR)"
-    )
-  )
-  versions <- query(lake, paste("SELECT version FROM", registry_table))$version
-  if (anyNA(versions) || any(versions > 4L)) {
-    abort(
-      "Registry schema is newer than this tidyweave version supports.",
-      "tw_registry_version"
-    )
+  if (DBI::dbExistsTable(lake$con, table_id("_dl", "schema_version"))) {
+    versions <- query(
+      lake,
+      paste("SELECT version FROM", registry_table)
+    )$version
+    if (!identical(versions, 4L)) {
+      abort(
+        "Unsupported registry version. Create a new lake with this package version.",
+        "tw_registry_version"
+      )
+    }
+    return(invisible(NULL))
   }
   schemas <- list(
+    schema_version = "version INTEGER, applied_at VARCHAR",
     assets = "id VARCHAR, version VARCHAR, kind VARCHAR, owner VARCHAR, description VARCHAR, definition VARCHAR, fingerprint VARCHAR, registered_at VARCHAR",
     runs = "run_id VARCHAR, pipeline VARCHAR, asset VARCHAR, status VARCHAR, started_at VARCHAR, finished_at VARCHAR, input_hash VARCHAR, definition_hash VARCHAR, code_version VARCHAR, message VARCHAR, release_id VARCHAR",
     inputs = "run_id VARCHAR, source VARCHAR, source_version VARCHAR, fingerprint VARCHAR, original_name VARCHAR, landed_path VARCHAR, received_at VARCHAR, business_date VARCHAR",
-    quality_results = "run_id VARCHAR, contract VARCHAR, rule VARCHAR, status VARCHAR, severity VARCHAR, n_failed DOUBLE, n_total DOUBLE, threshold DOUBLE, message VARCHAR",
+    quality_results = "run_id VARCHAR, contract VARCHAR, rule VARCHAR, status VARCHAR, severity VARCHAR, n_failed DOUBLE, n_total DOUBLE, threshold DOUBLE, message VARCHAR, engine VARCHAR, stage VARCHAR, segment VARCHAR, details VARCHAR",
     releases = "release_id VARCHAR, asset VARCHAR, schema_name VARCHAR, table_name VARCHAR, run_id VARCHAR, published_at VARCHAR, contract VARCHAR, definition_hash VARCHAR, input_hash VARCHAR, quality VARCHAR, business_date VARCHAR, parent_release VARCHAR",
     lineage_edges = "run_id VARCHAR, from_id VARCHAR, from_version VARCHAR, to_id VARCHAR, to_version VARCHAR, relation VARCHAR",
     events = "event_id VARCHAR, run_id VARCHAR, asset VARCHAR, type VARCHAR, recipient VARCHAR, created_at VARCHAR, status VARCHAR, message VARCHAR",
     reports = "id VARCHAR, created_at VARCHAR, manifest VARCHAR",
     run_owners = "run_id VARCHAR, host VARCHAR, pid INTEGER, boot VARCHAR, process_start VARCHAR"
   )
-  for (name in names(schemas)) {
-    exec(
-      lake,
-      paste0(
-        "CREATE TABLE IF NOT EXISTS ",
-        meta(lake, name),
-        " (",
-        schemas[[name]],
-        ")"
-      )
-    )
-  }
   DBI::dbWithTransaction(lake$con, {
-    columns <- DBI::dbListFields(lake$con, table_id("_dl", "quality_results"))
-    additions <- c(
-      engine = "'legacy'",
-      stage = "'candidate'",
-      segment = "''",
-      details = "''"
-    )
-    for (column in setdiff(names(additions), columns)) {
+    for (name in names(schemas)) {
       exec(
         lake,
-        paste(
-          "ALTER TABLE",
-          meta(lake, "quality_results"),
-          "ADD COLUMN",
-          qident(lake, column),
-          "VARCHAR DEFAULT",
-          additions[[column]]
+        paste0(
+          "CREATE TABLE IF NOT EXISTS ",
+          meta(lake, name),
+          " (",
+          schemas[[name]],
+          ")"
         )
       )
     }
-    if (!4L %in% versions) {
-      insert_meta(
-        lake,
-        "schema_version",
-        list(version = 4L, applied_at = now())
-      )
-    }
+    insert_meta(lake, "schema_version", list(version = 4L, applied_at = now()))
   })
 }
 
@@ -101,9 +74,6 @@ tw_registry <- function(
   )
 ) {
   assert_lake(lake)
-  if (length(table) == 1L && table %in% c("ru", "run")) {
-    table <- "runs"
-  }
   table <- match.arg(table)
   query(lake, paste("SELECT * FROM", meta(lake, table)))
 }
@@ -152,19 +122,6 @@ tw_register <- function(lake, object) {
   )
   if (nrow(old)) {
     if (any(old$fingerprint != h)) {
-      if (
-        inherits(object, "tw_metric") &&
-          any(vapply(
-            old$definition,
-            function(x) is.character(jdecode(x)$expr),
-            logical(1)
-          ))
-      ) {
-        abort(
-          "Legacy metric formulas used abbreviated labels. Register a new metric version; historical reports remain readable.",
-          "tw_legacy_metric"
-        )
-      }
       abort(
         paste(
           "Definition changed without a version bump:",
