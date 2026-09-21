@@ -7,8 +7,24 @@ template:
   bootstrap: 5
 navbar:
   structure:
-    left: [intro, articles, reference, news]
+    left: [intro, articles, reference, components, news]
     right: [search, github]
+  components:
+    components:
+      text: Packages
+      menu:
+        - text: dataraft.core
+          href: components/dataraft.core/reference/index.html
+        - text: dataraft.lake
+          href: components/dataraft.lake/reference/index.html
+        - text: dataraft.adapters
+          href: components/dataraft.adapters/reference/index.html
+        - text: dataraft.metrics
+          href: components/dataraft.metrics/reference/index.html
+        - text: dataraft.dbt
+          href: components/dataraft.dbt/reference/index.html
+        - text: dataraft.catalog
+          href: components/dataraft.catalog/reference/index.html
 reference:
   - title: Family API
     contents: [starts_with("dr_")]
