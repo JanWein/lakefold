@@ -42,7 +42,10 @@ test_that("local shorthand preserves saved backends and refuses unknown folders"
     "is a file"
   )
   manifest <- file.path(root, "tidyweave.json")
-  writeLines('{"format":1,"backend":"ducklake"}', manifest)
+  writeLines(
+    '{"format":2,"backend":"ducklake","layers":["raw","validated","products"]}',
+    manifest
+  )
   expect_identical(tw_lake_config(path = root)$backend, "ducklake")
   expect_error(
     tw_lake_config(path = root, backend = "duckdb"),
