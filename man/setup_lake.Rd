@@ -12,7 +12,8 @@ setup_lake(
   landing = "landing",
   backend = c("ducklake", "duckdb"),
   install_extensions = TRUE,
-  read_only = FALSE
+  read_only = FALSE,
+  path = NULL
 )
 
 connect_lake(config, read_only = config$read_only \%||\% FALSE)
@@ -33,6 +34,11 @@ S3).}
 
 \item{read_only}{Attach existing storage read-only and skip schema creation
 and migration. A lake created by a newer package may require an upgrade.}
+
+\item{path}{Optional self-contained local folder, as in \code{\link[=open_lake]{open_lake()}}.
+Supply this instead of \code{catalog}, \code{storage} and \code{landing}. New folders
+default to DuckDB; use \code{backend = "ducklake"} for DuckLake. Saved settings
+are reused when reopening.}
 
 \item{config}{A configuration from a previously connected lake.}
 }

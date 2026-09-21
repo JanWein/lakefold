@@ -49,6 +49,21 @@ no output path is supplied. `quality()` gives the underlying checks, and
 
 ## Publish, then accept the next delivery
 
+For an actual local **DuckLake**, start with a new folder:
+
+```r
+lake <- open_lake("my-ducklake", backend = "ducklake",
+  layers = c("raw", "staging", "core", "marts"))
+close_lake(lake)
+lake <- open_lake("my-ducklake") # Backend and layers are remembered
+close_lake(lake)
+```
+
+This needs optional `duckdb` and its DuckLake extension. Follow
+[Create a DuckLake](https://janwein.github.io/tidyweave/articles/create-ducklake.html)
+to save data, reopen the folder and publish the next delivery. Omitting the
+backend for a new folder selects ordinary DuckDB, as in the simpler example below.
+
 ```r
 # Optional dependency for a local lake with release history:
 install.packages("duckdb")

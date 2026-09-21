@@ -5,7 +5,13 @@
 \alias{close_lake}
 \title{Open a local lake with sensible defaults}
 \usage{
-open_lake(path = "tidyweave", backend = NULL, read_only = FALSE)
+open_lake(
+  path = "tidyweave",
+  backend = NULL,
+  read_only = FALSE,
+  layers = NULL,
+  install_extensions = TRUE
+)
 
 close_lake(lake)
 }
@@ -18,6 +24,13 @@ DuckDB extension. Defaults to the saved choice, or DuckDB for a new folder.}
 
 \item{read_only}{Open an existing lake without registry or data writes.}
 
+\item{layers}{Layer names, optionally named by role. For a new folder the
+default is \code{c("raw", "validated", "products")}. Omit on subsequent opens
+to reuse saved layers. Explicit conflicting settings are rejected.}
+
+\item{install_extensions}{Allow installation of required DuckDB extensions.
+Use \code{FALSE} when the required extensions are already installed.}
+
 \item{lake}{Connected lake to close.}
 }
 \value{
@@ -26,11 +39,18 @@ returns \code{TRUE}; it is an alias for \code{\link[=disconnect_lake]{disconnect
 }
 \description{
 Creates or reopens a self-contained local folder. DuckDB is the default and
-needs no extension download or external service. The backend is remembered
-in \code{tidyweave.json}; reopening a folder never silently switches backends.
+needs no extension download or external service. Use \code{backend = "ducklake"}
+for an actual DuckLake. Backend and ordered layers (including named roles)
+are remembered in \code{tidyweave.json}; reopening never silently switches them.
 A new lake needs an empty or nonexistent folder. Existing lakes made with
-custom configuration still open through \code{\link[=connect_lake]{connect_lake()}}.
-Use \code{\link[=lake_config]{lake_config()}} and \code{\link[=connect_lake]{connect_lake()}} for custom layers or remote storage.
+custom remote or split-location configuration still open through
+\code{\link[=connect_lake]{connect_lake()}}. Use \code{\link[=lake_config]{lake_config()}} for a connection-free definition.
+}
+\details{
+Older folders stored only their backend. Default-layer folders are upgraded
+on writable open. If extra schemas exist, supply your original \code{layers} once,
+in their intended order; their roles cannot be recovered from schema names.
+Read-only opens never update the folder configuration.
 }
 \examples{
 \dontshow{if (requireNamespace("duckdb", quietly = TRUE)) withAutoprint(\{ # examplesIf}

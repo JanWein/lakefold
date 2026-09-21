@@ -40,6 +40,7 @@ The downloadable examples are extracted from the corresponding vignettes:
 | Script | Source |
 |---|---|
 | `everyday_workflows.R` | `everyday-workflows.Rmd` |
+| `create_ducklake.R` | `create-ducklake.Rmd` |
 | `composing_products.R` | `composing-products.Rmd` |
 | `monthly_reporting.R` | `getting-started.Rmd` |
 | `custom_target.R` | `extending-tidyweave.Rmd` |

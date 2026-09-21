@@ -1,16 +1,27 @@
 #' Open a local lake with sensible defaults
 #'
 #' Creates or reopens a self-contained local folder. DuckDB is the default and
-#' needs no extension download or external service. The backend is remembered
-#' in `tidyweave.json`; reopening a folder never silently switches backends.
+#' needs no extension download or external service. Use `backend = "ducklake"`
+#' for an actual DuckLake. Backend and ordered layers (including named roles)
+#' are remembered in `tidyweave.json`; reopening never silently switches them.
 #' A new lake needs an empty or nonexistent folder. Existing lakes made with
-#' custom configuration still open through [connect_lake()].
-#' Use [lake_config()] and [connect_lake()] for custom layers or remote storage.
+#' custom remote or split-location configuration still open through
+#' [connect_lake()]. Use [lake_config()] for a connection-free definition.
+#'
+#' Older folders stored only their backend. Default-layer folders are upgraded
+#' on writable open. If extra schemas exist, supply your original `layers` once,
+#' in their intended order; their roles cannot be recovered from schema names.
+#' Read-only opens never update the folder configuration.
 #' @param path Local folder, created if needed. Defaults to `"tidyweave"` in
 #'   the working directory.
 #' @param backend Optional `"duckdb"` or `"ducklake"`. DuckLake requires its
 #'   DuckDB extension. Defaults to the saved choice, or DuckDB for a new folder.
 #' @param read_only Open an existing lake without registry or data writes.
+#' @param layers Layer names, optionally named by role. For a new folder the
+#'   default is `c("raw", "validated", "products")`. Omit on subsequent opens
+#'   to reuse saved layers. Explicit conflicting settings are rejected.
+#' @param install_extensions Allow installation of required DuckDB extensions.
+#'   Use `FALSE` when the required extensions are already installed.
 #' @param lake Connected lake to close.
 #' @returns `open_lake()` returns a connected `tw_lake`. `close_lake()` invisibly
 #'   returns `TRUE`; it is an alias for [disconnect_lake()].
@@ -26,62 +37,30 @@
 #' read_release(lake, "orders")
 #' close_lake(lake)
 #' unlink(root, recursive = TRUE)
-open_lake <- function(path = "tidyweave", backend = NULL, read_only = FALSE) {
-  need("duckdb")
+open_lake <- function(
+  path = "tidyweave",
+  backend = NULL,
+  read_only = FALSE,
+  layers = NULL,
+  install_extensions = TRUE
+) {
   flag(read_only, "read_only")
   path <- absolute_path(path)
-  if (!is.null(backend)) {
-    backend <- match.arg(backend, c("duckdb", "ducklake"))
+  if (read_only && !file.exists(file.path(path, "tidyweave.json"))) {
+    abort("A read-only lake must already exist.")
   }
-  manifest <- file.path(path, "tidyweave.json")
-  if (file.exists(manifest)) {
-    saved <- tryCatch(
-      jdecode(paste(readLines(manifest, warn = FALSE), collapse = "\n")),
-      error = function(e) NULL
-    )
-    if (
-      !is.list(saved) ||
-        !identical(saved$format, 1L) ||
-        !is.character(saved$backend) ||
-        length(saved$backend) != 1L ||
-        !saved$backend %in% c("duckdb", "ducklake")
-    ) {
-      abort(
-        "Invalid tidyweave.json. Restore the folder's original configuration."
-      )
-    }
-    if (!is.null(backend) && !identical(backend, saved$backend)) {
-      abort(
-        "This folder uses a different backend. Reopen without backend or choose a new folder."
-      )
-    }
-    backend <- saved$backend
-  } else {
-    if (read_only) {
-      abort("A read-only lake must already exist.")
-    }
-    if (length(list.files(path, all.files = TRUE, no.. = TRUE))) {
-      abort(
-        "This folder is not empty and has no tidyweave.json. Use its original lake_config() or choose an empty folder."
-      )
-    }
-    backend <- backend %||% "duckdb"
-    dir.create(path, recursive = TRUE, showWarnings = FALSE)
-    if (!dir.exists(path)) {
-      abort("Unable to create the lake folder.")
-    }
-    temp <- tempfile("config-", tmpdir = path)
-    on.exit(unlink(temp), add = TRUE)
-    writeLines(jencode(list(format = 1L, backend = backend)), temp)
-    if (!file.rename(temp, manifest)) abort("Unable to save tidyweave.json.")
-  }
-  setup_lake(
-    catalog = registry_duckdb(file.path(path, "metadata.duckdb")),
-    storage = storage_local(file.path(path, "data")),
-    landing = file.path(path, "landing"),
-    backend = backend,
-    read_only = read_only
+  args <- list(
+    path = path,
+    read_only = read_only,
+    install_extensions = install_extensions
   )
+  if (!is.null(backend)) {
+    args$backend <- backend
+  }
+  if (!is.null(layers)) {
+    args$layers <- layers
+  }
+  connect_lake(do.call(lake_config, args))
 }
 
 #' @rdname open_lake
