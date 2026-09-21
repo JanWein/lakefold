@@ -147,7 +147,10 @@ dr_as_targets <- function(x, cue = NULL, evidence = NULL) {
     file_call <- as.call(c(list(as.name("list")), files))
     code <- targets_product_code(product)
     command <- as.call(list(
-      quote(utils::getFromNamespace("targets_run_product", "dataraft")),
+      quote(utils::getFromNamespace(
+        "targets_run_product",
+        "dataraft.adapters"
+      )),
       product,
       dependency_call,
       file_call,

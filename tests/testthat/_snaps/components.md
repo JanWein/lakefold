@@ -3,6 +3,6 @@
     Code
       dr_validate(product)
     Condition
-      Error in `need()`:
+      Error in `dataraft.core::need()`:
       ! Install optional package: duckdb
 

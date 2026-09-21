@@ -580,6 +580,14 @@ for (name in names(family_owners)) {
 }
 local_family_bindings <- function(..., .package = NULL, .env = parent.frame()) {
   bindings <- list(...)
+  if (
+    !is.null(.package) && !.package %in% c("dataraft", unique(family_owners))
+  ) {
+    return(do.call(
+      testthat::local_mocked_bindings,
+      c(bindings, list(.package = .package, .env = .env))
+    ))
+  }
   owners <- unname(family_owners[names(bindings)])
   if (anyNA(owners)) {
     stop("Unknown mocked family binding")

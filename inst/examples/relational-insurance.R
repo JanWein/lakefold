@@ -292,10 +292,11 @@ run_relational_insurance <- function(
   ) |>
     dr_add_recipe(
       dr_recipe() |>
-        dr_step_lookup(policy_attributes, by = dplyr::join_by(policy_id, month))
-    ) |>
-    dr_add_recipe(
-      dr_recipe() |> dr_step_lookup(raw$brokers, by = dplyr::join_by(broker_id))
+        dr_step_lookup(
+          policy_attributes,
+          by = dplyr::join_by(policy_id, month)
+        ) |>
+        dr_step_lookup(raw$brokers, by = dplyr::join_by(broker_id))
     ) |>
     dr_add_contract(contracts$enriched_payments)
 

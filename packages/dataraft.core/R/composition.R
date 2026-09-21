@@ -585,7 +585,7 @@ explain.dr_product <- function(x, ...) {
     product_display_defaults(x),
     "dr_validate() checks configuration and dependency cycles; dr_run() executes."
   )
-  cat(paste(text, collapse = "\n"), "\n")
+  cat(paste(text, collapse = "\n"), "\n", sep = "")
   invisible(text)
 }
 
@@ -602,15 +602,16 @@ print.dr_product <- function(x, ...) {
     "\n",
     sep = ""
   )
-  cat("Transformations:", length(x$transforms), "\n")
+  cat("Transformations: ", length(x$transforms), "\n", sep = "")
   cat(
-    "Contract:",
+    "Contract: ",
     if (is.null(x$contract)) {
       "automatic structure"
     } else {
       paste(length(x$contract$columns), "fields, version", x$contract$version)
     },
-    "\n"
+    "\n",
+    sep = ""
   )
   cat("Quality:", length(x$quality) + length(x$contract$rules), "rules\n")
   target <- product_display_target(x)
@@ -618,19 +619,20 @@ print.dr_product <- function(x, ...) {
   if (inherits(target, "dr_lake_target")) {
     target_label <- paste0(target_label, " (", target$layer, ")")
   }
-  cat("Target:", target_label, "\n")
+  cat("Target: ", target_label, "\n", sep = "")
   defaults <- product_display_defaults(x)
   if (!is.null(defaults)) {
     cat(defaults, "\n")
   }
   cat(
-    "Status:",
+    "Status: ",
     if (isTRUE(attr(x, "dr_validated"))) {
       "validated"
     } else {
       "defined"
     },
-    "\n"
+    "\n",
+    sep = ""
   )
   invisible(x)
 }

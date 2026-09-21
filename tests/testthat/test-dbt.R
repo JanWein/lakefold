@@ -28,7 +28,11 @@ test_that("each invocation gets isolated artifacts and literal selector argument
     captured <<- args
     target <- args[match("--target-path", args) + 1L]
     paths <<- c(paths, target)
-    fixtures <- system.file("extdata", "dbt-artifacts", package = "dataraft.dbt")
+    fixtures <- system.file(
+      "extdata",
+      "dbt-artifacts",
+      package = "dataraft.dbt"
+    )
     file.copy(list.files(fixtures, full.names = TRUE), target)
     list(status = 0L, stdout = "done", stderr = "")
   })
@@ -96,7 +100,11 @@ test_that("dbt failures retain structured diagnostics", {
   writeLines("name: test", file.path(root, "dbt_project.yml"))
   local_family_bindings(dbt_process = function(command, args, ...) {
     target <- args[match("--target-path", args) + 1L]
-    fixtures <- system.file("extdata", "dbt-artifacts", package = "dataraft.dbt")
+    fixtures <- system.file(
+      "extdata",
+      "dbt-artifacts",
+      package = "dataraft.dbt"
+    )
     file.copy(list.files(fixtures, full.names = TRUE), target)
     runs <- jsonlite::read_json(file.path(target, "run_results.json"))
     runs$results[[1]]$status <- "fail"

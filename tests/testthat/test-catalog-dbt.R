@@ -7,7 +7,11 @@ local_dbt_catalog_project <- function(failed = FALSE, .env = parent.frame()) {
     dbt_process = function(command, args, ...) {
       calls$dbt <- calls$dbt + 1L
       target <- args[match("--target-path", args) + 1L]
-      fixture <- system.file("extdata", "dbt-artifacts", package = "dataraft.dbt")
+      fixture <- system.file(
+        "extdata",
+        "dbt-artifacts",
+        package = "dataraft.dbt"
+      )
       file.copy(list.files(fixture, full.names = TRUE), target)
       if (failed) {
         path <- file.path(target, "run_results.json")

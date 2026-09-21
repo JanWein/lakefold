@@ -36,7 +36,10 @@ for (path in paths) {
   )
   status <- withr::with_envvar(
     c(R_LIBS = paste(.libPaths(), collapse = .Platform$path.sep)),
-    system2(file.path(R.home("bin"), "R"), c("--vanilla", "--slave", "-e", shQuote(command)))
+    system2(
+      file.path(R.home("bin"), "R"),
+      c("--vanilla", "--slave", "-e", shQuote(command))
+    )
   )
   if (status != 0L) stop("Documentation failed: ", path)
 }
