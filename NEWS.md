@@ -9,23 +9,8 @@
   workflow assembly and execution. The README, getting-started guide, core
   component guides, navigation and function reference share that structure.
 
-* `tw_collect()` and `tw_explain()` retain dplyr dispatch. Use `dplyr::filter()`
-  explicitly; tidyweave no longer re-exports unprefixed dplyr functions.
-
-* `tw_add_product()` and `tw_add_recipe()` assemble independent specifications in an
-  empty `tw_workflow()`. Update, remove and extract helpers make components reusable;
-  trial, run and publish retain the existing product execution gates.
-* `tw_recipe()` records reusable `tw_step_*()` preparations without reading data.
-  Recipes preserve tidy evaluation, lazy tables and checked lookup dependencies.
-* `tw_set_engine()` switches quality rules between native and pointblank, and
-  reusable `tw_lookup_spec()` relationships between native and dm.
-
-
-* `tw_product()` accepts dm models with named table contracts. `tw_trial()` checks
-  the complete model; `tw_publish()` commits all member tables and their manifest
-  together. `tw_collect()` and `tw_read_release()` restore the pinned model.
-  `tw_product()` and `tw_add_lookup()` select model members with `table =`.
 * Lake publication accepts `previous` to reject stale corrections.
+
 * PostgreSQL catalogs coordinate package writes with database-scoped advisory
   locks using RPostgres. Metadata schema 4 prevents older writers reopening
   upgraded lakes. Writes are serialized, including report issuance.
@@ -35,19 +20,6 @@
   and report examples. The complete website and its internal links are checked
   on pull requests before the main-branch Pages deployment.
 
-* `tw_add_lookup()` retains a stable delivery name, inferred from a bare variable or
-  supplied with `name`. `tw_explain()` and printing show these names; corrections
-  use them directly in `sources`. Primary `data` and other named replacements
-  can be supplied together; duplicate or ambiguous selections are rejected.
-* `left_join()` on a product explains the checked enrichment path and the
-  ordinary dplyr escape hatch instead of exposing an internal class error.
-* `tw_measure()` explains omitted grouping when dimensions are available.
-  Printing a measurement set states its grouping or overall-total scope.
-* `tw_quality_rows()` selects a single failed rule automatically, or lists the
-  failed rules when the choice is ambiguous.
-* `tw_trial()` returns failed results for direct diagnosis by default. Use
-  `stop_on_failure = TRUE` for strict trials. `tw_run()` and `tw_publish()` keep their
-  strict defaults. Failure messages point to public diagnostic functions.
 * Local lake folders now preserve their ordered layers and named layer roles
   together with the backend. Reopening no longer adds default layers or rejects
   publication into an originally configured layer. Conflicting settings fail
@@ -55,26 +27,69 @@
   read-only opens never rewrite the configuration.
   New and upgraded folders use configuration format 2; older tidyweave versions
   reject this format instead of silently forgetting the layer settings.
-* `tw_open_lake()` accepts `layers` and `install_extensions`, keeping creation and
-  reopening on the same entry point. A DuckLake setup tutorial walks through
-  initial publication, reopening and another delivery.
-* `tw_setup_lake(path = )` accepts the same self-contained local folders as
-  `tw_open_lake()` and `tw_lake_config(path = )`.
+
+* `left_join()` on a product explains the checked enrichment path and the
+  ordinary dplyr escape hatch instead of exposing an internal class error.
+
+* `tw_add_lookup()` retains a stable delivery name, inferred from a bare variable or
+  supplied with `name`. `tw_explain()` and printing show these names; corrections
+  use them directly in `sources`. Primary `data` and other named replacements
+  can be supplied together; duplicate or ambiguous selections are rejected.
+
+* `tw_add_product()` and `tw_add_recipe()` assemble independent specifications in an
+  empty `tw_workflow()`. Update, remove and extract helpers make components reusable;
+  trial, run and publish retain the existing product execution gates.
+
+* `tw_collect()` and `tw_explain()` retain dplyr dispatch. Use `dplyr::filter()`
+  explicitly; tidyweave no longer re-exports unprefixed dplyr functions.
 
 * `tw_compare(first, second)` compares exact publication results and manages its
   own read-only connection.
+
+* `tw_measure()` explains omitted grouping when dimensions are available.
+  Printing a measurement set states its grouping or overall-total scope.
+
 * `tw_measure()` accepts successful in-memory trials using the same metric
   definitions. Trial measurements retain quality evidence but cannot be issued
   as reports, even if the metric is approved.
+
+* `tw_open_lake()` accepts `layers` and `install_extensions`, keeping creation and
+  reopening on the same entry point. A DuckLake setup tutorial walks through
+  initial publication, reopening and another delivery.
+
+* `tw_product()` accepts dm models with named table contracts. `tw_trial()` checks
+  the complete model; `tw_publish()` commits all member tables and their manifest
+  together. `tw_collect()` and `tw_read_release()` restore the pinned model.
+  `tw_product()` and `tw_add_lookup()` select model members with `table =`.
+
+* `tw_quality_rows()` selects a single failed rule automatically, or lists the
+  failed rules when the choice is ambiguous.
+
 * `tw_quality_rows()` explicitly retrieves bounded row diagnostics for predicates,
   missing required values, duplicate keys and unmatched lookups. Row data stays
   outside persisted metadata and portable quality reports.
+
+* `tw_recipe()` records reusable `tw_step_*()` preparations without reading data.
+  Recipes preserve tidy evaluation, lazy tables and checked lookup dependencies.
+
 * `tw_report_release()` preserves full double precision and detects small numeric
   changes after measurement. Nested columns are rejected before writing, with
   instructions to return named atomic columns. Old reports remain readable;
   legacy measurements must be recalculated before issuing new reports.
+
+* `tw_set_engine()` switches quality rules between native and pointblank, and
+  reusable `tw_lookup_spec()` relationships between native and dm.
+
+* `tw_setup_lake(path = )` accepts the same self-contained local folders as
+  `tw_open_lake()` and `tw_lake_config(path = )`.
+
+* `tw_trial()` returns failed results for direct diagnosis by default. Use
+  `stop_on_failure = TRUE` for strict trials. `tw_run()` and `tw_publish()` keep their
+  strict defaults. Failure messages point to public diagnostic functions.
+
 * `tw_trial()` disables configured targets, catalogs and durable run evidence
   throughout a product graph without changing its stored definition.
+
 * `tw_workflow()` declares dependent receipt, preparation, dbt and measurement
   steps with ordinary named functions. Corrections rerun affected branches;
   failures block consumers while retaining successful steps for explicit retry.
