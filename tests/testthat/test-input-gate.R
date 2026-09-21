@@ -1,23 +1,23 @@
 test_that("input failures preserve landing and the published release without writing raw", {
   f <- fixture()
   withr::defer(fixture_cleanup(f))
-  good <- tw_run(f$pipeline, f$lake)
+  good <- dr_run(f$pipeline, f$lake)
   contract <- f$contract
-  contract$rules <- list(tw_quality_rule("nonnegative", function(data) {
+  contract$rules <- list(dr_quality_rule("nonnegative", function(data) {
     all(data$reserve >= 0)
   }))
   contract$id <- "risk.input"
-  p <- tw_pipeline("risk.prechecked", f$lake, code_version = "v1") |>
-    tw_step_land(f$pipeline$steps$land) |>
-    tw_step_extract() |>
-    tw_step_precheck(contract) |>
-    tw_step_validate(f$contract) |>
-    tw_step_publish("risk.validated")
+  p <- dr_pipeline("risk.prechecked", f$lake, code_version = "v1") |>
+    dr_step_land(f$pipeline$steps$land) |>
+    dr_step_extract() |>
+    dr_step_precheck(contract) |>
+    dr_step_validate(f$contract) |>
+    dr_step_publish("risk.validated")
   bad <- f$good
   bad$reserve[1] <- -10
   f$write(bad)
   notifications <- list()
-  result <- tw_run(
+  result <- dr_run(
     p,
     f$lake,
     stop_on_failure = FALSE,
@@ -27,11 +27,11 @@ test_that("input failures preserve landing and the published release without wri
   )
   expect_equal(result$status, "blocked")
   expect_equal(
-    unique(tw_quality(f$lake, run_id = result$run_id)$stage),
+    unique(dr_quality(f$lake, run_id = result$run_id)$stage),
     "ingest"
   )
   expect_equal(
-    tw_releases(f$lake, "risk.validated")$release_id,
+    dr_releases(f$lake, "risk.validated")$release_id,
     good$release_id
   )
   expect_equal(
@@ -45,18 +45,18 @@ test_that("input failures preserve landing and the published release without wri
     ),
     FALSE
   )
-  inputs <- tw_registry(f$lake, "inputs")
+  inputs <- dr_registry(f$lake, "inputs")
   expect_equal(
     file.exists(inputs$landed_path[inputs$run_id == result$run_id]),
     TRUE
   )
   expect_equal(notifications[[1]]$type, "quality_failed")
   f$write()
-  success <- tw_run(p, f$lake)
+  success <- dr_run(p, f$lake)
   expect_equal(success$status, "published")
-  expect_setequal(tw_quality(success)$stage, c("ingest", "candidate"))
+  expect_setequal(dr_quality(success)$stage, c("ingest", "candidate"))
   expect_equal(
-    tw_plan(p)$step,
+    dr_plan(p)$step,
     c("land", "extract", "precheck", "validate", "publish")
   )
 })
@@ -67,17 +67,17 @@ test_that("the final candidate gate still runs after a successful input gate", {
   input <- f$contract
   input$id <- "risk.input"
   input$rules <- list()
-  p <- tw_pipeline("risk.prechecked", f$lake, code_version = "v1") |>
-    tw_step_land(f$pipeline$steps$land) |>
-    tw_step_extract() |>
-    tw_step_precheck(input) |>
+  p <- dr_pipeline("risk.prechecked", f$lake, code_version = "v1") |>
+    dr_step_land(f$pipeline$steps$land) |>
+    dr_step_extract() |>
+    dr_step_precheck(input) |>
     pipeline_step_transform(
       function(data) dplyr::mutate(data, reserve = -reserve),
       "negate"
     ) |>
-    tw_step_validate(f$contract) |>
-    tw_step_publish("risk.validated")
-  result <- tw_run(p, f$lake, stop_on_failure = FALSE)
+    dr_step_validate(f$contract) |>
+    dr_step_publish("risk.validated")
+  result <- dr_run(p, f$lake, stop_on_failure = FALSE)
   expect_equal(result$status, "blocked")
   expect_equal(
     all(result$quality$status[result$quality$stage == "ingest"] == "passed"),

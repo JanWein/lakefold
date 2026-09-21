@@ -13,7 +13,7 @@ jobs:
   documentation:
     runs-on: ubuntu-24.04
     env:
-      TIDYWEAVE_TEST_DUCKLAKE: "true"
+      DATARAFT_TEST_DUCKLAKE: "true"
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v6
@@ -24,14 +24,26 @@ jobs:
           use-public-rspm: true
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
-          extra-packages: any::pkgdown, local::.
+          extra-packages: |
+            any::pkgdown
+            any::DiagrammeR
+            any::DiagrammeRsvg
+            any::devtools
+            local::packages/dataraft.core
+            local::packages/dataraft.lake
+            local::packages/dataraft.adapters
+            local::packages/dataraft.metrics
+            local::packages/dataraft.dbt
+            local::packages/dataraft.catalog
+            local::.
           needs: website
       - name: Check and build documentation
         run: |
+          rmarkdown::render("README.Rmd", output_format = "github_document", quiet = TRUE)
           pkgdown::check_pkgdown()
           options(download.file.method = "curl",
                   download.file.extra = "--retry 3 --retry-all-errors")
-          pkgdown::build_site(new_process = FALSE)
+          source("scripts/build-site.R")
         shell: Rscript {0}
       - name: Check internal documentation links
         run: python scripts/check-site-links.py site

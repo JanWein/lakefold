@@ -1,97 +1,97 @@
 # root slots explicitly replace results while other pinned inputs persist
 
     Code
-      tw_replace_sources(root, orders = newer)
+      dr_replace_sources(root, orders = newer)
     Condition
-      Error in `abort()`:
+      Error in `dr_replace_sources()`:
       ! Unknown replacement source: orders. Available names: current, historical.
 
 # invalid and overlapping source selectors fail before execution
 
     Code
-      tw_replace_sources(root, missing = leaf)
+      dr_replace_sources(root, missing = leaf)
     Condition
-      Error in `abort()`:
+      Error in `dr_replace_sources()`:
       ! Unknown replacement source: missing. Available names: branch, leaf.
 
 ---
 
     Code
-      tw_replace_sources(root, leaf = leaf, leaf = leaf)
+      dr_replace_sources(root, leaf = leaf, leaf = leaf)
     Condition
-      Error in `abort()`:
+      Error in `dr_replace_sources()`:
       ! Supply uniquely named, non-empty replacement sources.
 
 ---
 
     Code
-      tw_replace_sources(root, leaf)
+      dr_replace_sources(root, leaf)
     Condition
-      Error in `abort()`:
+      Error in `dr_replace_sources()`:
       ! Supply uniquely named, non-empty replacement sources.
 
 ---
 
     Code
-      tw_replace_sources(root, branch = tw_product("branch", data.frame(id = 1L)),
+      dr_replace_sources(root, branch = dr_product("branch", data.frame(id = 1L)),
       leaf = leaf)
     Condition
-      Error in `abort()`:
+      Error in `dr_replace_sources()`:
       ! Overlapping replacements discard requested sources: leaf
 
 ---
 
     Code
-      tw_replace_sources(ambiguous, leaf = leaf)
+      dr_replace_sources(ambiguous, leaf = leaf)
     Condition
-      Error in `abort()`:
+      Error in `dr_replace_sources()`:
       ! Ambiguous root alias and product ID: leaf
 
 ---
 
     Code
-      tw_replace_sources(root, branch = cyclic)
+      dr_replace_sources(root, branch = cyclic)
     Condition
-      Error in `abort()`:
+      Error in `dr_replace_sources()`:
       ! Product dependency cycle: root -> branch -> root
 
 ---
 
     Code
-      tw_replace_sources(conflict, branch = branch)
+      dr_replace_sources(conflict, branch = branch)
     Condition
-      Error in `abort()`:
+      Error in `dr_replace_sources()`:
       ! Different product definitions share the ID: leaf
 
 # managed dbt bindings change without reading a database or writing files
 
     Code
-      tw_replace_sources(project, orders = corrected)
+      dr_replace_sources(project, orders = corrected)
     Condition
-      Error in `abort()`:
+      Error in `dr_replace_sources()`:
       ! Ambiguous dbt source binding; use group.table: orders
 
 ---
 
     Code
-      tw_replace_sources(project, inputs.orders = corrected, historical.orders = NULL)
+      dr_replace_sources(project, inputs.orders = corrected, historical.orders = NULL)
     Condition
-      Error in `abort()`:
+      Error in `FUN()`:
       ! Each source needs a successful immutable lake release, with its asset, release, run and configuration.
 
 ---
 
     Code
-      tw_replace_sources(changed, unknown = corrected)
+      dr_replace_sources(changed, unknown = corrected)
     Condition
-      Error in `abort()`:
+      Error in `dr_replace_sources()`:
       ! Unknown dbt source binding: unknown. Available names: inputs.orders, inputs.customers, historical.orders.
 
 # correcting a product input retains its transformations and quality gates
 
     Code
-      tw_replace_sources(tw_product("root", multiple), multiple = data.frame(id = 2L))
+      dr_replace_sources(dr_product("root", multiple), multiple = data.frame(id = 2L))
     Condition
-      Error in `abort()`:
+      Error in `dr_replace_sources()`:
       ! Replacing a product input requires exactly one primary source at `multiple`. Use sources = list(name = value) to select a deeper input or supply an edited product definition.
 

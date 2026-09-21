@@ -6,10 +6,10 @@ test_that("dbt releases preserve snapshots and revalidate mutable source relatio
     f$lake$con,
     "CREATE TABLE lake.marts.customer_revenue AS SELECT 101 AS customer_id, 100.0::DOUBLE AS revenue"
   )
-  parsed <- tidyweave:::dbt_read_artifacts(system.file(
+  parsed <- dataraft.dbt:::dbt_read_artifacts(system.file(
     "extdata",
     "dbt-artifacts",
-    package = "tidyweave"
+    package = "dataraft.dbt"
   ))
   result <- structure(
     list(
@@ -19,20 +19,20 @@ test_that("dbt releases preserve snapshots and revalidate mutable source relatio
       artifacts_dir = system.file(
         "extdata",
         "dbt-artifacts",
-        package = "tidyweave"
+        package = "dataraft.dbt"
       ),
       invocation_id = parsed$manifest$metadata$invocation_id,
       artifact_hashes = dbt_artifact_hashes(system.file(
         "extdata",
         "dbt-artifacts",
-        package = "tidyweave"
+        package = "dataraft.dbt"
       )),
       results = parsed$results,
       manifest = parsed$manifest
     ),
-    class = "tw_dbt_result"
+    class = "dr_dbt_result"
   )
-  contract <- tw_contract(
+  contract <- dr_contract(
     "revenue",
     "1",
     "Analytics",
@@ -40,12 +40,12 @@ test_that("dbt releases preserve snapshots and revalidate mutable source relatio
     "One customer",
     c(customer_id = "integer", revenue = "numeric"),
     key = "customer_id",
-    rules = list(tw_quality_rule("positive", function(data) {
+    rules = list(dr_quality_rule("positive", function(data) {
       counts <- dplyr::collect(dplyr::summarise(data, n = sum(revenue < 0)))
       counts$n == 0
     }))
   )
-  first <- tw_dbt_publish(
+  first <- dr_dbt_publish(
     f$lake,
     result,
     "model.shop.customer_revenue",
@@ -58,7 +58,7 @@ test_that("dbt releases preserve snapshots and revalidate mutable source relatio
     f$lake$con,
     "UPDATE lake.marts.customer_revenue SET revenue = -10"
   )
-  second <- tw_dbt_publish(
+  second <- dr_dbt_publish(
     f$lake,
     result,
     "model.shop.customer_revenue",
@@ -68,16 +68,16 @@ test_that("dbt releases preserve snapshots and revalidate mutable source relatio
     stop_on_failure = FALSE
   )
   expect_equal(second$status, "blocked")
-  expect_equal(dplyr::collect(tw_tbl(f$lake, "shop.revenue"))$revenue, 100)
-  expect_equal(tw_releases(f$lake, "shop.revenue")$release_id, first$release_id)
-  expect_setequal(tw_quality(first)$stage, c("model", "candidate"))
-  edges <- tw_lineage(f$lake, "shop.revenue")
+  expect_equal(dplyr::collect(dr_tbl(f$lake, "shop.revenue"))$revenue, 100)
+  expect_equal(dr_releases(f$lake, "shop.revenue")$release_id, first$release_id)
+  expect_setequal(dr_quality(first)$stage, c("model", "candidate"))
+  edges <- dr_lineage(f$lake, "shop.revenue")
   expect_equal(edges$from_id, "model.shop.customer_revenue")
   expect_equal(edges$from_version, parsed$manifest$metadata$invocation_id)
   result$command <- "test"
   expect_snapshot(
     error = TRUE,
-    tw_dbt_publish(
+    dr_dbt_publish(
       f$lake,
       result,
       "model.shop.customer_revenue",

@@ -1,12 +1,12 @@
-# Run after installing tidyweave. Synthetic local workload; no external services.
-# Example: benchmark_tidyweave(100000, "duckdb")
-benchmark_tidyweave <- function(n = 100000L, backend = "duckdb") {
+# Run after installing dataraft. Synthetic local workload; no external services.
+# Example: benchmark_dataraft(100000, "duckdb")
+benchmark_dataraft <- function(n = 100000L, backend = "duckdb") {
   stopifnot(length(n) == 1L, is.finite(n), n >= 10, n <= .Machine$integer.max)
   n <- as.integer(n)
-  root <- tempfile("tidyweave-benchmark-")
-  lake <- tidyweave::tw_open_lake(root, backend = backend)
+  root <- tempfile("dataraft-benchmark-")
+  lake <- dataraft::dr_open_lake(root, backend = backend)
   on.exit({
-    tidyweave::tw_close_lake(lake)
+    dataraft::dr_close_lake(lake)
     unlink(root, recursive = TRUE)
   })
   data <- data.frame(
@@ -15,21 +15,21 @@ benchmark_tidyweave <- function(n = 100000L, backend = "duckdb") {
     amount = (seq_len(n) %% 1000) / 10
   )
   elapsed <- numeric()
-  elapsed[["first_write"]] <- system.time(tidyweave::tw_write_data(
+  elapsed[["first_write"]] <- system.time(dataraft::dr_write_data(
     lake,
     data,
     "orders",
     partition_by = "month"
   ))[["elapsed"]]
   data$amount[seq_len(10)] <- data$amount[seq_len(10)] + 1
-  elapsed[["partition_correction"]] <- system.time(tidyweave::tw_write_data(
+  elapsed[["partition_correction"]] <- system.time(dataraft::dr_write_data(
     lake,
     data,
     "orders",
     partition_by = "month"
   ))[["elapsed"]]
   elapsed[["comparison"]] <- system.time(
-    difference <- tidyweave::tw_compare(lake, "orders", key = c("id", "month"))
+    difference <- dataraft::dr_compare(lake, "orders", key = c("id", "month"))
   )[["elapsed"]]
   stopifnot(difference$counts[["changed"]] == 10)
   files <- list.files(

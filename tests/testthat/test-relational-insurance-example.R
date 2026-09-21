@@ -1,23 +1,23 @@
 test_that("the insurance grammar preserves transaction grain without infrastructure", {
-  example <- new.env(parent = asNamespace("tidyweave"))
+  example <- new.env(parent = asNamespace("dataraft"))
   sys.source(
     system.file(
       "examples",
       "relational-insurance.R",
-      package = "tidyweave",
+      package = "dataraft",
       mustWork = TRUE
     ),
     envir = example
   )
   inputs <- example$insurance_inputs()
   contracts <- example$insurance_contracts()
-  attributes <- tw_product("policy_attributes", inputs$policy_months) |>
+  attributes <- dr_product("policy_attributes", inputs$policy_months) |>
     dplyr::select(policy_id, month, company, broker_id, policy_status = status)
-  payments <- tw_product("payments", inputs$payments) |>
-    tw_add_lookup(attributes, by = dplyr::join_by(policy_id, month)) |>
-    tw_add_lookup(inputs$brokers, by = dplyr::join_by(broker_id)) |>
-    tw_add_contract(contracts$enriched_payments)
-  data <- tw_collect(tw_run(payments))
+  payments <- dr_product("payments", inputs$payments) |>
+    dr_add_lookup(attributes, by = dplyr::join_by(policy_id, month)) |>
+    dr_add_lookup(inputs$brokers, by = dplyr::join_by(broker_id)) |>
+    dr_add_contract(contracts$enriched_payments)
+  data <- dr_collect(dr_run(payments))
   expect_equal(nrow(data), 10L)
   expect_equal(intersect("premium_due", names(data)), character())
   expect_equal(anyDuplicated(data$payment_id), 0L)
@@ -27,34 +27,34 @@ test_that("the insurance grammar preserves transaction grain without infrastruct
   invalid <- inputs$payments
   invalid$month[[1]] <- as.Date("2026-03-01")
   failed <- payments |>
-    tw_add_source(invalid, replace = TRUE) |>
-    tw_run(stop_on_failure = FALSE)
+    dr_add_source(invalid, replace = TRUE) |>
+    dr_run(stop_on_failure = FALSE)
   expect_identical(failed$status, "error")
-  expect_s3_class(failed$error$parent, "tw_lookup_unmatched")
+  expect_s3_class(failed$error$parent, "dr_lookup_unmatched")
 })
 
 test_that("the insurance example preserves business grains and issued reports", {
-  executable <- Sys.getenv("TIDYWEAVE_DBT_EXECUTABLE")
+  executable <- Sys.getenv("DATARAFT_DBT_EXECUTABLE")
   skip_if(
     !nzchar(executable),
-    "Set TIDYWEAVE_DBT_EXECUTABLE for the real insurance dbt integration test"
+    "Set DATARAFT_DBT_EXECUTABLE for the real insurance dbt integration test"
   )
   for (package in c("duckdb", "pointblank", "dm", "yaml", "processx")) {
     skip_if_not_installed(package)
   }
-  example <- new.env(parent = asNamespace("tidyweave"))
+  example <- new.env(parent = asNamespace("dataraft"))
   sys.source(
     system.file(
       "examples",
       "relational-insurance.R",
-      package = "tidyweave",
+      package = "dataraft",
       mustWork = TRUE
     ),
     envir = example
   )
   demo <- example$run_relational_insurance(
     path = withr::local_tempdir(),
-    backend = Sys.getenv("TIDYWEAVE_TEST_BACKEND", "duckdb"),
+    backend = Sys.getenv("DATARAFT_TEST_BACKEND", "duckdb"),
     executable = executable
   )
 
@@ -77,8 +77,8 @@ test_that("the insurance example preserves business grains and issued reports", 
   corrected$payment_count[[1]] <- 2L
   expect_equal(ordered(demo$corrected$data), corrected)
 
-  policies <- tw_collect(demo$products$policies)
-  payments <- tw_collect(demo$products$payments)
+  policies <- dr_collect(demo$products$policies)
+  payments <- dr_collect(demo$products$payments)
   expect_equal(nrow(policies), 12L)
   expect_equal(nrow(payments), 10L)
   expect_equal(anyDuplicated(policies[c("policy_id", "month")]), 0L)
@@ -96,7 +96,7 @@ test_that("the insurance example preserves business grains and issued reports", 
   )
   expect_identical(demo$definitions$payments$contract$key, "payment_id")
   for (accepted in demo$raw) {
-    checks <- tw_quality(accepted)
+    checks <- dr_quality(accepted)
     expect_gt(sum(checks$engine == "pointblank" & checks$stage == "ingest"), 0L)
     expect_identical(accepted$status, "published")
     expect_identical(accepted$outputs$schema, "raw")
@@ -105,7 +105,7 @@ test_that("the insurance example preserves business grains and issued reports", 
   # Ratios aggregate the numerator and denominator, not individual percentages.
   expect_equal(
     dplyr::filter(
-      tw_collect(demo$initial$totals),
+      dr_collect(demo$initial$totals),
       .metric == "cash_to_due"
     )$value,
     2280 / 2850
@@ -113,7 +113,7 @@ test_that("the insurance example preserves business grains and issued reports", 
   expect_gt(
     abs(
       dplyr::filter(
-        tw_collect(demo$initial$totals),
+        dr_collect(demo$initial$totals),
         .metric == "cash_to_due"
       )$value -
         mean(c(980 / 1500, 1300 / 1350))
@@ -122,14 +122,14 @@ test_that("the insurance example preserves business grains and issued reports", 
   )
   expect_equal(
     dplyr::filter(
-      tw_collect(demo$corrected$totals),
+      dr_collect(demo$corrected$totals),
       .metric == "cash_to_due"
     )$value,
     2530 / 2850
   )
   expect_identical(demo$failures$pointblank$status, "blocked")
   expect_null(demo$failures$pointblank$outputs)
-  expect_identical(unique(tw_quality(demo$failures$pointblank)$stage), "ingest")
+  expect_identical(unique(dr_quality(demo$failures$pointblank)$stage), "ingest")
   expect_gt(nrow(demo$failures$pointblank$inputs), 0L)
   expect_equal(
     sum(file.exists(demo$failures$pointblank$inputs$landed_path)),
@@ -142,12 +142,12 @@ test_that("the insurance example preserves business grains and issued reports", 
   )
 
   # A known policy in an unknown month exercises the composite foreign key.
-  invalid <- tw_collect(demo$corrected$raw$payments)
+  invalid <- dr_collect(demo$corrected$raw$payments)
   invalid$month[[1]] <- as.Date("2026-03-01")
   failed <- demo$definitions$payments |>
-    tw_add_source(invalid, replace = TRUE) |>
-    tw_run(
-      execution = tw_execution_config(
+    dr_add_source(invalid, replace = TRUE) |>
+    dr_run(
+      execution = dr_execution_config(
         quality = "pointblank",
         relationships = "dm"
       ),
@@ -155,11 +155,11 @@ test_that("the insurance example preserves business grains and issued reports", 
     )
   expect_identical(failed$status, "error")
   expect_null(failed$outputs)
-  expect_s3_class(failed$error, "tw_transform_failed")
-  expect_s3_class(failed$error$parent, "tw_lookup_unmatched")
+  expect_s3_class(failed$error, "dr_transform_failed")
+  expect_s3_class(failed$error$parent, "dr_lookup_unmatched")
 
-  lake <- tw_connect_lake(demo$context$config, read_only = TRUE)
-  withr::defer(tw_close_lake(lake))
+  lake <- dr_connect_lake(demo$context$config, read_only = TRUE)
+  withr::defer(dr_close_lake(lake))
   # Both builds must identify the exact independently approved staging releases.
   for (phase in c("initial", "corrected")) {
     results <- if (phase == "initial") {
@@ -173,16 +173,16 @@ test_that("the insurance example preserves business grains and issued reports", 
       source <- built$manifest$sources[[
         paste0("source.insurance.inputs.", name)
       ]]
-      history <- tw_releases(lake, results[[name]]$asset)
+      history <- dr_releases(lake, results[[name]]$asset)
       reference <- history[history$release_id == results[[name]]$release_id, ]
       expect_equal(nrow(reference), 1L)
       expect_identical(source$database, "lake")
       expect_identical(source$schema, "staging")
       expect_identical(source$schema, reference$schema_name[[1]])
       expect_identical(source$identifier, reference$table_name[[1]])
-      metadata <- source$config$meta$tidyweave
+      metadata <- source$config$meta$dataraft
       if (is.null(metadata)) {
-        metadata <- source$meta$tidyweave
+        metadata <- source$meta$dataraft
       }
       expect_identical(metadata$release_id, results[[name]]$release_id)
       expect_identical(metadata$asset, results[[name]]$asset)
@@ -190,22 +190,22 @@ test_that("the insurance example preserves business grains and issued reports", 
   }
 
   expect_identical(
-    tw_releases(lake, demo$products$policies$asset)$release_id,
+    dr_releases(lake, demo$products$policies$asset)$release_id,
     demo$products$policies$release_id
   )
   expect_setequal(
-    tw_releases(lake, demo$products$payments$asset)$release_id,
+    dr_releases(lake, demo$products$payments$asset)$release_id,
     c(
       demo$products$payments$release_id,
       demo$corrected$products$payments$release_id
     )
   )
   expect_equal(
-    tw_collect(tw_read_release(lake, demo$initial$release$asset)) |> ordered(),
+    dr_collect(dr_read_release(lake, demo$initial$release$asset)) |> ordered(),
     corrected
   )
   expect_equal(
-    tw_read_release(
+    dr_read_release(
       lake,
       demo$initial$release$asset,
       release = demo$initial$release$release_id
@@ -214,7 +214,7 @@ test_that("the insurance example preserves business grains and issued reports", 
     expected
   )
   for (phase in c("initial", "corrected")) {
-    report <- tw_report_read(lake, demo[[phase]]$report$id)
+    report <- dr_report_read(lake, demo[[phase]]$report$id)
     pins <- vapply(
       report$measures,
       function(x) x$manifest$release_id,
@@ -222,7 +222,7 @@ test_that("the insurance example preserves business grains and issued reports", 
     )
     expect_identical(unname(unique(pins)), demo[[phase]]$release$release_id)
   }
-  saved <- tw_report_read(lake, demo$initial$report$id, values_only = TRUE)
+  saved <- dr_report_read(lake, demo$initial$report$id, values_only = TRUE)
   expect_equal(saved, demo$initial$summary)
   expect_equal(
     dplyr::filter(saved, .metric == "cash_collected")$value,
@@ -240,25 +240,25 @@ test_that("the insurance example preserves business grains and issued reports", 
     dplyr::filter(saved, .metric == "cash_collected")$.period,
     list(as.Date("2026-01-01"), as.Date("2026-02-01"))
   )
-  expect_equal(tw_collect(demo$initial$by_channel)$value, c(400, 280, 300))
+  expect_equal(dr_collect(demo$initial$by_channel)$value, c(400, 280, 300))
   expect_equal(
     dplyr::filter(demo$corrected$summary, .metric == "cash_collected")$value,
     c(1230, 1300)
   )
   stock_error <- tryCatch(
-    tw_measure(
+    dr_measure(
       demo$initial$release,
       demo$initial$metrics$active_policies
     ),
     error = identity
   )
-  expect_s3_class(stock_error, "tw_error")
+  expect_s3_class(stock_error, "dataraft_error")
   expect_match(
     conditionMessage(stock_error),
     "Stock metrics require exactly one"
   )
   ratio_error <- tryCatch(
-    tw_measure(
+    dr_measure(
       demo$initial$release,
       demo$initial$metrics$cash_to_due,
       at = as.Date("2026-02-01"),
@@ -266,6 +266,6 @@ test_that("the insurance example preserves business grains and issued reports", 
     ),
     error = identity
   )
-  expect_s3_class(ratio_error, "tw_error")
+  expect_s3_class(ratio_error, "dataraft_error")
   expect_match(conditionMessage(ratio_error), "non-finite")
 })

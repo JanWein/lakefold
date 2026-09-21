@@ -1,6 +1,6 @@
 layered_catalog_state <- function(config) {
-  lake <- tw_connect_lake(config)
-  on.exit(tw_close_lake(lake))
+  lake <- dr_connect_lake(config)
+  on.exit(dr_close_lake(lake))
   tables <- DBI::dbGetQuery(
     lake$con,
     paste(
@@ -13,9 +13,9 @@ layered_catalog_state <- function(config) {
   list(
     tables = tables,
     raw_tables = tables$table_name[tables$table_schema == "raw"],
-    raw_releases = tw_releases(lake, "orders")$release_id,
-    consumer_releases = tw_releases(lake, "customer_revenue")$release_id,
-    consumer = tw_read_release(lake, "customer_revenue") |>
+    raw_releases = dr_releases(lake, "orders")$release_id,
+    consumer_releases = dr_releases(lake, "customer_revenue")$release_id,
+    consumer = dr_read_release(lake, "customer_revenue") |>
       dplyr::arrange(customer_id),
     mutable_mart = DBI::dbGetQuery(
       lake$con,
@@ -39,9 +39,9 @@ layered_expect_build <- function(result, accepted) {
   expect_identical(source$database, "lake")
   expect_identical(source$schema, "raw")
   expect_identical(source$identifier, accepted$outputs$table)
-  metadata <- source$config$meta$tidyweave
+  metadata <- source$config$meta$dataraft
   if (is.null(metadata)) {
-    metadata <- source$meta$tidyweave
+    metadata <- source$meta$dataraft
   }
   expect_identical(metadata$release_id, accepted$release_id)
   expect_identical(metadata$run_id, accepted$run_id)
@@ -66,10 +66,10 @@ layered_expect_build <- function(result, accepted) {
 }
 
 test_that("CSV, Excel and API deliveries retain approved outputs across layered failures", {
-  executable <- Sys.getenv("TIDYWEAVE_DBT_EXECUTABLE")
+  executable <- Sys.getenv("DATARAFT_DBT_EXECUTABLE")
   skip_if(
     !nzchar(executable),
-    "Set TIDYWEAVE_DBT_EXECUTABLE for the real layered dbt integration test"
+    "Set DATARAFT_DBT_EXECUTABLE for the real layered dbt integration test"
   )
   for (package in c(
     "duckdb",
@@ -81,11 +81,11 @@ test_that("CSV, Excel and API deliveries retain approved outputs across layered 
   )) {
     skip_if_not_installed(package)
   }
-  backend <- Sys.getenv("TIDYWEAVE_TEST_BACKEND", "duckdb")
+  backend <- Sys.getenv("DATARAFT_TEST_BACKEND", "duckdb")
   directory <- withr::local_tempdir()
-  config <- tw_lake_config(
-    tw_registry_duckdb(file.path(directory, "catalog.duckdb")),
-    tw_storage_local(file.path(directory, "data")),
+  config <- dr_lake_config(
+    dr_registry_duckdb(file.path(directory, "catalog.duckdb")),
+    dr_storage_local(file.path(directory, "data")),
     landing = file.path(directory, "landing"),
     backend = backend,
     layers = c("raw", "staging", "core", "marts")
@@ -97,7 +97,7 @@ test_that("CSV, Excel and API deliveries retain approved outputs across layered 
   )
   csv <- file.path(directory, "orders.csv")
   utils::write.csv(first_data, csv, row.names = FALSE)
-  first_raw <- tw_ingest(
+  first_raw <- dr_ingest(
     csv,
     config,
     "orders",
@@ -106,7 +106,7 @@ test_that("CSV, Excel and API deliveries retain approved outputs across layered 
   )
   expect_identical(first_raw$status, "published")
   expect_null(first_raw$output_lake)
-  expect_equal(tw_collect(first_raw), tibble::as_tibble(first_data))
+  expect_equal(dr_collect(first_raw), tibble::as_tibble(first_data))
   expect_identical(first_raw$outputs$schema, "raw")
   expect_equal(first_raw$inputs$business_date, "2026-09-01")
   expect_true(all(nzchar(first_raw$inputs$received_at)))
@@ -114,9 +114,9 @@ test_that("CSV, Excel and API deliveries retain approved outputs across layered 
     digest::digest(file = first_raw$inputs$landed_path[[1]], algo = "sha256"),
     digest::digest(file = csv, algo = "sha256")
   )
-  expect_setequal(tw_quality(first_raw)$stage, c("ingest", "candidate"))
+  expect_setequal(dr_quality(first_raw)$stage, c("ingest", "candidate"))
 
-  project <- tw_dbt_init(
+  project <- dr_dbt_init(
     file.path(directory, "dbt"),
     config,
     name = "layered_workflow",
@@ -139,12 +139,12 @@ test_that("CSV, Excel and API deliveries retain approved outputs across layered 
     model
   })
   model_names <- vapply(properties$models, `[[`, character(1), "name")
-  mart_contract <- tw_contract(
+  mart_contract <- dr_contract(
     columns = c(customer_id = "integer", revenue = "numeric"),
     key = "customer_id"
   )
   properties$models[[which(model_names == "customer_revenue")]] <-
-    tw_dbt_contract(mart_contract, "customer_revenue")$models[[1L]]
+    dr_dbt_contract(mart_contract, "customer_revenue")$models[[1L]]
   yaml::write_yaml(properties, schema_file)
   dir.create(file.path(project$path, "tests"))
   writeLines(
@@ -155,11 +155,11 @@ test_that("CSV, Excel and API deliveries retain approved outputs across layered 
     file.path(project$path, "tests", "revenue_within_limit.sql")
   )
 
-  first_build <- tw_dbt_build(project, echo = FALSE, stop_on_failure = FALSE)
+  first_build <- dr_dbt_build(project, echo = FALSE, stop_on_failure = FALSE)
   if (!layered_expect_build(first_build, first_raw)) {
     return(invisible(NULL))
   }
-  first <- tw_dbt_publish(config, first_build, "customer_revenue")
+  first <- dr_dbt_publish(config, first_build, "customer_revenue")
   expect_identical(first$status, "published")
   expect_null(first$output_lake)
   expect_identical(first$outputs$schema, "marts")
@@ -167,7 +167,7 @@ test_that("CSV, Excel and API deliveries retain approved outputs across layered 
     first$inputs$invocation_id,
     first_build$manifest$metadata$invocation_id
   )
-  first_values <- tw_collect(first) |> dplyr::arrange(customer_id)
+  first_values <- dr_collect(first) |> dplyr::arrange(customer_id)
   expect_equal(first_values$revenue, c(30.75, 30.25))
   state <- layered_catalog_state(config)
   expect_setequal(
@@ -193,7 +193,7 @@ test_that("CSV, Excel and API deliveries retain approved outputs across layered 
         customer_id = as.integer(customer_id)
       )
   }
-  second_raw <- tw_ingest(
+  second_raw <- dr_ingest(
     workbook,
     config,
     "orders",
@@ -202,43 +202,43 @@ test_that("CSV, Excel and API deliveries retain approved outputs across layered 
     business_date = as.Date("2026-09-02")
   )
   expect_identical(second_raw$status, "published")
-  expect_equal(tw_collect(second_raw)$amount, c(100.25, 200.5, 300.25))
+  expect_equal(dr_collect(second_raw)$amount, c(100.25, 200.5, 300.25))
   expect_equal(
     digest::digest(file = second_raw$inputs$landed_path[[1]], algo = "sha256"),
     digest::digest(file = workbook, algo = "sha256")
   )
-  tw_dbt_sources(project, list(orders = second_raw), name = "raw")
-  second_build <- tw_dbt_build(project, echo = FALSE, stop_on_failure = FALSE)
+  dr_dbt_sources(project, list(orders = second_raw), name = "raw")
+  second_build <- dr_dbt_build(project, echo = FALSE, stop_on_failure = FALSE)
   if (!layered_expect_build(second_build, second_raw)) {
     return(invisible(NULL))
   }
-  second <- tw_dbt_publish(config, second_build, "customer_revenue")
+  second <- dr_dbt_publish(config, second_build, "customer_revenue")
   expect_identical(second$status, "published")
   expect_false(identical(first$release_id, second$release_id))
-  second_values <- tw_collect(second) |> dplyr::arrange(customer_id)
+  second_values <- dr_collect(second) |> dplyr::arrange(customer_id)
   expect_equal(second_values$revenue, c(300.75, 300.25))
-  expect_equal(tw_collect(first) |> dplyr::arrange(customer_id), first_values)
-  expect_equal(tw_collect(first_raw), tibble::as_tibble(first_data))
+  expect_equal(dr_collect(first) |> dplyr::arrange(customer_id), first_values)
+  expect_equal(dr_collect(first_raw), tibble::as_tibble(first_data))
 
-  binding_file <- file.path(project$path, "models", "tidyweave_sources_raw.yml")
+  binding_file <- file.path(project$path, "models", "dataraft_sources_raw.yml")
   binding_before <- readLines(binding_file)
   before_rejection <- layered_catalog_state(config)
   invalid <- first_data
   invalid$amount[[1]] <- -1
   invalid_csv <- file.path(directory, "invalid-orders.csv")
   utils::write.csv(invalid, invalid_csv, row.names = FALSE)
-  native_rejected <- tw_ingest(
+  native_rejected <- dr_ingest(
     invalid_csv,
     config,
     "orders",
     quality = list(nonnegative = ~ amount >= 0),
     stop_on_failure = FALSE
   )
-  pointblank_rejected <- tw_ingest(
+  pointblank_rejected <- dr_ingest(
     invalid,
     config,
     "orders",
-    quality = tw_pointblank_checks("nonnegative", function(data) {
+    quality = dr_pointblank_checks("nonnegative", function(data) {
       pointblank::create_agent(data) |>
         pointblank::col_vals_gte("amount", 0)
     }),
@@ -257,20 +257,20 @@ test_that("CSV, Excel and API deliveries retain approved outputs across layered 
     }
     expect_null(rejected$outputs)
     expect_true(all(file.exists(rejected$inputs$landed_path)))
-    expect_identical(unique(tw_quality(rejected)$stage), "ingest")
+    expect_identical(unique(dr_quality(rejected)$stage), "ingest")
     expect_error(
-      tw_dbt_sources(project, list(orders = rejected), name = "raw"),
+      dr_dbt_sources(project, list(orders = rejected), name = "raw"),
       "successful"
     )
     expect_equal(readLines(binding_file), binding_before)
   }
   expect_true(any(
-    tw_quality(native_rejected)$engine == "r" &
-      tw_quality(native_rejected)$status == "failed"
+    dr_quality(native_rejected)$engine == "r" &
+      dr_quality(native_rejected)$status == "failed"
   ))
   expect_true(any(
-    tw_quality(pointblank_rejected)$engine == "pointblank" &
-      tw_quality(pointblank_rejected)$status == "failed"
+    dr_quality(pointblank_rejected)$engine == "pointblank" &
+      dr_quality(pointblank_rejected)$status == "failed"
   ))
   expect_equal(
     digest::digest(
@@ -299,21 +299,21 @@ test_that("CSV, Excel and API deliveries retain approved outputs across layered 
   server <- webfakes::new_app_process(app)
   withr::defer(server$stop())
   request <- httr2::request(paste0(sub("/$", "", server$url()), "/orders"))
-  api_raw <- tw_ingest(
-    tw_source_api(request),
+  api_raw <- dr_ingest(
+    dr_source_api(request),
     config,
     "orders",
     quality = list(nonnegative = ~ amount >= 0),
     business_date = as.Date("2026-09-03")
   )
   expect_identical(api_raw$status, "published")
-  expect_equal(tw_collect(api_raw)$amount, c(1000.25, 2000.5, 3000.25))
+  expect_equal(dr_collect(api_raw)$amount, c(1000.25, 2000.5, 3000.25))
   expect_equal(
     readRDS(api_raw$inputs$landed_path[[1]])$amount,
-    tw_collect(api_raw)$amount
+    dr_collect(api_raw)$amount
   )
-  tw_dbt_sources(project, list(orders = api_raw), name = "raw")
-  failed <- tw_dbt_build(project, echo = FALSE, stop_on_failure = FALSE)
+  dr_dbt_sources(project, list(orders = api_raw), name = "raw")
+  failed <- dr_dbt_build(project, echo = FALSE, stop_on_failure = FALSE)
   expect_false(failed$success)
   expect_true(any(failed$results$status == "fail"))
   expect_identical(
@@ -327,7 +327,7 @@ test_that("CSV, Excel and API deliveries retain approved outputs across layered 
     api_raw$outputs$table
   )
   expect_error(
-    tw_dbt_publish(config, failed, "customer_revenue"),
+    dr_dbt_publish(config, failed, "customer_revenue"),
     "successful dbt build"
   )
   after_failure <- layered_catalog_state(config)
@@ -337,6 +337,6 @@ test_that("CSV, Excel and API deliveries retain approved outputs across layered 
   )
   expect_equal(after_failure$consumer, second_values)
   expect_equal(after_failure$mutable_mart$revenue, c(3000.75, 3000.25))
-  expect_equal(tw_collect(first) |> dplyr::arrange(customer_id), first_values)
-  expect_equal(tw_collect(second) |> dplyr::arrange(customer_id), second_values)
+  expect_equal(dr_collect(first) |> dplyr::arrange(customer_id), first_values)
+  expect_equal(dr_collect(second) |> dplyr::arrange(customer_id), second_values)
 })

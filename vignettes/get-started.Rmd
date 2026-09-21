@@ -1,114 +1,52 @@
 ---
-title: "Get started"
+title: "Products, recipes and workflows"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Get started}
+  %\VignetteIndexEntry{Products, recipes and workflows}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
 
-```{r setup, include=FALSE, purl=FALSE}
-knitr::opts_chunk$set(collapse = TRUE, comment = "#>", message = FALSE)
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 ```
 
-Build a checked table from three independent definitions, then reuse the same
-workflow for a new delivery. This introduction needs only tidyweave and its hard
-dependencies. Every example on this page runs in a fresh R session.
+```{r failure}
+library(dataraft)
 
-## Define the product
+orders <- dr_product("orders") |>
+  dr_add_contract(c(id = "integer", amount = "numeric")) |>
+  dr_add_quality(~ amount >= 0)
 
-A product specification names the output and states its requirements. Here,
-each order has a unique integer ID and a nonnegative amount.
+flow <- dr_workflow() |>
+  dr_add_product(orders) |>
+  dr_add_recipe(dr_recipe() |> dr_step_mutate(amount = round(amount, 2)))
 
-```{r}
-library(tidyweave)
-orders <- tw_product("orders") |>
-  tw_add_contract(tw_contract(
-    columns = c(id = "integer", amount = "numeric"), key = "id"
-  )) |>
-  tw_add_quality(~ amount >= 0)
-orders
+bad_delivery <- data.frame(id = 1:3, amount = c(25, -75, 50))
+checked <- dr_trial(flow, data = bad_delivery)
+checked$status
+dr_quality_rows(checked)
 ```
 
-## Describe preparation
+Correct the delivery and reuse the same workflow:
 
-A recipe is an ordered collection of deferred steps. Its expressions use dplyr
-data masking: `amount` refers to the column when the recipe is executed.
-
-```{r}
-preparation <- tw_recipe() |>
-  tw_step_mutate(amount = round(amount, 2))
-preparation
+```{r success}
+next_delivery <- data.frame(id = 1:3, amount = c(25, 75, 50))
+result <- dr_trial(flow, data = next_delivery)
+dr_collect(result)
 ```
 
-The product and recipe are ordinary R objects. Neither holds this delivery or
-opens a connection. The same recipe can serve several products.
+A **product** defines identity, contract and quality requirements. A **recipe**
+defines preparation in step order. A **workflow** binds these definitions to
+sources and a target. Definitions do no I/O. `dr_trial()` checks without writing;
+`dr_run()` executes the configured target. `dr_collect()` retrieves the output.
 
-## Assemble the workflow
 
-```{r}
-flow <- tw_workflow() |>
-  tw_add_product(orders) |>
-  tw_add_recipe(preparation)
-flow
-```
+Use `dr_plan()` to inspect a definition before reading sources. Contract failures
+and quality failures are available in the result; `dr_quality_rows()` exposes
+retained failing rows. Set a destination with `dr_set_target()` and execute with
+`dr_run()` once the trial passes. Quality gates run before the destination writer.
 
-The workflow coordinates the components. An optional source or destination can
-be attached later. Keeping data outside the definition makes repeated deliveries
-explicit.
-
-## Try a delivery
-
-```{r}
-delivery <- data.frame(id = 1:3, amount = c(25, 75, 50))
-result <- tw_trial(flow, data = delivery)
-tw_collect(result)
-tw_status(result)
-```
-
-Preparation runs before the output checks. The result records the attempt;
-`tw_collect()` returns an ordinary tibble. Its amount totals **150**.
-`tw_trial()` disables framework publication and catalog writers, including those
-on dependencies. User-supplied functions remain responsible for their own effects.
-
-## Reuse and change components
-
-```{r}
-corrected <- data.frame(id = 1:3, amount = c(30, 75, 50))
-next_result <- tw_trial(flow, data = corrected)
-sum(tw_collect(next_result)$amount)
-
-whole_amounts <- tw_recipe() |> tw_step_mutate(amount = round(amount))
-alternate <- flow |> tw_update_recipe(whole_amounts)
-tw_extract_recipe(flow)
-tw_extract_recipe(alternate)
-```
-
-The corrected total is **155**. Updating a slot returns a new workflow; `flow`
-still has its original recipe. No delivery has been persisted by these trials.
-
-## Publish when ready
-
-With DuckDB >= 1.5.5 installed, save a checked delivery to a local folder:
-
-```{r eval=FALSE}
-saved <- tw_publish(flow, data = corrected, to = "data/orders")
-tw_collect(saved)
-```
-
-Publication means saving data to a destination. It does not make it public
-online. A lake result identifies an immutable release. Use `tw_run()` when you
-want to execute the destinations already configured on a definition.
-
-## Choose the next topic
-
-Continue with [recipes](preparation-recipes.html) and
-[workflows](modular-workflows.html), then [quality checks](quality-gates.html)
-and [reports](save-report.html). [Integrations](optional-integrations.html)
-explains storage and optional tools. Function arguments and return values live
-in the [reference](../reference/index.html).
-
-```{r verify, include=FALSE}
-stopifnot(sum(tw_collect(result)$amount) == 150,
-          sum(tw_collect(next_result)$amount) == 155)
-```
+Recipes own preparation in modular workflows. Products added with
+`dr_add_product()` must not carry embedded transformations. Recipe steps run in
+the order added, followed by output contract checks and quality rules.

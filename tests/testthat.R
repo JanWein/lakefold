@@ -1,3 +1,3 @@
 library(testthat)
-library(tidyweave)
-test_check("tidyweave")
+library(dataraft)
+test_check("dataraft")

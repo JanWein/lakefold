@@ -2,16 +2,16 @@ test_that("starter profiles attach the configured catalog", {
   skip_if_not_installed("yaml")
   root <- withr::local_tempdir()
   for (backend in c("duckdb", "ducklake")) {
-    config <- tw_lake_config(
-      tw_registry_duckdb(file.path(root, "lake.db")),
-      tw_storage_local(file.path(root, "data")),
+    config <- dr_lake_config(
+      dr_registry_duckdb(file.path(root, "lake.db")),
+      dr_storage_local(file.path(root, "data")),
       backend = backend
     )
-    project <- tw_dbt_init(file.path(root, backend), config)
+    project <- dr_dbt_init(file.path(root, backend), config)
     profile <- yaml::read_yaml(file.path(
       project$path,
       "profiles.yml"
-    ))$tidyweave_demo$outputs$dev
+    ))$dataraft_demo$outputs$dev
     expect_equal(profile$database, "lake")
     expect_equal(profile$attach[[1]]$alias, "lake")
     expect_equal(
@@ -30,33 +30,33 @@ test_that("starter refuses to overwrite existing files", {
   writeLines("keep", file.path(root, "important.txt"))
   expect_snapshot(
     error = TRUE,
-    tw_dbt_init(root, tw_lake_config(backend = "duckdb"))
+    dr_dbt_init(root, dr_lake_config(backend = "duckdb"))
   )
   expect_equal(readLines(file.path(root, "important.txt")), "keep")
 })
 
 test_that("real dbt builds and tests the starter project", {
-  executable <- Sys.getenv("TIDYWEAVE_DBT_EXECUTABLE")
+  executable <- Sys.getenv("DATARAFT_DBT_EXECUTABLE")
   skip_if(
     !nzchar(executable),
-    "Set TIDYWEAVE_DBT_EXECUTABLE for the external CLI integration test"
+    "Set DATARAFT_DBT_EXECUTABLE for the external CLI integration test"
   )
   root <- withr::local_tempdir()
-  backend <- Sys.getenv("TIDYWEAVE_TEST_BACKEND", "duckdb")
-  config <- tw_lake_config(
-    tw_registry_duckdb(file.path(root, "lake.db")),
-    tw_storage_local(file.path(root, "data")),
+  backend <- Sys.getenv("DATARAFT_TEST_BACKEND", "duckdb")
+  config <- dr_lake_config(
+    dr_registry_duckdb(file.path(root, "lake.db")),
+    dr_storage_local(file.path(root, "data")),
     landing = file.path(root, "landing"),
     backend = backend
   )
-  lake <- tw_connect_lake(config)
-  tw_disconnect_lake(lake)
-  project <- tw_dbt_init(
+  lake <- dr_connect_lake(config)
+  dr_disconnect_lake(lake)
+  project <- dr_dbt_init(
     file.path(root, "dbt"),
     config,
     executable = executable
   )
-  result <- tw_dbt_build(project, echo = FALSE, stop_on_failure = FALSE)
+  result <- dr_dbt_build(project, echo = FALSE, stop_on_failure = FALSE)
   expect_equal(
     result$success,
     TRUE,
@@ -66,17 +66,17 @@ test_that("real dbt builds and tests the starter project", {
     return(invisible(NULL))
   }
   expect_equal(sum(result$results$status == "pass"), 7L)
-  expect_equal(tw_dbt_test(project, echo = FALSE)$success, TRUE)
-  lake <- tw_connect_lake(config)
-  withr::defer(tw_disconnect_lake(lake))
-  model <- tw_dbt_model(
+  expect_equal(dr_dbt_test(project, echo = FALSE)$success, TRUE)
+  lake <- dr_connect_lake(config)
+  withr::defer(dr_disconnect_lake(lake))
+  model <- dr_dbt_model(
     lake,
     result,
-    tables = c(revenue = "model.tidyweave_demo.customer_revenue"),
+    tables = c(revenue = "model.dataraft_demo.customer_revenue"),
     primary_keys = list(revenue = "customer_id")
   )
   expect_equal(sum(dplyr::collect(model$revenue)$revenue), 150)
-  contract <- tw_contract_from(
+  contract <- dr_contract_from(
     model$revenue,
     "revenue",
     "Analytics",
@@ -84,11 +84,11 @@ test_that("real dbt builds and tests the starter project", {
     "One customer",
     key = "customer_id"
   ) |>
-    tw_contract_confirm()
-  release <- tw_dbt_publish(
+    dr_contract_confirm()
+  release <- dr_dbt_publish(
     lake,
     result,
-    "model.tidyweave_demo.customer_revenue",
+    "model.dataraft_demo.customer_revenue",
     contract,
     "shop.revenue",
     code_version = "v1"
@@ -96,7 +96,7 @@ test_that("real dbt builds and tests the starter project", {
   expect_equal(release$status, "published")
   expect_equal(
     sum(
-      dplyr::collect(tw_tbl(lake, "shop.revenue", release$release_id))$revenue
+      dplyr::collect(dr_tbl(lake, "shop.revenue", release$release_id))$revenue
     ),
     150
   )
@@ -105,14 +105,14 @@ test_that("real dbt builds and tests the starter project", {
 test_that("RAW starter binds ingestion releases without creating dbt seeds", {
   skip_if_not_installed("yaml")
   root <- withr::local_tempdir()
-  config <- tw_lake_config(
-    tw_registry_duckdb(file.path(root, "lake.db")),
-    tw_storage_local(file.path(root, "data")),
+  config <- dr_lake_config(
+    dr_registry_duckdb(file.path(root, "lake.db")),
+    dr_storage_local(file.path(root, "data")),
     landing = file.path(root, "landing"),
     backend = "duckdb",
     layers = c("raw", "staging", "core", "marts")
   )
-  accepted <- tw_ingest(
+  accepted <- dr_ingest(
     data.frame(order_id = 1:2, customer_id = c(1L, 1L), amount = c("10", "20")),
     to = config,
     name = "orders"
@@ -121,7 +121,7 @@ test_that("RAW starter binds ingestion releases without creating dbt seeds", {
     accepted$inputs$landed_path,
     paste0(normalizePath(root, winslash = "/"), "/")
   )))
-  project <- tw_dbt_init(
+  project <- dr_dbt_init(
     file.path(root, "dbt"),
     config,
     sources = list(orders = accepted)
@@ -152,7 +152,7 @@ test_that("RAW starter binds ingestion releases without creating dbt seeds", {
   expect_identical(
     yaml::read_yaml(file.path(
       project$path,
-      "models/tidyweave_sources_raw.yml"
+      "models/dataraft_sources_raw.yml"
     ))$sources[[1]]$tables[[1]]$identifier,
     accepted$outputs$table
   )
@@ -160,12 +160,12 @@ test_that("RAW starter binds ingestion releases without creating dbt seeds", {
   bad <- accepted
   bad$metadata$schema <- c(id = "integer")
   expect_error(
-    tw_dbt_init(file.path(root, "bad"), config, sources = list(orders = bad)),
+    dr_dbt_init(file.path(root, "bad"), config, sources = list(orders = bad)),
     "order starter requires"
   )
   expect_false(dir.exists(file.path(root, "bad")))
   expect_error(
-    tw_dbt_init(
+    dr_dbt_init(
       file.path(root, "generic"),
       config,
       sources = list(customers = accepted)
@@ -178,7 +178,7 @@ test_that("RAW starter binds ingestion releases without creating dbt seeds", {
     stats::setNames("character", "{{ unsafe }}")
   )
   expect_error(
-    tw_dbt_init(
+    dr_dbt_init(
       file.path(root, "templated"),
       config,
       sources = list(orders = templated)
@@ -191,7 +191,7 @@ test_that("RAW starter binds ingestion releases without creating dbt seeds", {
 test_that("named lake layers configure the three transformation schemas", {
   skip_if_not_installed("yaml")
   root <- withr::local_tempdir()
-  config <- tw_lake_config(
+  config <- dr_lake_config(
     backend = "duckdb",
     layers = c(
       raw = "raw",
@@ -200,11 +200,11 @@ test_that("named lake layers configure the three transformation schemas", {
       marts = "reporting"
     )
   )
-  project <- tw_dbt_init(file.path(root, "dbt"), config)
+  project <- dr_dbt_init(file.path(root, "dbt"), config)
   properties <- yaml::read_yaml(file.path(
     project$path,
     "dbt_project.yml"
-  ))$models$tidyweave_demo
+  ))$models$dataraft_demo
   expect_identical(properties$staging$`+schema`, "prep")
   expect_identical(properties$core$`+schema`, "business")
   expect_identical(properties$marts$`+schema`, "reporting")

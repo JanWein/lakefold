@@ -1,24 +1,24 @@
 test_that("custom layers survive folder reopening and permit another publication", {
   root <- file.path(withr::local_tempdir(), "lake")
   layers <- c("raw", "staging", "core", "marts")
-  lake <- tw_connect_lake(tw_lake_config(path = root, layers = layers))
-  first <- tw_publish(
-    tw_product("orders", data.frame(amount = 350)),
+  lake <- dr_connect_lake(dr_lake_config(path = root, layers = layers))
+  first <- dr_publish(
+    dr_product("orders", data.frame(amount = 350)),
     to = lake,
     layer = "core"
   )
-  tw_close_lake(lake)
-  lake <- tw_open_lake(root)
-  withr::defer(tw_close_lake(lake))
+  dr_close_lake(lake)
+  lake <- dr_open_lake(root)
+  withr::defer(dr_close_lake(lake))
   expect_identical(lake$config$layers, layers)
-  expect_equal(tw_read_release(lake, "orders")$amount, 350)
-  second <- tw_publish(
-    tw_product("orders", data.frame(amount = 380)),
+  expect_equal(dr_read_release(lake, "orders")$amount, 350)
+  second <- dr_publish(
+    dr_product("orders", data.frame(amount = 380)),
     to = lake,
     layer = "core"
   )
   expect_identical(second$status, "published")
-  expect_equal(tw_read_release(lake, "orders", first$release_id)$amount, 350)
+  expect_equal(dr_read_release(lake, "orders", first$release_id)$amount, 350)
   schemas <- DBI::dbGetQuery(
     lake$con,
     "SELECT schema_name FROM information_schema.schemata WHERE catalog_name = 'lake'"
@@ -34,61 +34,61 @@ test_that("both folder entry points retain named roles and read-only opens do no
     core = "business",
     marts = "reporting"
   )
-  lake <- tw_setup_lake(path = root, layers = layers, backend = "duckdb")
-  tw_close_lake(lake)
-  marker <- file.path(root, "tidyweave.json")
+  lake <- dr_setup_lake(path = root, layers = layers, backend = "duckdb")
+  dr_close_lake(lake)
+  marker <- file.path(root, "dataraft.json")
   before <- readLines(marker)
-  config <- tw_lake_config(path = root)
+  config <- dr_lake_config(path = root)
   expect_identical(config$layers, layers)
-  lake <- tw_open_lake(root, read_only = TRUE)
+  lake <- dr_open_lake(root, read_only = TRUE)
   expect_identical(lake$config$layers, layers)
-  tw_close_lake(lake)
+  dr_close_lake(lake)
   expect_identical(readLines(marker), before)
-  lake <- tw_setup_lake(path = root)
+  lake <- dr_setup_lake(path = root)
   expect_identical(lake$config$layers, layers)
-  tw_close_lake(lake)
+  dr_close_lake(lake)
   expect_snapshot(
     error = TRUE,
-    tw_open_lake(root, layers = c("raw", "products"))
+    dr_open_lake(root, layers = c("raw", "products"))
   )
   expect_snapshot(
     error = TRUE,
-    tw_setup_lake(path = root, landing = "elsewhere")
+    dr_setup_lake(path = root, landing = "elsewhere")
   )
-  expect_snapshot(error = TRUE, tw_open_lake(root, backend = "ducklake"))
+  expect_snapshot(error = TRUE, dr_open_lake(root, backend = "ducklake"))
   expect_identical(readLines(marker), before)
 })
 
 test_that("a single layer is preserved without JSON scalar conversion", {
   root <- withr::local_tempdir()
-  lake <- tw_open_lake(root, layers = "raw")
-  tw_close_lake(lake)
-  expect_identical(tw_lake_config(path = root)$layers, "raw")
+  lake <- dr_open_lake(root, layers = "raw")
+  dr_close_lake(lake)
+  expect_identical(dr_lake_config(path = root)$layers, "raw")
 })
 
 test_that("saved configuration cannot be bypassed by an older definition", {
   root <- withr::local_tempdir()
-  stale <- tw_lake_config(path = root)
-  lake <- tw_open_lake(root, layers = c("raw", "core"))
-  tw_close_lake(lake)
-  expect_snapshot(error = TRUE, tw_connect_lake(stale))
+  stale <- dr_lake_config(path = root)
+  lake <- dr_open_lake(root, layers = c("raw", "core"))
+  dr_close_lake(lake)
+  expect_snapshot(error = TRUE, dr_connect_lake(stale))
 })
 
 test_that("DuckLake folder setup survives reconnect and another checked publication", {
   skip_if(
-    Sys.getenv("TIDYWEAVE_TEST_DUCKLAKE") != "true",
+    Sys.getenv("DATARAFT_TEST_DUCKLAKE") != "true",
     "Enable real DuckLake integration"
   )
   root <- file.path(withr::local_tempdir(), "lake")
   layers <- c("raw", "staging", "core", "marts")
-  lake <- tw_setup_lake(path = root, backend = "ducklake", layers = layers)
-  first <- tw_publish(
-    tw_product("orders", data.frame(amount = 350)),
+  lake <- dr_setup_lake(path = root, backend = "ducklake", layers = layers)
+  first <- dr_publish(
+    dr_product("orders", data.frame(amount = 350)),
     to = lake,
     layer = "core"
   )
-  tw_close_lake(lake)
-  lake <- tw_open_lake(root)
+  dr_close_lake(lake)
+  lake <- dr_open_lake(root)
   expect_identical(lake$config$backend, "ducklake")
   expect_identical(lake$config$layers, layers)
   expect_identical(
@@ -98,15 +98,15 @@ test_that("DuckLake folder setup survives reconnect and another checked publicat
     )$type,
     "ducklake"
   )
-  second <- tw_publish(
-    tw_product("orders", data.frame(amount = 380)),
+  second <- dr_publish(
+    dr_product("orders", data.frame(amount = 380)),
     to = lake,
     layer = "core"
   )
   expect_identical(second$status, "published")
-  expect_equal(tw_read_release(lake, "orders", first$release_id)$amount, 350)
-  tw_close_lake(lake)
-  lake <- tw_open_lake(root, read_only = TRUE)
-  expect_equal(tw_read_release(lake, "orders")$amount, 380)
-  tw_close_lake(lake)
+  expect_equal(dr_read_release(lake, "orders", first$release_id)$amount, 350)
+  dr_close_lake(lake)
+  lake <- dr_open_lake(root, read_only = TRUE)
+  expect_equal(dr_read_release(lake, "orders")$amount, 380)
+  dr_close_lake(lake)
 })

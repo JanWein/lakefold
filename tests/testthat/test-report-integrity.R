@@ -1,8 +1,8 @@
 test_that("reports preserve doubles and detect small numeric changes", {
   f <- fixture()
   on.exit(fixture_cleanup(f))
-  tw_run(f$pipeline, f$lake)
-  definition <- tw_metric(
+  dr_run(f$pipeline, f$lake)
+  definition <- dr_metric(
     "precision",
     "risk.validated",
     approved = TRUE,
@@ -18,24 +18,24 @@ test_that("reports preserve doubles and detect small numeric changes", {
     1.2345678901234567
   )
   for (i in seq_along(numbers)) {
-    value <- tw_measure(f$lake, definition, params = list(value = numbers[i]))
-    tw_report_release(f$lake, paste0("report", i), list(total = value), "v1")
-    actual <- tw_report_read(f$lake, paste0("report", i), values_only = TRUE)
+    value <- dr_measure(f$lake, definition, params = list(value = numbers[i]))
+    dr_report_release(f$lake, paste0("report", i), list(total = value), "v1")
+    actual <- dr_report_read(f$lake, paste0("report", i), values_only = TRUE)
     expect_identical(as.double(actual$total$value), numbers[i])
   }
-  changed <- tw_measure(f$lake, definition, params = list(value = numbers[1]))
+  changed <- dr_measure(f$lake, definition, params = list(value = numbers[1]))
   changed$value <- changed$value - 1
   expect_snapshot(
     error = TRUE,
-    tw_report_release(f$lake, "changed", list(total = changed), "v1")
+    dr_report_release(f$lake, "changed", list(total = changed), "v1")
   )
 })
 
 test_that("nested report values are rejected before any report is written", {
   f <- fixture()
   on.exit(fixture_cleanup(f))
-  tw_run(f$pipeline, f$lake)
-  definition <- tw_metric(
+  dr_run(f$pipeline, f$lake)
+  definition <- dr_metric(
     "nested",
     "risk.validated",
     approved = TRUE,
@@ -44,10 +44,10 @@ test_that("nested report values are rejected before any report is written", {
       tibble::tibble(value = list(c(low = 100, high = 200)))
     }
   )
-  value <- tw_measure(f$lake, definition)
+  value <- dr_measure(f$lake, definition)
   expect_snapshot(
     error = TRUE,
-    tw_report_release(f$lake, "nested", list(total = value), "v1")
+    dr_report_release(f$lake, "nested", list(total = value), "v1")
   )
-  expect_equal(nrow(tw_registry(f$lake, "reports")), 0L)
+  expect_equal(nrow(dr_registry(f$lake, "reports")), 0L)
 })

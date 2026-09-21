@@ -1,30 +1,30 @@
-library(tidyweave)
+library(dataraft)
 job <- readRDS(commandArgs(trailingOnly = TRUE)[[1]])
 result <- tryCatch(
   {
     if (job$action == "hold") {
       hold <- function() {
-        lake <- tw_connect_lake(job$config)
-        on.exit(tw_close_lake(lake), add = TRUE)
-        tidyweave:::assert_writable(lake)
+        lake <- dr_open_lake(job$config)
+        on.exit(dr_close_lake(lake), add = TRUE)
+        dataraft.lake:::assert_writable(lake)
         file.create(job$ready)
         Sys.sleep(30)
       }
       hold()
       list(status = "held")
     } else if (job$action == "report") {
-      metrics <- tw_metric_set(
+      metrics <- dr_metric_set(
         "shared",
         count = dplyr::n(),
         approved = TRUE,
         code_version = "v1"
       )
-      values <- tw_measure(job$previous, metrics = metrics, by = character())
-      tw_report_release(values, "same-report", code_version = "v1")
+      values <- dr_measure(job$previous, metrics = metrics, by = character())
+      dr_report_release(values, "same-report", code_version = "v1")
       list(status = "reported")
     } else {
-      result <- tw_publish(
-        tw_product(job$asset, data.frame(id = job$value)),
+      result <- dr_publish(
+        dr_product(job$asset, data.frame(id = job$value)),
         to = job$config,
         previous = job$previous
       )

@@ -1,8 +1,8 @@
 # SQL transforms work with ordinary data and reject missing infrastructure in preflight
 
     Code
-      tw_validate(product)
+      dr_validate(product)
     Condition
-      Error in `need()`:
+      Error in `dataraft.core::need()`:
       ! Install optional package: duckdb
 

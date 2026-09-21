@@ -1,5 +1,5 @@
 # A complete local example. Install pointblank only when you need its checks.
-library(tidyweave)
+library(dataraft)
 
 if (requireNamespace("pointblank", quietly = TRUE)) {
   reserves <- data.frame(
@@ -7,11 +7,11 @@ if (requireNamespace("pointblank", quietly = TRUE)) {
     date = as.Date("2026-09-30"),
     reserve = c(100, 200)
   )
-  schema <- tw_contract(
+  schema <- dr_contract(
     columns = c(id = "character", date = "Date", reserve = "numeric"),
     key = c("id", "date")
   )
-  checks <- tw_pointblank_checks(
+  checks <- dr_pointblank_checks(
     "business_checks",
     function(data) {
       pointblank::create_agent(
@@ -23,13 +23,13 @@ if (requireNamespace("pointblank", quietly = TRUE)) {
     policy = "agent"
   )
 
-  result <- tw_product("reserves") |>
-    tw_add_source(reserves) |>
-    tw_add_contract(schema) |>
-    tw_add_quality(checks) |>
-    tw_run()
-  print(tw_quality(result))
-  print(tw_collect(result))
+  result <- dr_product("reserves") |>
+    dr_add_source(reserves) |>
+    dr_add_contract(schema) |>
+    dr_add_quality(checks) |>
+    dr_run()
+  print(dr_quality(result))
+  print(dr_collect(result))
 } else {
   message("Install optional package pointblank to run this example.")
 }

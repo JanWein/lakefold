@@ -21,7 +21,7 @@ test_that("libpq keyword values preserve quoting without exposing secrets", {
     "password='secret'x"
   )) {
     error <- tryCatch(postgres_parameters(invalid), error = identity)
-    expect_s3_class(error, "tw_error")
+    expect_s3_class(error, "dataraft_error")
     expect_equal(grepl("secret", conditionMessage(error)), FALSE)
   }
 })

@@ -1,15 +1,15 @@
 # invalid dependency graphs fail before any step runs
 
     Code
-      tw_workflow(a = function(b) b, b = function(a) a, code_version = "v1")
+      dr_workflow(a = function(b) b, b = function(a) a, code_version = "v1")
     Condition
-      Error in `abort()`:
+      Error in `dr_workflow()`:
       ! Workflow dependencies contain a cycle.
 
 ---
 
     Code
-      tw_workflow(a = function(unknown) unknown, code_version = "v1")
+      dr_workflow(a = function(unknown) unknown, code_version = "v1")
     Condition
-      Error in `abort()`:
+      Error in `dr_workflow()`:
       ! Every step argument must name a workflow input or step.

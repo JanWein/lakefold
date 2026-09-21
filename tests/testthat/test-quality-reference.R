@@ -5,27 +5,27 @@ test_that("reference rules count rows, composite keys and nulls consistently", {
     area = c(1L, 1L, 2L, 1L, 1L)
   )
   by <- c(customer = "id", area = "region")
-  rule <- tw_quality_reference(reference, by)
-  evidence <- tw_run_quality(rule, data)
+  rule <- dr_quality_reference(reference, by)
+  evidence <- dr_run_quality(rule, data)
   expect_equal(evidence$n_total, 5)
   expect_equal(evidence$n_failed, 2)
   expect_equal(evidence$status, "failed")
   expect_equal(
-    tw_run_quality(
-      tw_quality_reference(reference, by, na_matches = "na"),
+    dr_run_quality(
+      dr_quality_reference(reference, by, na_matches = "na"),
       data
     )$n_failed,
     1
   )
   expect_true(rule$dynamic_reference)
   expect_false(grepl('"b"', jencode(rule), fixed = TRUE))
-  expect_equal(tw_run_quality(rule, data[0, ])$status, "not_checked")
+  expect_equal(dr_run_quality(rule, data[0, ])$status, "not_checked")
   expect_error(
-    tw_run_quality(rule, data["customer"]),
+    dr_run_quality(rule, data["customer"]),
     "key columns are missing"
   )
   expect_error(
-    tw_quality_reference(reference, c(customer = "id", customer = "region")),
+    dr_quality_reference(reference, c(customer = "id", customer = "region")),
     "unique"
   )
 })
@@ -36,11 +36,11 @@ test_that("reference callbacks are deferred and resolved for every check", {
     calls <<- calls + 1L
     data.frame(id = seq_len(calls))
   }
-  rule <- tw_quality_reference(reference, "id")
-  tw_check_component(rule)
+  rule <- dr_quality_reference(reference, "id")
+  dr_check_component(rule)
   expect_equal(calls, 0L)
-  expect_equal(tw_run_quality(rule, data.frame(id = 2L))$status, "failed")
-  expect_equal(tw_run_quality(rule, data.frame(id = 2L))$status, "passed")
+  expect_equal(dr_run_quality(rule, data.frame(id = 2L))$status, "failed")
+  expect_equal(dr_run_quality(rule, data.frame(id = 2L))$status, "passed")
   expect_equal(calls, 2L)
 })
 
@@ -55,31 +55,31 @@ test_that("same-database reference checks stay lazy and cross-backend copies are
   orders <- dplyr::tbl(con, "orders")
   customers <- dplyr::tbl(con, "customers")
   by <- c(customer = "id")
-  actual <- tw_run_quality(tw_quality_reference(customers, by), orders)
+  actual <- dr_run_quality(dr_quality_reference(customers, by), orders)
   expect_equal(
     actual,
-    tw_run_quality(tw_quality_reference(reference, by), data)
+    dr_run_quality(dr_quality_reference(reference, by), data)
   )
   expect_true(DBI::dbIsValid(con))
   expect_error(
-    tw_run_quality(tw_quality_reference(reference, by), orders),
+    dr_run_quality(dr_quality_reference(reference, by), orders),
     "copy = TRUE"
   )
   expect_error(
-    tw_run_quality(tw_quality_reference(customers, by), data),
+    dr_run_quality(dr_quality_reference(customers, by), data),
     "copy = TRUE"
   )
   expect_equal(
-    tw_run_quality(tw_quality_reference(reference, by, copy = TRUE), orders),
+    dr_run_quality(dr_quality_reference(reference, by, copy = TRUE), orders),
     actual
   )
   expect_equal(
-    tw_run_quality(tw_quality_reference(customers, by, copy = TRUE), data),
+    dr_run_quality(dr_quality_reference(customers, by, copy = TRUE), data),
     actual
   )
-  adapter <- tw_source_database(con, table = "customers", lazy = TRUE)
+  adapter <- dr_source_database(con, table = "customers", lazy = TRUE)
   expect_equal(
-    tw_run_quality(tw_quality_reference(adapter, by), orders),
+    dr_run_quality(dr_quality_reference(adapter, by), orders),
     actual
   )
 })

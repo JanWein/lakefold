@@ -1,49 +1,49 @@
 # invalid or conflicting slots explain how to repair them
 
     Code
-      tw_add_product(tw_workflow(), 1)
+      dr_add_product(dr_workflow(), 1)
     Condition
-      Error in `abort()`:
-      ! Supply a tw_product() specification.
+      Error in `dr_add_product()`:
+      ! Supply a dr_product() specification.
 
 # adding an occupied product slot requires update
 
     Code
-      tw_add_product(tw_add_product(tw_workflow(), tw_product("a")), tw_product("b"))
+      dr_add_product(dr_add_product(dr_workflow(), dr_product("a")), dr_product("b"))
     Condition
-      Error in `abort()`:
-      ! This workflow already has a product. Use tw_update_product().
+      Error in `dr_add_product()`:
+      ! This workflow already has a product. Use dr_update_product().
 
 # adding an occupied recipe slot requires update
 
     Code
-      tw_add_recipe(tw_add_recipe(tw_workflow(), tw_recipe()), tw_recipe())
+      dr_add_recipe(dr_add_recipe(dr_workflow(), dr_recipe()), dr_recipe())
     Condition
-      Error in `abort()`:
-      ! This workflow already has a recipe. Use tw_update_recipe().
+      Error in `dr_add_recipe()`:
+      ! This workflow already has a recipe. Use dr_update_recipe().
 
 # preparation stays in a dedicated workflow slot
 
     Code
-      tw_add_product(tw_workflow(), dplyr::mutate(tw_product("a"), amount = 1))
+      dr_add_product(dr_workflow(), dplyr::mutate(dr_product("a"), amount = 1))
     Condition
-      Error in `abort()`:
-      ! Keep preparation in a recipe when using tw_add_product().
+      Error in `dr_add_product()`:
+      ! Keep preparation in a recipe when using dr_add_product().
 
 # sources cannot silently shadow product inputs
 
     Code
-      tw_add_product(tw_add_source(tw_workflow(), data.frame(id = 1L)), tw_product(
+      dr_add_product(dr_add_source(dr_workflow(), data.frame(id = 1L)), dr_product(
         "a", data.frame(id = 2L)))
     Condition
-      Error in `abort()`:
+      Error in `dr_add_product()`:
       ! Sources are already set on the product. Supply sources in one place.
 
 # incomplete workflows explain the missing product
 
     Code
-      tw_trial(tw_workflow(), data = data.frame(id = 1L))
+      dr_trial(dr_workflow(), data = data.frame(id = 1L))
     Condition
-      Error in `abort()`:
-      ! This workflow has no product. Use tw_add_product().
+      Error in `dr_extract_product()`:
+      ! This workflow has no product. Use dr_add_product().
 

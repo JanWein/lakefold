@@ -1,76 +1,96 @@
-# tidyweave
 
-**Compose checked data products from reusable specifications and recipes.**
+# DataRaft
 
-tidyweave separates what a table must satisfy, how it is prepared, and how the
-work runs. Define each component once, reuse it for new deliveries, and retain
-the data behind a report when corrections arrive.
+[![R-CMD-check](https://github.com/JanWein/tidyweave/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/JanWein/tidyweave/actions/workflows/R-CMD-check.yaml)
+[![Coverage](https://github.com/JanWein/tidyweave/actions/workflows/coverage.yaml/badge.svg)](https://github.com/JanWein/tidyweave/actions/workflows/coverage.yaml)
+[![Lifecycle:
+experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
 
-## Installation
+Deliver checked data with reusable specifications, recipes and
+workflows. A changed column type or a negative amount blocks a delivery
+before its target is written. The result retains the checks and
+offending rows for diagnosis.
 
-The development version requires R 4.2 or later:
+DataRaft is under development. Before 1.0 the current API is the
+supported API.
 
-```r
-install.packages("remotes")
-remotes::install_github("JanWein/tidyweave")
+``` r
+library(dataraft)
+
+orders <- dr_product("orders") |>
+  dr_add_contract(c(id = "integer", amount = "numeric")) |>
+  dr_add_quality(~ amount >= 0)
+
+flow <- dr_workflow() |>
+  dr_add_product(orders) |>
+  dr_add_recipe(dr_recipe() |> dr_step_mutate(amount = round(amount, 2)))
+
+bad_delivery <- data.frame(id = 1:3, amount = c(25, -75, 50))
+checked <- dr_trial(flow, data = bad_delivery)
+checked$status
+#> [1] "blocked"
+dr_quality_rows(checked)
+#> # A tibble: 1 × 2
+#>      id amount
+#>   <int>  <dbl>
+#> 1     2    -75
 ```
 
-## Usage
+Correct the delivery and reuse the same workflow:
 
-```r
-library(tidyweave)
-
-orders <- tw_product("orders") |>
-  tw_add_contract(tw_contract(
-    columns = c(id = "integer", amount = "numeric"), key = "id"
-  )) |>
-  tw_add_quality(~ amount >= 0)
-
-preparation <- tw_recipe() |>
-  tw_step_mutate(amount = round(amount, 2))
-
-flow <- tw_workflow() |>
-  tw_add_product(orders) |>
-  tw_add_recipe(preparation)
-
-delivery <- data.frame(id = 1:3, amount = c(25, 75, 50))
-result <- tw_trial(flow, data = delivery)
-tw_collect(result)
+``` r
+next_delivery <- data.frame(id = 1:3, amount = c(25, 75, 50))
+result <- dr_trial(flow, data = next_delivery)
+dr_collect(result)
+#> # A tibble: 3 × 2
+#>      id amount
+#>   <int>  <dbl>
+#> 1     1     25
+#> 2     2     75
+#> 3     3     50
 ```
 
-The result is a tibble with three orders totalling **150**. Definitions do not
-read or write data. `tw_trial()` executes preparation and checks with framework
-writers disabled. Use `tw_publish(flow, data = delivery, to = "data/orders")`
-to save checked output with the optional DuckDB dependency installed.
+A **product** defines identity, contract and quality requirements. A
+**recipe** defines preparation in step order. A **workflow** binds these
+definitions to sources and a target. Definitions do no I/O. `dr_trial()`
+checks without writing; `dr_run()` executes the configured target.
+`dr_collect()` retrieves the output.
 
-| Component | Defines | Main functions |
-|---|---|---|
-| Product specification | Identity, schema, keys and quality requirements | `tw_product()`, `tw_add_contract()`, `tw_add_quality()` |
-| Recipe | Ordered preparation instructions | `tw_recipe()`, `tw_step_*()` |
-| Workflow | Product, recipe, inputs and destination | `tw_workflow()`, `tw_add_product()`, `tw_add_recipe()` |
-| Execution | A checked attempt and its evidence | `tw_trial()`, `tw_publish()`, `tw_collect()` |
+## Packages
 
-The architecture follows [parsnip](https://parsnip.tidymodels.org/),
-[recipes](https://recipes.tidymodels.org/) and
-[workflows](https://workflows.tidymodels.org/). All tidyweave exports start with
-`tw_`, so they can be used alongside those packages. Ordinary dplyr methods
-remain available through dplyr. These recipes contain deferred instructions;
-they have no fitted training state or `prep()` / `bake()` phase.
+| Package             | Responsibility                                                |
+|---------------------|---------------------------------------------------------------|
+| `dataraft`          | Metapackage and shared introduction                           |
+| `dataraft.core`     | Products, contracts, recipes, workflows and quality           |
+| `dataraft.lake`     | Lake storage, releases, coordinated publication and recovery  |
+| `dataraft.adapters` | Database, API, Parquet and pins adapters; targets integration |
+| `dataraft.dbt`      | dbt execution and artifacts                                   |
+| `dataraft.catalog`  | Catalog applications and metadata publication                 |
+| `dataraft.metrics`  | Metrics and frozen report evidence                            |
 
-## Documentation
+Use `library(dataraft.core)` for in-memory work without the extensions.
+Each extension is independently installable with its declared
+dependencies. The metapackage re-exports the public family API; its own
+R code contains no engine.
 
-- [Get started](https://janwein.github.io/tidyweave/articles/get-started.html): one complete workflow, including a second delivery.
-- [Preparation recipes](https://janwein.github.io/tidyweave/articles/preparation-recipes.html): compose, reuse and inspect steps.
-- [Workflows](https://janwein.github.io/tidyweave/articles/modular-workflows.html): assemble components, replace slots and execute.
-- [Articles](https://janwein.github.io/tidyweave/articles/index.html) and [reference](https://janwein.github.io/tidyweave/reference/index.html): publication, reports, integrations and arguments.
+During development, install the family from a checkout:
 
+``` r
+source("scripts/install-family.R")
+```
 
-## Scope
+## When to use it
 
-Start in memory. Optional adapters connect DBI, Arrow, pins, HTTP, dbt and
-catalogs. Lake publication retains immutable releases; other targets keep their
-documented storage semantics. Local lake writes require one coordinated writer.
-DuckLake is an explicit backend choice. Saved reports contain values and
-evidence; rendering, scheduling and access management remain with your tools.
+Use DataRaft when repeated deliveries need a reusable preparation
+definition, quality gates and an inspectable execution result. Use
+pointblank for standalone data validation, targets for pipeline
+scheduling, pins for board-based object storage and dbt for SQL model
+development. DataRaft adapters connect these tools to a checked delivery
+workflow.
 
-The package is in development. Interfaces may change before version 1.0, without backward compatibility. See [Contributing](CONTRIBUTING.md). MIT licensed.
+See the
+[introduction](https://dataraft-r.github.io/dataraft/articles/get-started.html),
+[integration
+guide](https://dataraft-r.github.io/dataraft/articles/integrations.html)
+and [guarantees and
+limits](https://dataraft-r.github.io/dataraft/articles/guarantees.html).
