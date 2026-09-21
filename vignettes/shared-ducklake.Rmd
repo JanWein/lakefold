@@ -1,0 +1,105 @@
+---
+title: "Publish to a shared DuckLake"
+description: "Configure PostgreSQL once and coordinate publications from independent R sessions."
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Publish to a shared DuckLake}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+**Use this when:** several people publish to the same lake. Complete
+[the cancellation report](cancellation-report.html) first. Business definitions
+remain the same; only the destination changes.
+
+You need a PostgreSQL database dedicated to this DuckLake, shared S3-compatible
+storage, DuckDB with DuckLake/PostgreSQL/httpfs extensions, and RPostgres.
+Every writer must use this version of tidyweave. The database and bucket must
+already exist and each person needs authorized access. This guide does not
+provision infrastructure or implement access policies.
+
+## Configure the destination once
+
+Supply the PostgreSQL libpq connection string through the environment variable
+`TIDYWEAVE_PG_CONNECTION`, for example through your deployment's secret manager.
+Keyword/value strings and `service=your_service` are supported; URI strings are
+not supported by the writer coordinator. S3 credentials come from
+`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and optionally `AWS_SESSION_TOKEN`.
+Do not put credentials in product definitions, scripts or Git.
+
+```{r config, eval=FALSE, purl=FALSE}
+library(tidyweave)
+team <- lake_config(
+  catalog = registry_postgres("TIDYWEAVE_PG_CONNECTION", lock_timeout = 30),
+  storage = storage_s3(
+    bucket = "your-team-bucket", prefix = "insurance",
+    endpoint = "https://your-s3-endpoint", region = "eu-central-1"
+  ),
+  landing = "/your-shared-evidence/insurance",
+  backend = "ducklake"
+)
+```
+
+All clients use the same database, data location and layer names. The landing
+folder must be durable and accessible where receipt evidence is consumed.
+S3 table storage alone does not make local landing files shared. Configure
+credentials separately for each person; configuration objects contain their
+environment-variable names, not credential values.
+
+## Publish and correct
+
+Use the `portfolio` model product and `reporting_product()` definition from the
+cancellation guide. No business definition needs a PostgreSQL-specific rewrite.
+
+```{r publish, eval=FALSE, purl=FALSE}
+first_model <- publish(portfolio, to = team)
+first_report_data <- publish(reporting_product(first_model), to = team)
+
+second_model <- publish(portfolio, to = team, previous = first_model,
+  sources = list(policies = corrected_policies))
+second_report_data <- publish(reporting_product(second_model), to = team,
+  previous = first_report_data)
+```
+
+`previous` is your correction's starting point. If someone has already published
+a newer release, the call fails before replacing it. Read the newer state,
+reconcile the complete delivery, and publish with that state as `previous`.
+Without `previous`, publication is a deliberate new replacement using the
+normal ordered-writer policy. Always use `previous` for user-authored corrections.
+
+A model's tables commit together, including their relationship evidence and
+model manifest. The derived report is a separate publication. Its source is the
+exact model you passed, even if another model is published meanwhile.
+Saving report values remains a separate reviewed step with `report_release()`.
+
+## What simultaneous writing means
+
+Independent R sessions may submit work concurrently. PostgreSQL advisory locks
+serialize package write operations per catalog database, including setup,
+definition registration, publication, report issuance and recovery. A session
+releases its lock when the operation returns or fails; an idle open lake does
+not reserve the writer. If the wait exceeds `lock_timeout`, the operation fails
+with an actionable busy message. There is no unbounded retry loop.
+
+This first implementation prioritizes ordered, consistent writes over parallel
+write throughput. Model validation occurs before acquiring the publication lock;
+publication rechecks an explicit `previous` while holding it. A model result
+contains all tables in memory during validation, so size the session accordingly.
+
+Direct SQL, dbt materialization and unrelated clients do not participate in this
+protocol. Use dbt-owned schemas for intermediate work and `dbt_publish()` for
+package-managed publication. Do not mutate package-managed release tables.
+Concurrent external changes are outside these guarantees. Catalog migrations and
+old clients must be coordinated operationally; metadata schema 4 rejects older
+package writers after upgrade.
+
+## Verification
+
+The repository includes `scripts/check-postgres.R` and a dedicated CI job using
+PostgreSQL 16, DuckLake and independent R processes. It checks concurrent clients,
+stale corrections, idempotent report issuance and model quality gates. Local
+DuckDB tests cover multi-table rollback and immutable historical models.
+These do not replace testing your S3 endpoint, authentication and network-failure
+behavior in the deployment environment.
+
+[Back to Learn](learn.html) · [Local DuckLake](create-ducklake.html)

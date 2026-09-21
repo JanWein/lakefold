@@ -57,6 +57,7 @@ assert_writable <- function(lake) {
       "tw_read_only"
     )
   }
+  acquire_lake_writer(lake, parent.frame())
 }
 asset_id <- function(x) {
   scalar(x, "Asset id")

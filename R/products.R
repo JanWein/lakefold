@@ -1,5 +1,11 @@
 #' Define a composable data product
 #'
+#' A table input defines a table product. A dm input defines a model product:
+#' its tables and declared relationships are checked together and published in
+#' one transaction. collect() returns a dm; select a member explicitly with
+#' product("report", result, table = "policies"). Model execution materializes
+#' all tables in memory. Table contracts are supplied through contracts.
+#'
 #' Add named sources, ordinary transformation functions and optional checks or
 #' a target. Use [trial()] to try it, or [publish()] to save checked output.
 #' [run()] executes the full configuration, including writers. Products can be
@@ -18,6 +24,9 @@
 #' @param execution Optional connection-free [execution_config()] stored on this
 #'   definition. Used when it is the root of [run()], [publish()] or [ingest()].
 #'   An explicit execution argument overrides these defaults.
+#' @param contracts Named table contracts when data is a dm model.
+#' @param table Table name to select from a successful model trial or publication.
+#'   Published selections retain the exact member release.
 #' @returns A `tw_product`, ready for composition, inspection and execution.
 #' @export
 #' @examples
@@ -35,7 +44,9 @@ product <- function(
   description = NULL,
   code_version = NULL,
   source_name = NULL,
-  execution = NULL
+  execution = NULL,
+  contracts = NULL,
+  table = NULL
 ) {
   x <- new_product(
     id,
@@ -57,6 +68,23 @@ product <- function(
     abort(
       "source_name requires data. Name a later source with add_source(name = )."
     )
+  }
+  if (!is.null(table)) {
+    data <- model_member_result(data, table)
+  }
+  if (inherits(data, "tw_model_result")) {
+    abort(
+      "Choose the model table explicitly with product(..., table = \"name\")."
+    )
+  }
+  if (inherits(data, "dm")) {
+    if (!is.null(contract) || !is.null(source_name)) {
+      abort("For a dm model use contracts = list(table_name = contract).")
+    }
+    return(new_model_product(x, data, contracts))
+  }
+  if (!is.null(contracts)) {
+    abort("contracts is available only for dm model products.")
   }
   if (!is.null(data)) {
     source_name <- source_name %||%

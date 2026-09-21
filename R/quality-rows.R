@@ -29,6 +29,35 @@ quality_rows <- function(x, rule = NULL, contract = NULL, limit = 100) {
   ) {
     abort("limit must be a non-negative whole number or Inf.")
   }
+  if (inherits(x, "tw_model_result")) {
+    failed <- names(x$members)[vapply(
+      x$members,
+      function(m) {
+        !m$status %in%
+          c("completed", "published", "cached")
+      },
+      logical(1)
+    )]
+    if (is.null(rule) && length(failed) == 1L) {
+      return(quality_rows(x$members[[failed]], limit = limit))
+    }
+    if (!is.null(rule) && is.character(rule)) {
+      selected <- names(x$members)[startsWith(
+        rule,
+        paste0(names(x$members), "/")
+      )]
+      if (length(selected) == 1L) {
+        return(quality_rows(
+          x$members[[selected]],
+          substring(rule, nchar(selected) + 2L),
+          limit = limit
+        ))
+      }
+    }
+    abort(
+      "Select a table/check from quality_report(result); for relationships inspect result$error$checks."
+    )
+  }
   if (inherits(x, "tw_run_result")) {
     checks <- quality(x)
     if (is.null(rule) && is.data.frame(checks)) {

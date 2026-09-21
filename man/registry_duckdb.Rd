@@ -9,7 +9,7 @@
 \usage{
 registry_duckdb(path)
 
-registry_postgres(connection_env = "DUCKLAKE_PG_CONNECTION")
+registry_postgres(connection_env = "DUCKLAKE_PG_CONNECTION", lock_timeout = 30)
 
 storage_local(path)
 
@@ -20,6 +20,10 @@ storage_s3(bucket, prefix = "dataloom/", endpoint, region = "eu-central-1")
 
 \item{connection_env}{Environment variable containing a PostgreSQL libpq
 string.}
+
+\item{lock_timeout}{Seconds to wait for another PostgreSQL writer. Writes are
+coordinated per catalog database using optional RPostgres. All writers must
+use this protocol; direct SQL and older clients are not coordinated.}
 
 \item{bucket}{S3 bucket.}
 

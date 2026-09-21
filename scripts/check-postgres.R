@@ -1,0 +1,92 @@
+# Run against a dedicated, disposable PostgreSQL database and shared test folder.
+# The database must be empty; never point this script at an existing lake.
+library(tidyweave)
+stopifnot(nzchar(Sys.getenv("TIDYWEAVE_TEST_PG_CONNECTION")))
+root <- tempfile("tidyweave-shared-")
+dir.create(root)
+config <- lake_config(
+  registry_postgres("TIDYWEAVE_TEST_PG_CONNECTION", lock_timeout = 30),
+  storage_local(file.path(root, "data")),
+  landing = file.path(root, "landing"),
+  backend = "ducklake"
+)
+lake <- connect_lake(config)
+close_lake(lake)
+config$install_extensions <- FALSE
+worker <- normalizePath("scripts/postgres-worker.R")
+launch <- function(job, number) {
+  input <- file.path(root, paste0("job-", number, ".rds"))
+  output <- file.path(root, paste0("out-", number, ".rds"))
+  saveRDS(c(list(config = config, output = output), job), input)
+  process <- processx::process$new(
+    file.path(R.home("bin"), "Rscript"),
+    c(worker, input),
+    stdout = file.path(root, paste0(number, ".log")),
+    stderr = "2>&1"
+  )
+  list(process = process, output = output)
+}
+finish <- function(job) {
+  job$process$wait(timeout = 120000)
+  if (job$process$is_alive()) {
+    job$process$kill()
+    stop("Worker timed out")
+  }
+  stopifnot(job$process$get_exit_status() == 0L)
+  readRDS(job$output)
+}
+# Independent clients can publish without duplicate registration or schema races.
+a <- launch(list(action = "publish", asset = "left", value = 1L), 1)
+b <- launch(list(action = "publish", asset = "right", value = 2L), 2)
+stopifnot(finish(a)$status == "published", finish(b)$status == "published")
+first <- publish(product("shared", data.frame(id = 1L)), to = config)
+a <- launch(
+  list(action = "publish", asset = "shared", value = 2L, previous = first),
+  3
+)
+b <- launch(
+  list(action = "publish", asset = "shared", value = 3L, previous = first),
+  4
+)
+results <- list(finish(a), finish(b))
+stopifnot(
+  sum(vapply(results, function(x) x$status == "published", logical(1))) == 1L,
+  sum(vapply(
+    results,
+    function(x) "tw_publication_conflict" %in% x$error_class,
+    logical(1)
+  )) ==
+    1L
+)
+# Same reviewed report is idempotent even when two clients issue it together.
+a <- launch(list(action = "report", previous = first), 5)
+b <- launch(list(action = "report", previous = first), 6)
+stopifnot(finish(a)$status == "reported", finish(b)$status == "reported")
+lake <- connect_lake(config)
+stopifnot(
+  nrow(releases(lake, "shared")) == 2L,
+  sum(registry(lake, "reports")$id == "same-report") == 1L,
+  identical(collect(first)$id, 1L)
+)
+model <- dm::dm(
+  customers = data.frame(id = 1:2),
+  policies = data.frame(id = 1:2)
+) |>
+  dm::dm_add_pk(customers, id) |>
+  dm::dm_add_fk(policies, id, customers)
+original <- publish(product("portfolio", model), to = lake)
+blocked <- publish(
+  product("portfolio", model),
+  to = lake,
+  sources = list(customers = data.frame(id = 1L)),
+  stop_on_failure = FALSE
+)
+stopifnot(
+  blocked$status == "blocked",
+  nrow(releases(lake, "portfolio")) == 1L,
+  identical(collect(original)$policies$id, 1:2)
+)
+close_lake(lake)
+cat(
+  "PostgreSQL/DuckLake: parallel clients, stale correction, report identity and model gate passed.\n"
+)

@@ -30,7 +30,8 @@ overriding defaults stored by \code{product(execution = )}.}
 
 \item{...}{Execution options, including \code{data} or \code{sources} for new deliveries
 as described in \code{\link[=run]{run()}}, \code{stop_on_failure} and, for lake
-targets, \code{business_date}, \code{notify} and \code{cache}. dbt builds accept
+targets, \code{business_date}, \code{notify}, \code{cache} and \code{previous}. Supply a previous
+publication to reject stale corrections if the destination has changed. dbt builds accept
 \code{\link[=dbt_publish]{dbt_publish()}} options such as \code{contract}, \code{asset} and \code{layer}.}
 
 \item{layer}{Optional publication layer for a lake target.}

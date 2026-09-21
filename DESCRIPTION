@@ -11,9 +11,9 @@ Description: Composes data acquisition, transformation, contracts and quality
 License: MIT + file LICENSE
 Encoding: UTF-8
 Depends: R (>= 4.2.0)
-Imports: DBI, dplyr (>= 1.1.0), dbplyr, tibble, rlang, digest, jsonlite, methods
+Imports: DBI, dplyr (>= 1.1.0), dbplyr, tibble, rlang, digest, jsonlite, methods, withr
 Suggests: duckdb (>= 1.5.5), testthat (>= 3.0.0), pointblank, dm, shiny, bslib, yaml,
-    readr, readxl, paws.storage, knitr, rmarkdown, processx, withr,
+    readr, readxl, paws.storage, knitr, rmarkdown, processx, RPostgres,
     arrow, pins (>= 1.2.0), httr2, targets, renv, RSQLite, webfakes, bit64
 Config/testthat/edition: 3
 Config/Needs/website: pkgdown, DiagrammeR, DiagrammeRsvg

@@ -2,6 +2,9 @@
 #' @param path Local path.
 #' @param connection_env Environment variable containing a PostgreSQL libpq
 #'   string.
+#' @param lock_timeout Seconds to wait for another PostgreSQL writer. Writes are
+#'   coordinated per catalog database using optional RPostgres. All writers must
+#'   use this protocol; direct SQL and older clients are not coordinated.
 #' @param bucket S3 bucket.
 #' @param prefix Prefix within the bucket.
 #' @param endpoint S3 endpoint, including https://.
@@ -20,10 +23,22 @@ registry_duckdb <- function(path) {
 }
 #' @rdname registry_duckdb
 #' @export
-registry_postgres <- function(connection_env = "DUCKLAKE_PG_CONNECTION") {
+registry_postgres <- function(
+  connection_env = "DUCKLAKE_PG_CONNECTION",
+  lock_timeout = 30
+) {
+  if (
+    !is.numeric(lock_timeout) ||
+      length(lock_timeout) != 1L ||
+      !is.finite(lock_timeout) ||
+      lock_timeout < 0
+  ) {
+    abort("lock_timeout must be a non-negative number of seconds.")
+  }
   structure(
     list(
       type = "postgres",
+      lock_timeout = lock_timeout,
       connection_env = scalar(connection_env, "connection_env")
     ),
     class = "tw_catalog_spec"
@@ -381,7 +396,17 @@ connect_lake <- function(config, read_only = config$read_only %||% FALSE) {
   )
   ok <- FALSE
   on.exit(if (!ok) DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
-  lake <- structure(list(con = con, config = config), class = "tw_lake")
+  lake <- structure(
+    list(
+      con = con,
+      config = config,
+      writer_state = new.env(parent = emptyenv())
+    ),
+    class = "tw_lake"
+  )
+  if (!read_only) {
+    assert_writable(lake)
+  }
   cat <- config$catalog
   st <- config$storage
   if (!read_only) {
@@ -522,7 +547,7 @@ connect_lake <- function(config, read_only = config$read_only %||% FALSE) {
         abort("Registry is missing. Open with a writable connection first.")
       }
     )
-    if (!length(versions) || anyNA(versions) || max(versions) != 3L) {
+    if (!length(versions) || anyNA(versions) || max(versions) != 4L) {
       abort(
         "Unsupported registry version. Open with a compatible writable package first."
       )

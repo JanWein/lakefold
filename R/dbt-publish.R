@@ -127,6 +127,7 @@ dbt_publish <- function(
     on.exit(close_lake(lake), add = TRUE)
   }
   assert_writable(lake)
+  assert_table_asset(lake, asset)
   if (is.null(layer)) {
     layer <- intersect(c("marts", "products"), lake$config$layers)[1L]
     if (is.na(layer)) {

@@ -102,7 +102,9 @@ and table-lineage edges are repeatable. Do not claim exactly-once delivery.
 
 ## Coordinate storage writers
 
-A governed lake requires one coordinated writer. Keep dbt and R writes to the same
+A governed lake requires one coordinated writer. PostgreSQL catalogs now coordinate
+package operations automatically with advisory locks; local file catalogs still
+require one writer process. See the shared DuckLake guide for client requirements. Keep dbt and R writes to the same
 local catalog sequential, closing R connections before the CLI opens it.
 `transform_dbt()` does this for its factory-owned connections. Other callers must
 coordinate their own connections and jobs.

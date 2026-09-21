@@ -1,0 +1,232 @@
+---
+title: "Build a monthly cancellation report"
+description: "Define reusable contracts and products for customers, policies and brokers."
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Build a monthly cancellation report}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+**Goal:** define your own contracts and products, diagnose an invalid delivery,
+and correct a cancellation report without changing an issued report.
+You need tidyweave, dplyr and dm. Saving reports also needs DuckDB.
+All data are synthetic. Run the visible code in order in a fresh session.
+
+## Decide what the number means
+
+For August 2026, the cancellation rate is the number of policies from the
+opening portfolio cancelled during August divided by that opening portfolio.
+It is a policy count, not a premium-weighted rate or a customer churn rate.
+Dates are effective dates: start is inclusive and cancellation is exclusive.
+A policy belongs to the opening portfolio if it starts before August 1 and
+has no cancellation before August 1. Cancellation on August 1 counts; cancellation
+on September 1 does not. Policies starting during August are excluded even if
+cancelled during August. An empty opening portfolio makes the rate undefined, never zero.
+The formula produces NA and `measure()` refuses to issue that result.
+
+Each delivery is a **complete snapshot**, including historical policies.
+One customer may have many policies. Every policy has exactly one customer and
+one broker. Their IDs are required and unique in their respective tables.
+Missing references, duplicate keys and cancellation before inception block use.
+Broker attribution uses the supplied snapshot, not an inferred historical mapping.
+A correction replaces the snapshot; it is not a patch of individual rows.
+
+```{r deliveries}
+library(tidyweave)
+library(dplyr)
+customers_data <- tibble(
+  customer_id = c("C1", "C2", "C3"),
+  segment = c("Private", "Private", "Business")
+)
+brokers_data <- tibble(
+  broker_id = c("B1", "B2"), channel = c("Broker", "Direct")
+)
+policies_data <- tibble(
+  policy_id = paste0("P", 1:8),
+  customer_id = c("C1", "C1", "C2", "C2", "C3", "C3", "C1", "C2"),
+  broker_id = c("B1", "B1", "B2", "B2", "B1", "B2", "B1", "B2"),
+  started_on = as.Date(c(rep("2026-01-01", 4), "2026-08-10",
+    "2026-01-01", "2026-01-01", "2026-08-01")),
+  cancelled_on = as.Date(c(NA, "2026-08-01", "2026-08-31", "2026-09-01",
+    "2026-08-20", "2025-12-31", NA, NA))
+)
+```
+
+## Define reusable contracts and products
+
+These are ordinary named R objects. The same contracts can be reused for the
+next delivery. Optional cancellation dates are excluded from `required`.
+
+```{r definitions}
+customer_contract <- contract(
+  columns = c(customer_id = "character", segment = "character"),
+  key = "customer_id", grain = "One customer"
+)
+broker_contract <- contract(
+  columns = c(broker_id = "character", channel = "character"),
+  key = "broker_id", grain = "One broker"
+)
+policy_contract <- contract(
+  columns = c(policy_id = "character", customer_id = "character",
+    broker_id = "character", started_on = "Date", cancelled_on = "Date"),
+  required = c("policy_id", "customer_id", "broker_id", "started_on"),
+  key = "policy_id", grain = "One policy with at most one cancellation",
+  rules = list(date_order = ~ is.na(cancelled_on) | cancelled_on >= started_on)
+)
+customers <- product("customers", customers_data, contract = customer_contract)
+brokers <- product("brokers", brokers_data, contract = broker_contract)
+policies <- product("policies", policies_data, contract = policy_contract)
+```
+
+## Find and fix the bad delivery
+
+```{r repair}
+attempt <- trial(policies)
+quality_rows(attempt)
+stopifnot(identical(quality_rows(attempt)$policy_id, "P6"))
+fixed_policies <- policies_data
+fixed_policies$cancelled_on[fixed_policies$policy_id == "P6"] <- as.Date("2026-07-31")
+policies <- replace_sources(policies, policies = fixed_policies)
+stopifnot(nrow(collect(trial(policies))) == 8L)
+```
+
+P6 was cancelled before it started. The corrected source says July 31, so it
+is outside August's opening portfolio. Checks do not guess or repair dates.
+
+## Describe the model and choose a reporting grain
+
+A dm model keeps related tables separate. It does not imply a single joined
+table. Here the reporting view deliberately has one row per policy.
+
+```{r relationships}
+portfolio_model <- dm::dm(
+  customers = collect(trial(customers)),
+  policies = collect(trial(policies)),
+  brokers = collect(trial(brokers))
+) |>
+  dm::dm_add_pk(customers, customer_id) |>
+  dm::dm_add_pk(policies, policy_id) |>
+  dm::dm_add_pk(brokers, broker_id) |>
+  dm::dm_add_fk(policies, customer_id, customers) |>
+  dm::dm_add_fk(policies, broker_id, brokers)
+stopifnot(all(dm::dm_examine_constraints(portfolio_model)$is_key))
+
+portfolio <- product("portfolio", portfolio_model, contracts = list(
+  customers = customer_contract, policies = policy_contract,
+  brokers = broker_contract
+))
+checked_model <- trial(portfolio)
+collect(checked_model)
+```
+
+The model product rechecks all table contracts and dm relationships on every
+execution. `collect()` returns the related tables as a dm. Publication saves all
+of them together. A new delivery uses its table name in `sources`.
+
+## Define the monthly calculation once
+
+Keep date logic in an ordinary reusable R function. Keep the metric separate
+from the storage connection and the product preparation.
+
+```{r calculation}
+reporting_month <- function(data, from, until) {
+  data |>
+    mutate(
+      opening = started_on < from & (is.na(cancelled_on) | cancelled_on >= from),
+      cancelled = opening & !is.na(cancelled_on) &
+        cancelled_on >= from & cancelled_on < until
+    )
+}
+reporting_product <- function(model_result) {
+  product("august_portfolio", model_result, table = "policies") |>
+    add_lookup(product("report_customers", model_result, table = "customers"),
+      by = "customer_id", name = "customers") |>
+    add_lookup(product("report_brokers", model_result, table = "brokers"),
+      by = "broker_id", name = "brokers") |>
+    add_transform(\(data) reporting_month(data, as.Date("2026-08-01"),
+      as.Date("2026-09-01")))
+}
+august <- reporting_product(checked_model)
+define_cancellation_metrics <- function(approved = FALSE, code_version = NULL) {
+  metric_set(
+  "august_portfolio",
+  opening = sum(opening, na.rm = TRUE),
+  cancellations = sum(cancelled, na.rm = TRUE),
+  cancellation_rate = if (sum(opening, na.rm = TRUE) == 0) NA_real_ else sum(cancelled, na.rm = TRUE) / sum(opening, na.rm = TRUE),
+  dimensions = "channel",
+  units = c(opening = "policies", cancellations = "policies", cancellation_rate = "ratio"),
+  na_policy = "expression", approved = approved, code_version = code_version
+  )
+}
+cancellation_metrics <- define_cancellation_metrics()
+preview <- trial(august)
+values <- measure(preview, metrics = cancellation_metrics, by = character())
+collect(values)
+stopifnot(nrow(collect(preview)) == 8L,
+  sum(collect(preview)$opening) == 5,
+  sum(collect(preview)$cancelled) == 2)
+```
+
+Expected: 5 opening policies, 2 cancellations and a rate of **0.4 (40%)**.
+Use `by = "channel"` for channel rates. Recompute the overall numerator and
+denominator; averaging channel percentages gives the wrong answer.
+No period aggregation rule should add these monthly rates together.
+`na_policy = "expression"` delegates input missing-value handling to the formula;
+it does not permit missing metric results. A channel with no opening policies
+therefore blocks the rate calculation. Inspect the `opening` and `cancellations`
+metrics separately and describe the rate as unavailable in your report. Do not
+replace it with zero. Input contracts still reject missing required fields.
+
+## Save the report and accept a late correction
+
+The following steps need optional DuckDB. Approval here is an explicit declaration
+for this synthetic example, not automatic approval of a production metric.
+
+```{r storage-availability, include=FALSE, purl=FALSE}
+knitr::opts_chunk$set(eval = requireNamespace("duckdb", quietly = TRUE))
+```
+
+```{r save}
+root <- tempfile("cancellation-reference-")
+first_model <- publish(portfolio, to = root)
+first <- publish(reporting_product(first_model), to = root)
+reviewed_metrics <- define_cancellation_metrics(
+  approved = TRUE, code_version = "opening-cohort-v1"
+)
+first_values <- measure(first, metrics = reviewed_metrics, by = character())
+report_release(first_values, "august-original", code_version = "report-v1")
+
+corrected_policies <- fixed_policies
+corrected_policies$cancelled_on[corrected_policies$policy_id == "P7"] <- as.Date("2026-08-15")
+second_model <- publish(portfolio, to = root, previous = first_model,
+  sources = list(policies = corrected_policies))
+second <- publish(reporting_product(second_model), to = root, previous = first)
+second_values <- measure(second, metrics = reviewed_metrics, by = character())
+report_release(second_values, "august-corrected", code_version = "report-v1")
+original <- report_read(root, "august-original", values_only = TRUE)
+corrected <- report_read(root, "august-corrected", values_only = TRUE)
+original
+corrected
+stopifnot(original$value[original$.metric == "cancellation_rate"] == 0.4,
+  corrected$value[corrected$.metric == "cancellation_rate"] == 0.6)
+stopifnot(sum(collect(first)$cancelled) == 2,
+  sum(collect(second)$cancelled) == 3,
+  sum(collect(second)$opening) == 5)
+```
+
+`previous` says which published state you corrected. A newer release causes a
+conflict, so another person's correction cannot be silently replaced. The model
+and the derived reporting table each publish atomically; the two calls are not
+one transaction. If reporting preparation fails, repeat it from `second_model`.
+The original model and report remain available.
+
+The correction changes the rate from **40% to 60%**. The original report remains
+40%. Use `collect(second_values)` with Quarto or your usual reporting tool;
+`report_release()` saves values and evidence, not a rendered document.
+
+```{r cleanup, include=FALSE}
+unlink(root, recursive = TRUE)
+```
+
+[Back to Learn](learn.html) · [Create a local DuckLake](create-ducklake.html)

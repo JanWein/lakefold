@@ -20,6 +20,17 @@ trial <- function(x, data = NULL, sources = NULL, stop_on_failure = FALSE) {
   if (!inherits(x, "tw_product")) {
     abort("trial() needs a product definition.")
   }
+  if (inherits(x, "tw_model_product")) {
+    x <- apply_execution_defaults(x, product_execution(x, NULL))
+    x$target <- NULL
+    attr(x, "tw_execution_config") <- NULL
+    return(run(
+      x,
+      data = data,
+      sources = sources,
+      stop_on_failure = stop_on_failure
+    ))
+  }
   x <- replace_execution_sources(x, data, sources)
   x <- apply_execution_defaults(x, product_execution(x, NULL))
   clear <- function(product) {

@@ -16,7 +16,8 @@ read_release(lake, name, release = NULL, lazy = FALSE)
 \item{lazy}{Return a lazy database table instead of collecting all rows.}
 }
 \value{
-A tibble, or a lazy \code{tbl_sql} when \code{lazy = TRUE}.
+A tibble, a lazy \code{tbl_sql} when \code{lazy = TRUE}, or a dm for a
+model product. Models restore all member tables from the same manifest.
 }
 \description{
 Returns the latest successfully published data as a tibble. Failed writes

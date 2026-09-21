@@ -13,7 +13,9 @@ product(
   description = NULL,
   code_version = NULL,
   source_name = NULL,
-  execution = NULL
+  execution = NULL,
+  contracts = NULL,
+  table = NULL
 )
 }
 \arguments{
@@ -38,11 +40,23 @@ ordinary inputs, or the upstream product ID for a nested product.}
 \item{execution}{Optional connection-free \code{\link[=execution_config]{execution_config()}} stored on this
 definition. Used when it is the root of \code{\link[=run]{run()}}, \code{\link[=publish]{publish()}} or \code{\link[=ingest]{ingest()}}.
 An explicit execution argument overrides these defaults.}
+
+\item{contracts}{Named table contracts when data is a dm model.}
+
+\item{table}{Table name to select from a successful model trial or publication.
+Published selections retain the exact member release.}
 }
 \value{
 A \code{tw_product}, ready for composition, inspection and execution.
 }
 \description{
+A table input defines a table product. A dm input defines a model product:
+its tables and declared relationships are checked together and published in
+one transaction. collect() returns a dm; select a member explicitly with
+product("report", result, table = "policies"). Model execution materializes
+all tables in memory. Table contracts are supplied through contracts.
+}
+\details{
 Add named sources, ordinary transformation functions and optional checks or
 a target. Use \code{\link[=trial]{trial()}} to try it, or \code{\link[=publish]{publish()}} to save checked output.
 \code{\link[=run]{run()}} executes the full configuration, including writers. Products can be

@@ -12,6 +12,11 @@ The website is generated from README, `vignettes/`, roxygen function help and
 `_pkgdown.yml`. Edit those sources, not generated HTML. Files in this directory
 are operating notes, links and dated development records, not a competing tutorial.
 
+## Current product decisions
+
+- [Reference case and target architecture](REFERENCE_CASE.md): cancellation reporting,
+  reusable table/model products and the shared-writer acceptance gates.
+
 ## Maintained operational notes
 
 - [Operations](OPERATIONS.md): coordination, monitoring and recovery.
