@@ -35,7 +35,7 @@ def check(root):
         for link in page.links:
             url = urlsplit(link)
             if url.netloc or url.scheme:
-                if url.netloc != "janwein.github.io" or not url.path.startswith(SITE_PREFIX):
+                if url.netloc != "dataraft-r.github.io" or not url.path.startswith(SITE_PREFIX):
                     continue
                 target = root / unquote(url.path[len(SITE_PREFIX):])
             elif url.path.startswith(SITE_PREFIX):

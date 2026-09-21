@@ -19,6 +19,7 @@ Config/testthat/edition: 3
 Config/Needs/website: pkgdown
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.1
-URL: https://github.com/JanWein/tidyweave
+URL: https://dataraft-r.github.io/dataraft/,
+    https://github.com/JanWein/tidyweave
 BugReports: https://github.com/JanWein/tidyweave/issues
 VignetteBuilder: knitr
