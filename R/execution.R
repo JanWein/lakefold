@@ -540,6 +540,11 @@ result_data <- function(result) {
 
 read_product_sources <- function(product, lake = NULL, on_input = NULL) {
   context <- attr(product, "tw_run_context") %||% new_product_context()
+  if (!is.null(lake)) {
+    previous_read_lake <- context$read_lake
+    context$read_lake <- lake
+    withr::defer(context$read_lake <- previous_read_lake)
+  }
   sources <- product_sources(product)
   tables <- vector("list", length(sources))
   names(tables) <- names(sources)
@@ -615,7 +620,7 @@ read_product_sources <- function(product, lake = NULL, on_input = NULL) {
           )
         } else {
           data <- if (identical(class(source), "tw_release_source")) {
-            read_release_source(source, lake)
+            read_release_source(source, lake %||% context$read_lake)
           } else {
             read_source(source)
           }

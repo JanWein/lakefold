@@ -75,6 +75,29 @@ postgres_parameters <- function(value) {
   out
 }
 
+.postgres_writer_states <- new.env(parent = emptyenv())
+
+lake_writer_state <- function(config) {
+  if (!identical(config$catalog$type, "postgres")) {
+    return(new.env(parent = emptyenv()))
+  }
+  value <- Sys.getenv(config$catalog$connection_env)
+  if (!nzchar(value)) {
+    abort(paste("Set", config$catalog$connection_env))
+  }
+  parameters <- postgres_parameters(value)
+  key <- fingerprint(list(
+    pid = Sys.getpid(),
+    parameters = parameters[sort(names(parameters))]
+  ))
+  state <- .postgres_writer_states[[key]]
+  if (is.null(state)) {
+    state <- new.env(parent = emptyenv())
+    .postgres_writer_states[[key]] <- state
+  }
+  state
+}
+
 # Each writable API holds a session advisory lock until its calling frame exits.
 # Reentrant calls sharing the same lake use the already-held lock.
 acquire_lake_writer <- function(lake, frame) {

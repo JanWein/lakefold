@@ -400,7 +400,7 @@ connect_lake <- function(config, read_only = config$read_only %||% FALSE) {
     list(
       con = con,
       config = config,
-      writer_state = new.env(parent = emptyenv())
+      writer_state = lake_writer_state(config)
     ),
     class = "tw_lake"
   )

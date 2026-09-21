@@ -13,7 +13,6 @@ config <- lake_config(
 )
 lake <- connect_lake(config)
 close_lake(lake)
-config$install_extensions <- FALSE
 worker <- normalizePath("scripts/postgres-worker.R")
 launch <- function(job, number) {
   input <- file.path(root, paste0("job-", number, ".rds"))
@@ -42,6 +41,11 @@ finish <- function(job) {
 a <- launch(list(action = "publish", asset = "left", value = 1L), 1)
 b <- launch(list(action = "publish", asset = "right", value = 2L), 2)
 stopifnot(finish(a)$status == "published", finish(b)$status == "published")
+# Nested publication reuses the process coordinator instead of waiting on itself.
+upstream <- product("upstream", data.frame(id = 1L)) |> set_target(config)
+stopifnot(
+  publish(product("downstream", upstream), to = config)$status == "published"
+)
 first <- publish(product("shared", data.frame(id = 1L)), to = config)
 a <- launch(
   list(action = "publish", asset = "shared", value = 2L, previous = first),

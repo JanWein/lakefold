@@ -167,3 +167,26 @@ test_that("model member names and established contracts cannot be bypassed", {
   expect_match(conditionMessage(error), "model product")
   expect_equal(collect(first)$customers$id, 1:2)
 })
+
+test_that("nested member selections reuse the active publication connection", {
+  skip_if_not_installed("dm")
+  skip_if_not_installed("duckdb")
+  root <- withr::local_tempdir()
+  first <- publish(product("portfolio", model_fixture()), to = root)
+  lake <- open_lake(root)
+  withr::defer(close_lake(lake))
+  real_connect <- connect_lake
+  local_mocked_bindings(connect_lake = function(
+    config,
+    read_only = config$read_only
+  ) {
+    if (isTRUE(read_only)) {
+      stop("Unexpected second read-only attachment")
+    }
+    real_connect(config, read_only = read_only)
+  })
+  selected <- product("summary", first, table = "policies") |>
+    add_lookup(product("lookup", first, table = "customers"), by = "id")
+  out <- publish(selected, to = lake)
+  expect_equal(collect(out)$amount, c(10, 20))
+})
