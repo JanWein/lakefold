@@ -124,7 +124,9 @@ metric <- function(
 #' @param period For `metrics`, `"each"` calculates each selected date separately;
 #'   `"aggregate"` calculates across selected dates. Stock metrics still require
 #'   one date. With `at = NULL`, dates are not split automatically.
-#' @param by Grouping columns.
+#' @param by Grouping columns selected from the metric's permitted dimensions.
+#'   Omitting `by` calculates an overall total, with a reminder when dimensions
+#'   are available. Use `by = character()` to request an overall total explicitly.
 #' @param at Business date, or a vector for flow metrics.
 #' @param release Optional explicit product release id for a connected lake.
 #'   For a publication result it must be omitted or match that exact release.
@@ -184,7 +186,7 @@ measure <- function(
     if (!is.null(metric)) {
       abort("Supply either metric or metrics, not both.")
     }
-    return(measure_set(
+    result <- measure_set(
       x,
       metrics,
       by,
@@ -194,7 +196,11 @@ measure <- function(
       params,
       record,
       match.arg(period)
-    ))
+    )
+    if (missing(by)) {
+      inform_measure_grouping(metrics)
+    }
+    return(result)
   }
   if (!missing(period)) {
     abort("period applies only when using metrics.")
@@ -476,7 +482,21 @@ measure <- function(
       )
     )
   }
+  if (missing(by)) {
+    inform_measure_grouping(list(metric))
+  }
   result
+}
+
+inform_measure_grouping <- function(metrics) {
+  dimensions <- Reduce(intersect, lapply(metrics, `[[`, "dimensions"))
+  if (length(dimensions)) {
+    message(
+      "Calculated an overall total. For grouped values use by = c(",
+      paste(encodeString(dimensions, quote = '"'), collapse = ", "),
+      "). Use by = character() for an explicit overall total."
+    )
+  }
 }
 
 #' Freeze metric results and input versions for a report
@@ -579,7 +599,9 @@ report_release <- function(
   measures <- lapply(results, function(x) {
     m <- attr(x, "tw_manifest")
     if (is.null(m)) {
-      abort("Every result must come from measure().")
+      abort(
+        "Use the original measure() result to save a report, before collect() or table edits. The original result retains the calculation and input history."
+      )
     }
     if (identical(m$input_published, FALSE)) {
       abort(
@@ -588,7 +610,7 @@ report_release <- function(
     }
     if (!isTRUE(m$metric_definition$approved)) {
       abort(
-        "Exploratory metrics cannot be saved in reports. Approve and recalculate first."
+        "Exploratory metrics cannot be saved in reports. After business review, define the metrics with approved = TRUE and code_version = \"your-version\", then measure() again. Approval is your explicit declaration, not an automatic check."
       )
     }
     if (

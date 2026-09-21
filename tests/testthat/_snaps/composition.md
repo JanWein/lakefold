@@ -4,7 +4,7 @@
       print(product)
     Output
       <Data product: orders >
-      Sources: source_1 
+      Deliveries: source_1
       Transformations: 1 
       Contract: automatic structure 
       Quality: 0 rules
@@ -15,6 +15,8 @@
     Output
       Product: orders
       Read: 1 named source(s).
+      Deliveries: source_1.
+      Replace a delivery with sources = list(delivery_name = new_data).
       Transforms receive one table, which may stay lazy.
       Transform: 1 ordered step(s).
       Check: inferred structure and 0 additional rule(s).
@@ -36,7 +38,7 @@
       collect(result)
     Condition
       Error in `abort()`:
-      ! orders failed during execution; no successful output is available. Inspect quality(result) or quality_report(result) for check details.
+      ! orders failed during execution; no successful output is available. Inspect quality_report(result) for checks and quality_rows(result) for affected rows.
 
 # contract prototypes, anonymous contracts and rule names normalize consistently
 

@@ -1,5 +1,19 @@
 # tidyweave 0.12.0.9000
 
+* `add_lookup()` retains a stable delivery name, inferred from a bare variable or
+  supplied with `name`. `explain()` and printing show these names; corrections
+  use them directly in `sources`. Primary `data` and other named replacements
+  can be supplied together; duplicate or ambiguous selections are rejected.
+* `left_join()` on a product explains the checked enrichment path and the
+  ordinary dplyr escape hatch instead of exposing an internal class error.
+* `measure()` explains omitted grouping when dimensions are available.
+  Printing a measurement set states its grouping or overall-total scope.
+* `quality_rows()` selects a single failed rule automatically, or lists the
+  failed rules when the choice is ambiguous.
+* `trial()` returns failed results for direct diagnosis by default. Use
+  `stop_on_failure = TRUE` for strict trials. `run()` and `publish()` keep their
+  strict defaults. Failure messages point to public diagnostic functions.
+
 * `compare(first, second)` compares exact publication results and manages its
   own read-only connection.
 * `measure()` accepts successful in-memory trials using the same metric

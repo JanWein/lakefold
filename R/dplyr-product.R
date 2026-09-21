@@ -13,19 +13,38 @@
 #' Use [add_transform()] for other functions. Multiple primary sources must
 #' first be combined by a transformation; [add_lookup()] adds a checked
 #' auxiliary source without changing the primary table.
+#' `left_join()` on a product gives guidance rather than guessing relationship
+#' rules. Use `add_lookup(reference, by = ..., name = "reference")` for checked
+#' enrichment, or join ordinary tables inside `add_transform()` for other joins.
 #' @param .data,x Product definition.
 #' @param ... Arguments captured and passed to the corresponding dplyr verb.
 #' @param .by,.preserve,.by_group,.add,.drop,.groups,.keep_all,.before,.after,wt,sort,name
 #'   Arguments with their usual dplyr meanings, evaluated during execution.
 #' @returns An updated product definition.
 #' @name product-dplyr
-#' @importFrom dplyr mutate filter select rename relocate arrange group_by ungroup summarise distinct count
+#' @importFrom dplyr mutate filter select rename relocate arrange group_by ungroup summarise distinct count left_join
 #' @examples
 #' orders <- product("orders", data.frame(group = c("a", "a"), amount = c(10, 20))) |>
 #'   dplyr::mutate(tax = amount * 0.2) |>
 #'   dplyr::summarise(total = sum(amount), .by = group)
 #' orders |> run() |> collect()
 NULL
+
+#' @export
+left_join.tw_product <- function(
+  x,
+  y,
+  by = NULL,
+  copy = FALSE,
+  suffix = c(".x", ".y"),
+  ...
+) {
+  abort(paste(
+    "To enrich a product with a reference table, use add_lookup(reference, by = ..., name = \"reference\").",
+    "It checks unique reference keys and matching input keys.",
+    "For other join relationships, use dplyr::left_join() on ordinary tables inside add_transform()."
+  ))
+}
 
 #' @rdname product-dplyr
 #' @export

@@ -1,8 +1,8 @@
 ---
-title: "Everyday workflows: publish, correct and explain"
+title: "Three deliveries, one report, and a correction"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Everyday workflows: publish, correct and explain}
+  %\VignetteIndexEntry{Three deliveries, one report, and a correction}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -12,241 +12,204 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>", message = FALSE)
 library(tidyweave)
 ```
 
-You have a table, another delivery next month, and a report that must stay
-reproducible. Follow one path: define the work, try it, publish a checked result,
-then use the same definition for a correction. Only the publication and reporting
-sections need optional DuckDB >= 1.5.5.
+You receive payments, contracts and brokers for one reporting period. You need
+totals by company, must fix a bad payment, and later accept a correction without
+changing the report you already issued. All data here are synthetic. Only saving
+and reopening results needs optional DuckDB >= 1.5.5.
 
-## Define the work once
+The deliveries are **complete snapshots**, not lists of changed rows.
+The report sums payments for this one period. A payment has one unique ID, belongs
+to one contract and must be non-negative. These are explicit business rules for
+this example, not rules the package guesses for you.
 
-The synthetic orders use one row per order. `id` is the business key; an amount
-must be non-negative. Those are explicit business decisions.
+## Name the three deliveries
 
-```{r define-orders}
-delivery <- data.frame(id = c(1L, 2L), amount = c(10, 20))
-orders <- product("orders", delivery) |>
-  dplyr::mutate(amount = round(amount, 2)) |>
-  add_contract(contract("orders.schema",
-    columns = c(id = "integer", amount = "numeric"), key = "id")) |>
-  add_quality(~ amount >= 0)
+```{r deliveries}
+payment_data <- data.frame(
+  payment_id = c("T1", "T2", "T3"),
+  policy_id = c("P1", "P2", "P3"), amount = c(100, 200, -50))
+contract_data <- data.frame(
+  policy_id = c("P1", "P2", "P3"),
+  broker_id = c("B1", "B1", "B2"), company = c("North", "North", "South"))
+broker_data <- data.frame(
+  broker_id = c("B1", "B2"), channel = c("Broker", "Direct"))
+
+payments <- product("payments", payment_data) |>
+  add_lookup(contract_data, by = "policy_id", name = "contracts") |>
+  add_lookup(broker_data, by = "broker_id", name = "brokers") |>
+  add_contract(contract(
+    columns = c(payment_id = "character", policy_id = "character",
+      amount = "numeric", broker_id = "character", company = "character",
+      channel = "character"),
+    key = "payment_id")) |>
+  add_quality(~ amount >= 0, name = "nonnegative")
+payments
 ```
 
-The product stores instructions, not a database connection. Ordinary dplyr verbs
-are deferred until execution. A contract describes the expected table; a quality
-rule checks its contents. Neither silently repairs the input.
+`product()` stores the instructions. `add_lookup()` adds reference columns and
+checks that each payment matches exactly one reference row. That protects your
+totals from duplicated or lost payments. The names `payments`, `contracts` and
+`brokers` are the same names you will use for corrections. Bare table variables
+also supply a default name; explicit names keep the script independent of your
+variable names. `explain(payments)` lists them without reading any data.
 
-## Try it and explore an ordinary table
+Use dplyr `mutate()`, `filter()` and `summarise()` for preparation as needed.
+Checked enrichment uses `add_lookup()`. General joins on ordinary tables belong
+inside `add_transform()`; the package does not guess their relationship rules.
 
-```{r try-orders}
-preview <- orders |> trial()
+## Find and fix the data error
+
+```{r diagnose}
+preview <- trial(payments)
+preview
+quality_report(preview)
+quality_rows(preview)
+stopifnot(identical(quality_rows(preview)$payment_id, "T3"))
+```
+
+The trial returns a blocked result instead of interrupting your session.
+`quality_rows()` shows T3 with amount -50. With several failed rules, it lists
+their names and asks which one you want to inspect. No row data is copied into
+portable check reports. `collect(preview)` refuses to return failed data as
+a successful result. Correct the delivery at its source; checks never repair it.
+
+```{r repair}
+fixed_payments <- payment_data
+fixed_payments$amount[fixed_payments$payment_id == "T3"] <- 50
+preview <- trial(payments, sources = list(payments = fixed_payments))
 collect(preview)
-collect(preview) |> dplyr::summarise(total = sum(amount))
+stopifnot(sum(collect(preview)$amount) == 350)
 ```
 
-This needs no storage, metric registration or approval. `trial()` keeps the result in memory and disables configured framework writers
-throughout the dependency graph. Use ordinary R analysis while deciding what matters.
-`explain(orders)` shows the plan without reading a source.
+Only the named delivery changes for this call. The definition, other deliveries,
+joins and checks are reused. For the main delivery alone, `data = fixed_payments`
+is an equivalent shortcut. `trial()` disables configured package writers and
+keeps the result in memory. `publish()` and configured `run()` calls still stop
+on failure by default.
 
-## Understand a failed delivery
+## Calculate the report you want
 
-```{r failed-delivery}
-bad_delivery <- delivery
-bad_delivery$amount[1] <- -10
-failed <- orders |> trial(data = bad_delivery, stop_on_failure = FALSE)
-status(failed)
-quality_report(failed)
-quality_rows(failed, ~ amount >= 0)
+```{r explore}
+metrics <- metric_set("payments", total = sum(amount, na.rm = TRUE),
+  dimensions = "company", units = "EUR")
+preview_values <- measure(preview, metrics = metrics, by = "company")
+preview_values
+stopifnot(identical(collect(preview_values)$value, c(300, 50)))
 ```
 
-The same definition receives new data. `stop_on_failure = FALSE` returns the
-failed result for inspection; it does not bypass checks. `quality_report()`
-returns a diagnostic table without needing a file path. Use `quality()` for the
-underlying checks and `lineage()` for recorded input evidence. A failed gate
-does not write a new accepted release.
+`dimensions` lists the columns you allow people to group or filter by.
+`by = "company"` chooses this report's grouping. `by = character()` explicitly
+chooses an overall total. If you omit `by`, the package reminds you of the
+available grouping instead of silently suggesting the dimension was used.
+`collect(preview_values)` gives an ordinary table for plotting or exploration.
 
-## Publish a result you want to keep
+## Save the reviewed report
 
-```{r storage-availability, include=FALSE}
+The next steps need DuckDB. A report here means saved numbers and their
+calculation history, not a rendered PDF. Use collected values in your usual
+reporting tool to create a document.
+
+```{r storage-availability, include=FALSE, purl=FALSE}
 knitr::opts_chunk$set(eval = requireNamespace("duckdb", quietly = TRUE))
 ```
 
-```{r publish-orders}
+```{r publication}
 root <- tempfile("tidyweave-everyday-")
-orders <- orders |> set_target(root)
-first <- orders |> publish()
-collect(first)
+payments <- payments |> set_target(root)
+first <- publish(payments, sources = list(payments = fixed_payments))
+
+# Only after business review: approval is your explicit declaration.
+metrics <- metric_set("payments", total = sum(amount, na.rm = TRUE),
+  dimensions = "company", units = "EUR",
+  approved = TRUE, code_version = "payment-totals-v1")
+values <- measure(first, metrics = metrics, by = "company")
+report_release(values, "august-v1", code_version = "report-v1")
 ```
 
-The destination is now retained by the same product definition. It avoids
-repeating the destination when deliveries arrive. `publish()` writes checked data
-to a local lake. It does not publish on the internet. The framework opens and
-closes the connection it owns.
+Set the storage folder once. `publish()` checks and saves the complete table;
+it does not put anything on the internet. Earlier saved results remain available.
+No connection management or internal version ID is needed in this workflow.
 
-For a workflow that needs optional engines, construct the product with
-`execution = execution_config(quality = "pointblank", relationships = "dm",
-to = root)`. This ordinary R configuration is retained without opening a
-connection. Ordinary predicates and lookup syntax stay the same. Explicit choices on individual steps win. Destination
-and layer defaults apply only to the root product, not to every dependency.
+Approval declares that you reviewed the metric. The code version identifies
+the calculation you reviewed; change it when that calculation changes.
+The report ID, such as `august-v1`, identifies this issued set of numbers.
+Keep `values` for report issuance: `collect(values)` is for ordinary analysis
+and does not retain the complete report evidence.
 
-A configured `run()` may write to its configured target. For an in-memory trial,
-use `trial(orders)`, even after storing a destination. `publish()` makes the intention
-to persist visible at the call site.
+## Accept a corrected payment delivery
 
-## Accept a corrected complete delivery
-
-```{r correct-orders}
-corrected <- data.frame(id = c(1L, 3L), amount = c(12, 30))
-second <- orders |> publish(data = corrected)
-collect(second)
-collect(first)
-```
-
-The new table totals 42. The first result still totals 30 because it pins its
-original release. The product definition and its checks have not been rewritten.
-
-These deliveries replace the **complete table**. Order 2 is absent from the new
-snapshot and is therefore removed; order 3 is added. If your source sends only
-changed rows, do not treat that delta as a complete snapshot. Complete-month
-replacement requires an explicit partition policy; see the
-[monthly reporting guide](getting-started.html). Keys, partition meaning and
-stock-versus-flow calculations cannot be safely inferred from column names.
-
-For several sources, use stable names with `sources = list(name = new_data)`.
-A nested product's ID selects its input while preserving its transformations
-and gates. Unknown or ambiguous names fail before execution. Already published
-inputs remain pinned until explicitly replaced. The
-[insurance guide](relational-insurance.html) shows this across checked lookups
-and a separate dbt build.
-
-## See what changed
-
-Compare the two exact results directly:
-
-```{r compare-orders}
+```{r correction}
+corrected_payments <- fixed_payments
+corrected_payments$amount[corrected_payments$payment_id == "T3"] <- 80
+second <- publish(payments, sources = list(payments = corrected_payments))
 difference <- compare(first, second)
-difference$numeric_summary
+difference
 difference$changed
+
+corrected_values <- measure(second, metrics = metrics, by = "company")
+corrected_values
+report_release(corrected_values, "august-v2", code_version = "report-v1")
 ```
 
-The contract supplies the key. Result comparison pins both selected releases
-and opens and closes its own connection. Lake-based comparison remains available. Order 1 changed from
-10 to 12, order 2 was removed, and order 3 added 30. The overall increase is 12.
-Counts run in the database; row previews are limited to 100 by default.
+The contract already states the payment key, so comparison needs no extra
+argument. T3 changes from 50 to 80. North stays at 300 and South becomes 80.
+The calculation is unchanged, so its code version stays the same. This is a new
+report, so it receives a new report ID.
 
-## Define related calculations together
+These calls do not rewrite the product definition's original inputs. Each call
+receives a complete named delivery. To retain corrected defaults for later
+calls, explicitly update the definition with
+`payments <- replace_sources(payments, payments = corrected_payments)`.
 
-```{r exploratory-metrics}
-exploratory <- metric_set("orders",
-  total = sum(amount),
-  count = dplyr::n())
-preview <- orders |> trial() |> measure(metrics = exploratory)
-collect(preview)
-quality(preview)
+## Correct a reference delivery using the same names
+
+Suppose contract P3 was assigned to the wrong company. Use the same operation,
+now supplying the corrected contracts alongside the current payments.
+
+```{r reference-correction}
+corrected_contracts <- contract_data
+corrected_contracts$company[corrected_contracts$policy_id == "P3"] <- "North"
+third <- publish(payments, sources = list(
+  payments = corrected_payments, contracts = corrected_contracts))
+reference_values <- measure(third, metrics = metrics, by = "company")
+reference_values
+stopifnot(identical(collect(reference_values)$value, 380))
 ```
 
-These exploratory calculations require neither a code version nor approval and
-do not register unapproved definitions. Trial measurements retain their execution and formula, and `quality(preview)`
-returns the trial checks. They cannot be issued as a report. The same definitions
-work on a publication result, which pins its exact source release.
+The broker delivery and all checks are unchanged. Unmatched or duplicated
+reference keys still block the result. Replace one or several deliveries in the
+same `sources` list, without rebuilding the preparation steps.
 
-When the definitions are ready for an issued report, explicitly identify the
-reviewed version and approval:
+## Reopen exactly what was reported
 
-```{r approved-metrics}
-metrics <- metric_set("orders",
-  total = sum(amount),
-  count = dplyr::n(),
-  units = c(total = "EUR", count = "orders"),
-  code_version = "orders-analysis-v1", approved = TRUE)
-values <- second |> measure(metrics = metrics)
-collect(values)
+```{r reopen}
+original_report <- report_read(root, "august-v1", values_only = TRUE)
+corrected_report <- report_read(root, "august-v2", values_only = TRUE)
+original_report
+corrected_report
+stopifnot(identical(as.numeric(original_report$value), c(300, 50)),
+  identical(as.numeric(corrected_report$value), c(300, 80)),
+  sum(collect(first)$amount) == 350,
+  sum(collect(second)$amount) == 380,
+  difference$counts[["changed"]] == 1)
 ```
 
-Use shared `dimensions`, `time_column` and `time_behavior` for related metrics.
-Stock measures require a single date; flows may aggregate periods explicitly.
-Missing inputs are rejected by default, even with `na.rm = TRUE`; change the
-missing-value policy only when your formula intentionally handles them.
+Reading reports does not recalculate them. The later reference correction
+changes neither issued report.
 
-Approval is your declared business decision, not an external approval system.
-Change `code_version` when external values, custom code or dependencies change.
-Formula text is fingerprinted, but arbitrary closure environments are not.
+## Add capabilities when the task calls for them
 
-## Issue a report and reopen it later
+Use [complete-month replacement](getting-started.html) when each delivery covers
+one whole month instead of the whole table. Use the
+[layered data guide](layered-data-stack.html) for separate receipt evidence and
+dbt SQL steps, or the [insurance guide](relational-insurance.html) for a larger
+process. Optional engines stay behind `execution_config(quality = "pointblank",
+relationships = "dm")`; the ordinary lookup and predicate syntax stays the same.
 
-```{r issue-report}
-report <- values |> report_release("orders-report-v1",
-  code_version = "reporting-v1")
-saved <- report_read(root, "orders-report-v1", values_only = TRUE)
-saved
-```
+Lake writes require one coordinated writer. Publication across several products
+and dbt execution are not a single transaction. These operating choices are
+separate from the everyday table workflow above.
 
-The destination is inferred from the retained source when all measurements
-belong to the same lake. Supply `to` explicitly when a destination cannot be
-inferred. The original measurement set preserves evidence; its collected table
-is for analysis and presentation. Exploratory unapproved or unversioned metrics
-cannot be frozen into an issued report.
-
-A report stores values and their input release, calculation definition and
-parameters. `report_read()` never recalculates. Changed inputs or formulas need a
-new report ID; retrying identical content is safe.
-
-```{r preserve-report}
-later <- orders |> publish(data = data.frame(id = 1L, amount = 99))
-preserved <- report_read(root, "orders-report-v1", values_only = TRUE)
-stopifnot(identical(saved, preserved))
-```
-
-The current table now totals 99. The issued report still contains 42 and two
-orders, and `collect(second)` still returns its original corrected data.
-
-## Run a correction through its dependent steps
-
-Define the repeated process once with ordinary named functions. Arguments name
-inputs or other steps, making the dependency graph explicit. The report remains
-an explicit decision after the workflow succeeds.
-
-```{r monthly-workflow}
-monthly <- workflow(
-  accepted = function(delivery) orders |> publish(data = delivery),
-  measures = function(accepted) measure(accepted, metrics = metrics),
-  inputs = list(delivery = corrected), code_version = "monthly-v1")
-first_run <- run(monthly)
-corrected_run <- run(monthly,
-  inputs = list(delivery = data.frame(id = 1L, amount = 45)),
-  previous = first_run)
-status(corrected_run)
-collect(corrected_run$results$measures)
-```
-
-Only changed branches rerun. Successful independent branches can be reused.
-On failure, `run(..., stop_on_failure = FALSE)` returns step status and retained
-conditions in `$errors`; dependent steps are skipped. Supply that result as
-`previous` for an explicit retry after fixing the cause. Already committed steps
-are not rolled back. Change `code_version` when code or captured settings change;
-use `refresh = "accepted"` when an external source changes without a new input.
-
-## Add infrastructure only when needed
-
-Use [checked lookups](composing-products.html) for enrichment,
-[optional integrations](optional-integrations.html) for existing clients and
-specialist engines, and the [layered guide](layered-data-stack.html) when RAW
-receipt evidence and dbt SQL models become useful. `ingest()` belongs to that
-receipt workflow; `write_data()` is a low-level lake operation.
-
-For exceptional writer recovery, inspect `interrupted()` and follow the
-[operations guide](https://github.com/JanWein/tidyweave/blob/main/docs/OPERATIONS.md).
-Recovery is not an ordinary delivery step.
-
-Lake writes require one coordinated writer and materialize a full candidate.
-Multi-product publication and dbt execution are not one distributed transaction.
-Remote storage, backup restoration and workload sizing need verification in the
-actual operating environment.
-
-```{r verify-and-cleanup, include=FALSE}
-stopifnot(sum(collect(first)$amount) == 30,
-  sum(collect(second)$amount) == 42,
-  collect(values)$value[collect(values)$.metric == "total"] == 42,
-  difference$counts[["changed"]] == 1,
-  difference$numeric_summary$difference == 12)
+```{r cleanup, include=FALSE}
 unlink(root, recursive = TRUE)
 ```

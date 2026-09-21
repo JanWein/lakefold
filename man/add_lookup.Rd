@@ -10,7 +10,8 @@ add_lookup(
   by,
   engine = c("native", "dm"),
   unmatched = c("error", "keep"),
-  suffix = c(".x", ".y")
+  suffix = c(".x", ".y"),
+  name = NULL
 )
 }
 \arguments{
@@ -31,6 +32,11 @@ with missing reference values. Unused reference rows are always allowed.}
 
 \item{suffix}{Two suffixes for overlapping non-key column names, as in
 \code{\link[dplyr:left_join]{dplyr::left_join()}}.}
+
+\item{name}{Stable delivery name used by \code{sources = list(name = new_data)}.
+Defaults to the reference product id or a bare source variable's name.
+For expressions such as file readers, supply a name explicitly; otherwise
+an automatic lookup name is used. \code{\link[=explain]{explain()}} shows the available names.}
 }
 \value{
 An updated product specification.

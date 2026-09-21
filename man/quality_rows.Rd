@@ -4,12 +4,14 @@
 \alias{quality_rows}
 \title{Inspect rows failing a specific quality check}
 \usage{
-quality_rows(x, rule, contract = NULL, limit = 100)
+quality_rows(x, rule = NULL, contract = NULL, limit = 100)
 }
 \arguments{
 \item{x}{A blocked run result, or a table to diagnose explicitly.}
 
-\item{rule}{Check name from \code{\link[=quality_report]{quality_report()}}, or a one-sided row formula.}
+\item{rule}{Check name from \code{\link[=quality_report]{quality_report()}}, or a one-sided row formula.
+Omit it when the result has one failed check or a failed lookup. When
+several checks fail, the error lists the names to choose from.}
 
 \item{contract}{Contract when supplying a table and a named check.}
 
