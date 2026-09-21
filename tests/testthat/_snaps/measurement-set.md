@@ -11,6 +11,8 @@
     Code
       report_release(f$lake, "monthly", measure(original, metrics = list(renamed = metric)),
       "v1")
+    Message
+      Calculated an overall total. For grouped values use by = c("company"). Use by = character() for an explicit overall total.
     Condition
       Error in `abort()`:
       ! Report id already exists with different content.

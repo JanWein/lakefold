@@ -58,3 +58,13 @@ The simulated walkthrough is not an independent human usability study.
 
 This is an executed documentation walkthrough, not independent user research.
 Remote service setup and browser screenshot review were not part of this check.
+
+## Integrating the first-use changes from PR #15
+
+The revised lessons reflect trial's diagnostic default, automatic failed-rule
+selection and explicit grouping via `by`. The three-delivery walkthrough is
+preserved as `three-deliveries.Rmd` alongside the separate orchestration guide.
+Named lookup replacement is shown in the composition guide. The generated
+`everyday_workflows.R` script and first-use simulator retain their filenames.
+Earlier validation counts above describe the original documentation PR, before
+this additional guide; the combined tree is verified separately during integration.

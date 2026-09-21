@@ -154,7 +154,17 @@ measurement_set_table <- function(x, metadata) {
 #' @rdname measure
 #' @export
 print.tw_measurement_set <- function(x, ...) {
-  cat("<tw_measurement_set> ", length(x), " pinned calculations\n", sep = "")
+  validate_measurement_set(x)
+  by <- attr(x[[1L]], "tw_manifest")$by
+  cat(
+    if (length(by)) {
+      paste0("Grouped by: ", paste(by, collapse = ", "))
+    } else {
+      "Overall total (no grouping)"
+    },
+    "\n",
+    sep = ""
+  )
   print(collect.tw_measurement_set(x), ...)
   invisible(x)
 }

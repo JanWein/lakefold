@@ -103,7 +103,7 @@ always performs preflight, so a separate call is optional.
 
 ```{r failed-attempt}
 bad_input <- data.frame(id = 1:2, amount = c(10, -1))
-blocked <- trial(orders, data = bad_input, stop_on_failure = FALSE)
+blocked <- trial(orders, data = bad_input)
 quality_report(blocked)
 stopifnot(blocked$status == "blocked")
 ```
@@ -111,7 +111,8 @@ stopifnot(blocked$status == "blocked")
 `data` replaces the submitted delivery for this attempt. For several sources,
 use explicit `sources = list(name = new_data)` values. Unknown or ambiguous
 names fail before execution. `add_source()` edits the definition itself.
-By default a failed attempt raises an error; the option above returns its result.
+A trial returns a failed result for diagnosis by default; `run()` and
+`publish()` stop on failure unless explicitly told to return that result.
 
 ## 5. Enrich a table with a checked lookup
 
@@ -119,7 +120,7 @@ By default a failed attempt raises an error; the option above returns its result
 customers <- data.frame(customer = c(1L, 2L), region = c("North", "South"))
 sales <- data.frame(customer = c(1L, 2L), amount = c(100, 250))
 regional <- product("regional_orders", sales) |>
-  add_lookup(customers, by = dplyr::join_by(customer))
+  add_lookup(customers, by = dplyr::join_by(customer), name = "customers")
 collect(trial(regional))
 ```
 
@@ -129,6 +130,21 @@ orders. `engine = "dm"` selects optional dm checks with the same contract.
 Only equality lookups are supported; general joins remain ordinary R functions.
 Several explicitly named primary sources still support complex transformations:
 `add_transform()` receives their named list and returns one table.
+
+The lookup name is also its correction name. For example:
+
+```{r correct-reference}
+corrected_customers <- customers
+corrected_customers$region[corrected_customers$customer == 2L] <- "North"
+corrected_result <- trial(regional, sources = list(customers = corrected_customers))
+collect(corrected_result)
+```
+
+This uses the same preparation and checks with the corrected reference table.
+The call does not rewrite the original definition. Supply all changed deliveries
+in `sources`, or use `replace_sources()` to retain corrected defaults in a new
+definition. [Three deliveries](three-deliveries.html) follows both a payment
+correction and a reference correction through issued reports.
 
 ## 6. Reuse a product as an input
 

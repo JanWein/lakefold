@@ -106,6 +106,7 @@ S3method(inspect,tw_result_source)
 S3method(inspect,tw_run_result)
 S3method(inspect,tw_source)
 S3method(inspect,tw_sql_transform)
+S3method(left_join,tw_product)
 S3method(mutate,tw_product)
 S3method(print,tw_comparison)
 S3method(print,tw_config)
@@ -294,6 +295,7 @@ importFrom(dplyr,
   explain,
   filter,
   group_by,
+  left_join,
   mutate,
   relocate,
   rename,

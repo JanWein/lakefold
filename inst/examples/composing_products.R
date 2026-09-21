@@ -23,15 +23,23 @@ explain(orders)
 validate(orders)
 
 bad_input <- data.frame(id = 1:2, amount = c(10, -1))
-blocked <- trial(orders, data = bad_input, stop_on_failure = FALSE)
+blocked <- trial(orders, data = bad_input)
 quality_report(blocked)
 stopifnot(blocked$status == "blocked")
 
 customers <- data.frame(customer = c(1L, 2L), region = c("North", "South"))
 sales <- data.frame(customer = c(1L, 2L), amount = c(100, 250))
 regional <- product("regional_orders", sales) |>
-  add_lookup(customers, by = dplyr::join_by(customer))
+  add_lookup(customers, by = dplyr::join_by(customer), name = "customers")
 collect(trial(regional))
+
+corrected_customers <- customers
+corrected_customers$region[corrected_customers$customer == 2L] <- "North"
+corrected_result <- trial(
+  regional,
+  sources = list(customers = corrected_customers)
+)
+collect(corrected_result)
 
 summary <- product("regional_summary", regional) |>
   dplyr::summarise(total = sum(amount))

@@ -39,6 +39,11 @@ checks, storage or reporting.
 | `publish(product)` | You intend to save checked output | Yes, to the selected destination |
 | `run(definition)` | You want to execute its full configuration | May write, depending on the configuration |
 
+`trial()` returns a failed result for inspection by default; use
+`stop_on_failure = TRUE` for a strict trial. `run()` and `publish()` stop on
+failure by default. Inspect a failed attempt with `quality_report()` and
+`quality_rows()`.
+
 Trial mode cannot sandbox side effects inside your own callbacks. Keep source
 and transformation functions free of unintended writes.
 

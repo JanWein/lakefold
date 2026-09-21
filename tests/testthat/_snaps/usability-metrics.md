@@ -28,7 +28,7 @@
       report_release(values, "exploration", code_version = "v1")
     Condition
       Error in `abort()`:
-      ! Exploratory metrics cannot be saved in reports. Approve and recalculate first.
+      ! Exploratory metrics cannot be saved in reports. After business review, define the metrics with approved = TRUE and code_version = "your-version", then measure() again. Approval is your explicit declaration, not an automatic check.
 
 ---
 

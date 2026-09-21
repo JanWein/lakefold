@@ -5,6 +5,19 @@
   and report examples. The complete website and its internal links are checked
   on pull requests before the main-branch Pages deployment.
 
+* `add_lookup()` retains a stable delivery name, inferred from a bare variable or
+  supplied with `name`. `explain()` and printing show these names; corrections
+  use them directly in `sources`. Primary `data` and other named replacements
+  can be supplied together; duplicate or ambiguous selections are rejected.
+* `left_join()` on a product explains the checked enrichment path and the
+  ordinary dplyr escape hatch instead of exposing an internal class error.
+* `measure()` explains omitted grouping when dimensions are available.
+  Printing a measurement set states its grouping or overall-total scope.
+* `quality_rows()` selects a single failed rule automatically, or lists the
+  failed rules when the choice is ambiguous.
+* `trial()` returns failed results for direct diagnosis by default. Use
+  `stop_on_failure = TRUE` for strict trials. `run()` and `publish()` keep their
+  strict defaults. Failure messages point to public diagnostic functions.
 * Local lake folders now preserve their ordered layers and named layer roles
   together with the backend. Reopening no longer adds default layers or rejects
   publication into an originally configured layer. Conflicting settings fail

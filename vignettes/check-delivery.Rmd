@@ -38,19 +38,22 @@ are valid refunds in your real data.
 
 ```{r failed}
 bad_delivery <- data.frame(id = 1:3, amount = c(-25, 75, 50))
-failed <- orders |> trial(data = bad_delivery, stop_on_failure = FALSE)
+failed <- orders |> trial(data = bad_delivery)
 status(failed)
 quality_report(failed)
-quality_rows(failed, ~ amount >= 0)
+quality_rows(failed)
 ```
 
 `status()` summarizes the attempt. `quality_report()` lists the checks and their
-outcomes. `quality_rows()` returns the row that fails the supplied predicate:
+outcomes. `quality_rows()` selects the single failed rule and returns its row:
 order **1**, amount **-25**. It can expose source values, so inspect it locally.
 
-Normally, failure stops the call with an error. `stop_on_failure = FALSE` lets
-you inspect the failed result; it does not make unacceptable data pass.
-Do not try to collect a successful output from a blocked result.
+`trial()` returns a failed result for inspection by default. Use
+`trial(..., stop_on_failure = TRUE)` when you want a strict trial that stops.
+`run()` and `publish()` still stop on failure by default. Returning a result
+does not make unacceptable data pass. If several rules fail, `quality_rows()`
+lists the choices; select one by its rule name. Do not try to collect a
+successful output from a blocked result.
 
 ## Correct the source and try again
 
@@ -69,7 +72,7 @@ received data before preparation, that is the later [receipt workflow](layered-d
 
 ```{r verify, include=FALSE}
 stopifnot(failed$status == "blocked", sum(collect(accepted)$amount) == 150,
-  quality_rows(failed, ~ amount >= 0)$id == 1L)
+  quality_rows(failed)$id == 1L)
 ```
 
 ## Continue

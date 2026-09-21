@@ -4,6 +4,9 @@
 #' ordinary named list of [metric()] definitions for `measure(metrics = ...)`.
 #' Each id combines the product id and expression name, separated by a dot.
 #' Business approval is explicit; exploratory definitions need no code version.
+#' `dimensions` lists permitted grouping and filtering columns; it does not
+#' choose a report layout. Select the grouping with `measure(by = "company")`
+#' or request an overall total explicitly with `measure(by = character())`.
 #' @param product Input asset id shared by all metrics.
 #' @param ... Named tidy summary expressions, as in [dplyr::summarise()].
 #' @param dimensions,time_column,owner,version,approved,code_version,na_policy

@@ -424,6 +424,12 @@ explain.tw_product <- function(x, ...) {
   text <- c(
     paste0("Product: ", x$id),
     paste0("Read: ", length(x$sources), " named source(s)."),
+    paste0(
+      "Deliveries: ",
+      paste(names(delivery_aliases(x)), collapse = ", "),
+      "."
+    ),
+    "Replace a delivery with sources = list(delivery_name = new_data).",
     if (length(product_sources(x)) > length(x$sources)) {
       paste0(
         "Lookups: ",
@@ -472,13 +478,14 @@ explain.tw_product <- function(x, ...) {
 print.tw_product <- function(x, ...) {
   cat("<Data product:", x$id, ">\n")
   cat(
-    "Sources:",
-    if (!length(x$sources)) {
+    "Deliveries: ",
+    if (!length(delivery_aliases(x))) {
       "not set"
     } else {
-      paste(names(x$sources), collapse = ", ")
+      paste(names(delivery_aliases(x)), collapse = ", ")
     },
-    "\n"
+    "\n",
+    sep = ""
   )
   cat("Transformations:", length(x$transforms), "\n")
   cat(

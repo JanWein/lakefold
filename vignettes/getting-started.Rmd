@@ -182,6 +182,8 @@ unlink(root, recursive = TRUE)
 ## Continue
 
 You can now process deliveries, reject a bad input, accept a correction and
-reopen the original report. Choose your next task in [Learn](learn.html).
+reopen the original report. Continue with [three related deliveries](three-deliveries.html)
+for named inputs, grouped reporting and reference corrections, or choose a task
+in [Learn](learn.html).
 
 [Previous: Save a report](save-report.html) · [All five lessons](get-started.html)

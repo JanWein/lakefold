@@ -198,7 +198,7 @@ collect.tw_run_result <- function(x, ...) {
     abort(
       paste(
         run_result_message(x),
-        "Inspect quality(result) or quality_report(result) for check details."
+        "Inspect quality_report(result) for checks and quality_rows(result) for affected rows."
       )
     )
   }
@@ -351,7 +351,7 @@ run.tw_product <- function(
     abort(
       paste(
         run_result_message(result),
-        "The condition retains this result in $result. Inspect quality(condition$result) for check details."
+        "For diagnosis, rerun with stop_on_failure = FALSE and save the result. Inspect quality_report(result) and quality_rows(result)."
       ),
       "tw_run_failed",
       result = result,

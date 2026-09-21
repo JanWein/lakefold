@@ -19,6 +19,7 @@ every integration.
 | Combine tables without multiplying rows | [Compose products](composing-products.html) | Checked lookups and reusable dependencies |
 | Express stricter checks or use pointblank | [Quality rules](quality-gates.html) | Tolerances, reference checks and optional pointblank |
 | Diagnose an attempt or inspect earlier data | [Quality and history](quality-history.html) | Saved evidence, release selection and monitoring |
+| Correct one of several named deliveries | [Three deliveries and a report](three-deliveries.html) | Payment and reference corrections with retained reports |
 | Repeat dependent steps after a correction | [Repeat a workflow](everyday-workflows.html) | A named workflow and selective reruns |
 
 ## Store data and report values

@@ -105,7 +105,10 @@ values <- measure(published, revenue, by = "region")
 values
 ```
 
-The values are 30 for EU and 30 for US. `approved = TRUE` records your declared
+The values are 30 for EU and 30 for US. `dimensions = "region"` declares an
+allowed grouping dimension; `by = "region"` actually requests grouped values.
+Omitting `by` produces an overall total and a message when dimensions are
+available. `approved = TRUE` records your declared
 decision; it is not a separate authorization system. Change `code_version`
 when custom code, captured values or dependencies change. Arbitrary closure
 environments are not fingerprinted.

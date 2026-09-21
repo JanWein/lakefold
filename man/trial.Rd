@@ -4,15 +4,16 @@
 \alias{trial}
 \title{Try a product without invoking configured writers}
 \usage{
-trial(x, data = NULL, sources = NULL, stop_on_failure = TRUE)
+trial(x, data = NULL, sources = NULL, stop_on_failure = FALSE)
 }
 \arguments{
 \item{x}{Product definition.}
 
 \item{data, sources}{Replacement delivery or named sources, as in \code{\link[=run]{run()}}.}
 
-\item{stop_on_failure}{Signal an error on a failed check. Use \code{FALSE} to
-inspect the returned result.}
+\item{stop_on_failure}{Defaults to \code{FALSE}: a failed trial returns a result
+for \code{\link[=quality_report]{quality_report()}} and \code{\link[=quality_rows]{quality_rows()}}. Use \code{TRUE} to raise an error.
+\code{\link[=run]{run()}} and \code{\link[=publish]{publish()}} still raise errors on failure by default.}
 }
 \value{
 An in-memory run result accepted by \code{\link[=collect]{collect()}} and \code{\link[=measure]{measure()}}.

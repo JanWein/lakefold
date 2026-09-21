@@ -32,7 +32,9 @@ cannot be recorded or saved in issued reports, even for approved metrics.}
 
 \item{metric}{Single metric definition.}
 
-\item{by}{Grouping columns.}
+\item{by}{Grouping columns selected from the metric's permitted dimensions.
+Omitting \code{by} calculates an overall total, with a reminder when dimensions
+are available. Use \code{by = character()} to request an overall total explicitly.}
 
 \item{at}{Business date, or a vector for flow metrics.}
 

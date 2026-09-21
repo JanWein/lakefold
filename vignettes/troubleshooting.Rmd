@@ -8,15 +8,17 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
-Start with `status(result)`, then `quality_report(result)`. For interactive
-diagnosis, execute with `stop_on_failure = FALSE` so a failed attempt returns
-its result. Leave the default stopping behavior in scheduled jobs.
+Start with `status(result)`, then `quality_report(result)`. `trial()` returns a
+failed result for diagnosis by default. `quality_rows(result)` automatically
+selects a single failed rule; if several fail, it lists the available choices.
+`run()` and `publish()` stop on failure by default. For interactive inspection,
+pass `stop_on_failure = FALSE`; retain their strict defaults in scheduled jobs.
 
 ## A delivery is blocked
 
 | Symptom | Next action |
 |---|---|
-| A quality rule fails | Inspect `quality_report(result)`; for a row predicate, use `quality_rows(result, ~ amount >= 0)` with your rule |
+| A quality rule fails | Inspect `quality_report(result)`, then `quality_rows(result)`; select a named rule if several fail |
 | A contract rejects a table | Check column names, types, missing values, duplicate keys and unexpected columns |
 | `collect()` reports no successful output | Inspect the failed result instead; correct the source and rerun the same definition |
 | A lookup rejects rows | Check for unmatched input keys and duplicate or missing lookup keys |
@@ -49,6 +51,8 @@ Use [lesson 4](save-report.html) to follow the supported sequence.
 
 An older report remaining unchanged after a correction is expected. Read its
 saved values with `report_read()`. To issue changed content, use a new report ID.
+Declaring `dimensions = "company"` allows grouping; it does not group automatically.
+Request company totals with `measure(..., by = "company")`.
 For a stock metric, select one reporting date with `at`; do not sum stocks
 across dates. [Lesson 5](getting-started.html) demonstrates this distinction.
 

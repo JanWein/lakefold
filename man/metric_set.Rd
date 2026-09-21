@@ -38,6 +38,9 @@ Captures named summary expressions without evaluating them. Returns an
 ordinary named list of \code{\link[=metric]{metric()}} definitions for \code{measure(metrics = ...)}.
 Each id combines the product id and expression name, separated by a dot.
 Business approval is explicit; exploratory definitions need no code version.
+\code{dimensions} lists permitted grouping and filtering columns; it does not
+choose a report layout. Select the grouping with \code{measure(by = "company")}
+or request an overall total explicitly with \code{measure(by = character())}.
 }
 \examples{
 definitions <- metric_set(

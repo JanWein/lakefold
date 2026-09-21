@@ -22,7 +22,8 @@ are operating notes, links and dated development records, not a competing tutori
 
 ## Validation and historical context
 
-[Validation](VALIDATION.md) and the [DuckLake test](DUCKLAKE_USER_TEST.md) report
+[Validation](VALIDATION.md), the [first-use simulation](USABILITY_TEST.md) and
+the [DuckLake test](DUCKLAKE_USER_TEST.md) report
 particular executions. They do not certify later commits or remote environments.
 
 The following documents record earlier design work and may use superseded examples:
