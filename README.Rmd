@@ -78,6 +78,6 @@ data validation, targets for pipeline scheduling, pins for board-based object
 storage and dbt for SQL model development. DataRaft adapters connect these tools
 to a checked delivery workflow.
 
-See the [introduction](vignettes/get-started.Rmd),
-[integration guide](vignettes/integrations.Rmd) and
-[guarantees and limits](vignettes/guarantees.Rmd).
+See the [introduction](https://dataraft-r.github.io/dataraft/articles/get-started.html),
+[integration guide](https://dataraft-r.github.io/dataraft/articles/integrations.html) and
+[guarantees and limits](https://dataraft-r.github.io/dataraft/articles/guarantees.html).

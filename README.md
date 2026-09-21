@@ -1,23 +1,20 @@
----
-output: github_document
----
 
 # DataRaft
 
 [![R-CMD-check](https://github.com/JanWein/tidyweave/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/JanWein/tidyweave/actions/workflows/R-CMD-check.yaml)
 [![Coverage](https://github.com/JanWein/tidyweave/actions/workflows/coverage.yaml/badge.svg)](https://github.com/JanWein/tidyweave/actions/workflows/coverage.yaml)
-[![Lifecycle: experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
+[![Lifecycle:
+experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
 
-Deliver checked data with reusable specifications, recipes and workflows.
-A changed column type or a negative amount blocks a delivery before its target
-is written. The result retains the checks and offending rows for diagnosis.
+Deliver checked data with reusable specifications, recipes and
+workflows. A changed column type or a negative amount blocks a delivery
+before its target is written. The result retains the checks and
+offending rows for diagnosis.
 
-DataRaft is under development. Before 1.0 the current API is the supported API.
+DataRaft is under development. Before 1.0 the current API is the
+supported API.
 
-
-
-
-```r
+``` r
 library(dataraft)
 
 orders <- dr_product("orders") |>
@@ -41,8 +38,7 @@ dr_quality_rows(checked)
 
 Correct the delivery and reuse the same workflow:
 
-
-```r
+``` r
 next_delivery <- data.frame(id = 1:3, amount = c(25, 75, 50))
 result <- dr_trial(flow, data = next_delivery)
 dr_collect(result)
@@ -54,41 +50,47 @@ dr_collect(result)
 #> 3     3     50
 ```
 
-A **product** defines identity, contract and quality requirements. A **recipe**
-defines preparation in step order. A **workflow** binds these definitions to
-sources and a target. Definitions do no I/O. `dr_trial()` checks without writing;
-`dr_run()` executes the configured target. `dr_collect()` retrieves the output.
+A **product** defines identity, contract and quality requirements. A
+**recipe** defines preparation in step order. A **workflow** binds these
+definitions to sources and a target. Definitions do no I/O. `dr_trial()`
+checks without writing; `dr_run()` executes the configured target.
+`dr_collect()` retrieves the output.
 
 ## Packages
 
-| Package | Responsibility |
-|---|---|
-| `dataraft` | Metapackage and shared introduction |
-| `dataraft.core` | Products, contracts, recipes, workflows and quality |
-| `dataraft.lake` | Lake storage, releases, coordinated publication and recovery |
+| Package             | Responsibility                                                |
+|---------------------|---------------------------------------------------------------|
+| `dataraft`          | Metapackage and shared introduction                           |
+| `dataraft.core`     | Products, contracts, recipes, workflows and quality           |
+| `dataraft.lake`     | Lake storage, releases, coordinated publication and recovery  |
 | `dataraft.adapters` | Database, API, Parquet and pins adapters; targets integration |
-| `dataraft.dbt` | dbt execution and artifacts |
-| `dataraft.catalog` | Catalog applications and metadata publication |
-| `dataraft.metrics` | Metrics and frozen report evidence |
+| `dataraft.dbt`      | dbt execution and artifacts                                   |
+| `dataraft.catalog`  | Catalog applications and metadata publication                 |
+| `dataraft.metrics`  | Metrics and frozen report evidence                            |
 
-Use `library(dataraft.core)` for in-memory work without the extensions. Each
-extension is independently installable with its declared dependencies. The
-metapackage re-exports the public family API; its own R code contains no engine.
+Use `library(dataraft.core)` for in-memory work without the extensions.
+Each extension is independently installable with its declared
+dependencies. The metapackage re-exports the public family API; its own
+R code contains no engine.
 
 During development, install the family from a checkout:
 
-```r
+``` r
 source("scripts/install-family.R")
 ```
 
 ## When to use it
 
-Use DataRaft when repeated deliveries need a reusable preparation definition,
-quality gates and an inspectable execution result. Use pointblank for standalone
-data validation, targets for pipeline scheduling, pins for board-based object
-storage and dbt for SQL model development. DataRaft adapters connect these tools
-to a checked delivery workflow.
+Use DataRaft when repeated deliveries need a reusable preparation
+definition, quality gates and an inspectable execution result. Use
+pointblank for standalone data validation, targets for pipeline
+scheduling, pins for board-based object storage and dbt for SQL model
+development. DataRaft adapters connect these tools to a checked delivery
+workflow.
 
-See the [introduction](vignettes/get-started.Rmd),
-[integration guide](vignettes/integrations.Rmd) and
-[guarantees and limits](vignettes/guarantees.Rmd).
+See the
+[introduction](https://dataraft-r.github.io/dataraft/articles/get-started.html),
+[integration
+guide](https://dataraft-r.github.io/dataraft/articles/integrations.html)
+and [guarantees and
+limits](https://dataraft-r.github.io/dataraft/articles/guarantees.html).
